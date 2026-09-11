@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../vendor/shadcn-tailwind-4.13.0.css";
+
+:root {
+  --background: #f6f8fc; --foreground: #0f172a; --card: #ffffff; --card-foreground: #0f172a;
+  --popover: #ffffff; --popover-foreground: #0f172a; --primary: #4f46e5; --primary-foreground: #ffffff;
+  --secondary: #eef2ff; --secondary-foreground: #3730a3; --muted: #f1f5f9; --muted-foreground: #64748b;
+  --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
+  --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
+}
+.dark {
+  color-scheme: dark;
+  --background: #0a0f1d; --foreground: #f8fafc; --card: #111827; --card-foreground: #f8fafc;
+  --popover: #111827; --popover-foreground: #f8fafc; --primary: #818cf8; --primary-foreground: #0b1020;
+  --secondary: #1e293b; --secondary-foreground: #e0e7ff; --muted: #182235; --muted-foreground: #94a3b8;
+  --accent: #242c52; --accent-foreground: #e0e7ff; --destructive: #fb7185; --border: #263247;
+  --input: #334155; --ring: #818cf8;
+}
+@theme inline {
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { border-color: var(--border); }
+html { background: var(--background); }
+body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
+button, input { font: inherit; } button { cursor: pointer; } ::selection { background: #c7d2fe; color: #1e1b4b; }
+.card { border: 1px solid var(--border); border-radius: 1.5rem; background: var(--card); color: var(--card-foreground); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.04); }
+.dark .card { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22); }
+
+/* Dark counterparts for the remaining palette utilities in the prototype. */
+.dark [class~="bg-[#f6f8fc]"] { background-color: var(--background); }
+.dark [class~="bg-white"] { background-color: var(--card); }
+.dark [class~="bg-white/90"], .dark [class~="bg-white/95"] { background-color: rgb(17 24 39 / 0.94); }
+.dark [class~="bg-slate-50"] { background-color: #182235; }
+.dark [class~="bg-slate-100"] { background-color: #1e293b; }
+.dark [class~="border-slate-200"] { border-color: var(--border); }
+.dark [class~="text-slate-950"] { color: var(--foreground); }
+.dark [class~="text-slate-700"] { color: #e2e8f0; }
+.dark [class~="text-slate-600"] { color: #cbd5e1; }
+.dark [class~="text-slate-500"], .dark [class~="text-slate-400"] { color: #94a3b8; }
+.dark [class~="text-slate-300"] { color: #64748b; }
+.dark [class~="bg-indigo-50"], .dark [class~="bg-indigo-50/50"] { background-color: rgb(49 46 129 / 0.34); }
+.dark [class~="bg-indigo-100"] { background-color: rgb(67 56 202 / 0.34); }
+.dark [class~="text-indigo-700"], .dark [class~="text-indigo-800"] { color: #a5b4fc; }
+.dark [class~="bg-emerald-50"] { background-color: rgb(6 78 59 / 0.38); }
+.dark [class~="text-emerald-700"], .dark [class~="text-emerald-800"] { color: #6ee7b7; }
+.dark [class~="bg-rose-50"] { background-color: rgb(136 19 55 / 0.36); }
+.dark [class~="text-rose-700"], .dark [class~="text-rose-800"] { color: #fda4af; }
+.dark [class~="bg-amber-50"], .dark [class~="bg-amber-50/40"] { background-color: rgb(120 53 15 / 0.34); }
+.dark [class~="bg-amber-100"] { background-color: rgb(146 64 14 / 0.42); }
+.dark [class~="text-amber-700"] { color: #fcd34d; }
+.dark [class~="ring-indigo-100"], .dark [class~="ring-emerald-100"], .dark [class~="ring-rose-100"], .dark [class~="ring-amber-100"] { --tw-ring-color: var(--border); }
+.dark [class~="shadow-indigo-200"], .dark [class~="shadow-indigo-200/70"] { --tw-shadow-color: rgb(0 0 0 / 0.24); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
