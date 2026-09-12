@@ -6,7 +6,9 @@ const TEACHER_ID = "1";
 const MOSCOW_OFFSET = "+03:00";
 
 type ActionBody =
-  | { action: "createLesson"; student: string; day: number; time: string }
+  | { action: "createLesson"; student: string; date: string; time: string; durationMinutes?: number; repeat?: "once" | "weekly" }
+  | { action: "updateLesson"; lessonId: string; date: string; time: string; durationMinutes?: number }
+  | { action: "deleteLesson"; lessonId: string }
   | { action: "createStudent"; name: string; email?: string; floating: boolean }
   | { action: "addPayment"; studentId: string; count: number }
   | { action: "resolveRequest"; requestId: string; decision: "approved" | "declined" };
@@ -62,7 +64,7 @@ export async function GET(request: Request) {
       const status = Number(row.has_request) ? "request" : balance < 0 ? "debt" : balance <= 1 ? "low" : "paid";
       const label = status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : balance <= 1 ? `Осталось ${balance}` : "Запланирован";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), day: Number(new Intl.DateTimeFormat("en", { day: "numeric", timeZone: "Europe/Moscow" }).format(start)), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label };
+      return { id: String(row.id), date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label };
     });
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {
       const kind = String(row.type);
@@ -91,13 +93,33 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
 
     if (body.action === "createLesson") {
-      if (!Number.isInteger(body.day) || body.day < 1 || body.day > 30 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.time)) return invalid();
+      const range = lessonRange(body.date, body.time, body.durationMinutes);
+      if (!range || ![undefined, "once", "weekly"].includes(body.repeat)) return invalid();
       const student = await db.prepare("SELECT id FROM members WHERE workspace_id = ? AND role = 'student' AND display_name = ?").bind(WORKSPACE_ID, body.student.trim()).first<{ id: string }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
-      const start = new Date(`2026-09-${String(body.day).padStart(2, "0")}T${body.time}:00${MOSCOW_OFFSET}`);
-      const end = new Date(start.getTime() + 60 * 60 * 1000);
-      await db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id)
-        VALUES (?, ?, ?, ?, ?, ?)`).bind(id, WORKSPACE_ID, student.id, start.getTime(), end.getTime(), TEACHER_ID).run();
+      if (await hasConflict(db, range.start, range.end)) return conflict();
+      const statements = [db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id)
+        VALUES (?, ?, ?, ?, ?, ?)`).bind(id, WORKSPACE_ID, student.id, range.start, range.end, TEACHER_ID)];
+      if (body.repeat === "weekly") {
+        const weekday = new Date(`${body.date}T12:00:00Z`).getUTCDay() || 7;
+        const [hours, minutes] = body.time.split(":").map(Number);
+        statements.push(db.prepare(`INSERT INTO lesson_series (id, workspace_id, student_id, weekday, start_minutes, duration_minutes, active_from, created_by_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), WORKSPACE_ID, student.id, weekday, hours * 60 + minutes, range.duration, body.date, TEACHER_ID));
+      }
+      await db.batch(statements);
+    } else if (body.action === "updateLesson") {
+      const range = lessonRange(body.date, body.time, body.durationMinutes);
+      if (!body.lessonId || !range) return invalid();
+      const lesson = await db.prepare("SELECT id FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, WORKSPACE_ID).first();
+      if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
+      if (await hasConflict(db, range.start, range.end, body.lessonId)) return conflict();
+      await db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
+        .bind(range.start, range.end, Date.now(), body.lessonId, WORKSPACE_ID).run();
+    } else if (body.action === "deleteLesson") {
+      if (!body.lessonId) return invalid();
+      const result = await db.prepare(`UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ?
+        WHERE id = ? AND workspace_id = ? AND status = 'scheduled'`).bind(Date.now(), Date.now(), body.lessonId, WORKSPACE_ID).run();
+      if (!result.meta.changes) return Response.json({ error: "Урок не найден" }, { status: 404 });
     } else if (body.action === "createStudent") {
       if (!body.name?.trim() || (body.email && !/^\S+@\S+\.\S+$/.test(body.email))) return invalid();
       const inviteToken = randomToken();
@@ -141,5 +163,22 @@ async function requireTeacher(request?: Request) {
 }
 
 function invalid() { return Response.json({ error: "Проверьте заполненные данные" }, { status: 400 }); }
+function conflict() { return Response.json({ error: "На это время уже назначен другой урок" }, { status: 409 }); }
 function initials(name: string) { return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(); }
 function minutesToTime(minutes: number) { return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; }
+function toMoscowDate(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Moscow" }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+function lessonRange(date: string, time: string, durationMinutes = 60) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Number.isInteger(durationMinutes) || durationMinutes < 15 || durationMinutes > 240) return null;
+  const start = new Date(`${date}T${time}:00${MOSCOW_OFFSET}`).getTime();
+  if (!Number.isFinite(start)) return null;
+  return { start, end: start + durationMinutes * 60_000, duration: durationMinutes };
+}
+async function hasConflict(db: ReturnType<typeof getD1>, start: number, end: number, exceptId = "") {
+  const row = await db.prepare(`SELECT id FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND id != ? AND starts_at < ? AND ends_at > ? LIMIT 1`)
+    .bind(WORKSPACE_ID, exceptId, end, start).first();
+  return Boolean(row);
+}

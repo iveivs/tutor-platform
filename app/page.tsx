@@ -1,5 +1,5 @@
-import TutorApp from "@/components/tutor-app";
+import { AuthGate } from "@/components/auth-gate";
 
 export default function HomePage() {
-  return <TutorApp />;
+  return <AuthGate enabled={Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)} />;
 }

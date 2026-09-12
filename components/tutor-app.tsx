@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3,
-  Home, LogOut, Menu, Plus, Search, Settings, UserRound, UsersRound, WalletCards,
+  Home, LogOut, Menu, Plus, Search, Settings, Trash2, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type View = "today" | "calendar" | "students" | "requests" | "student" | "portal";
-type Lesson = { id: string; day: number; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string };
+type Lesson = { id: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string };
+type LessonDraft = { date: string; time: string; name: string; repeat: "once" | "weekly" };
 type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean };
 type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
 type AppData = { lessons: Lesson[]; students: Student[]; requests: LessonRequest[] };
@@ -43,6 +44,13 @@ const statusStyles = {
   request: "bg-amber-50 text-amber-700 ring-amber-100",
 };
 
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date());
+const dateAtNoon = (value: string) => new Date(`${value}T12:00:00Z`);
+const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
+const shiftDate = (value: string, days: number) => { const date = dateAtNoon(value); date.setUTCDate(date.getUTCDate() + days); return toIsoDate(date); };
+const shiftMonth = (value: string, months: number) => { const date = dateAtNoon(value); const day = date.getUTCDate(); date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + months); date.setUTCDate(Math.min(day, new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate())); return toIsoDate(date); };
+const dateTitle = (value: string, options: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" }) => new Intl.DateTimeFormat("ru-RU", { ...options, timeZone: "UTC" }).format(dateAtNoon(value));
+
 export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" | "teacher" | "student"; onLogout?: () => void }) {
   const [view, setView] = useState<View>("today");
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -63,9 +71,17 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
 
   useEffect(() => { void reload().catch(() => { setLoadError(true); setLoading(false); }); }, [reload]);
 
-  const addLesson = async (lesson: Omit<Lesson, "id">) => {
-    try { await saveAppData({ action: "createLesson", student: lesson.name, day: lesson.day, time: lesson.time }); await reload(); toast.success("Урок добавлен в расписание"); }
+  const addLesson = async (lesson: LessonDraft) => {
+    try { await saveAppData({ action: "createLesson", student: lesson.name, date: lesson.date, time: lesson.time, repeat: lesson.repeat }); await reload(); toast.success("Урок добавлен в расписание"); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось добавить урок"); }
+  };
+  const updateLesson = async (lessonId: string, date: string, time: string) => {
+    try { await saveAppData({ action: "updateLesson", lessonId, date, time }); await reload(); toast.success("Урок перенесён"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось перенести урок"); }
+  };
+  const deleteLesson = async (lessonId: string) => {
+    try { await saveAppData({ action: "deleteLesson", lessonId }); await reload(); toast.success("Урок отменён без списания"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отменить урок"); }
   };
   const addStudent = async (student: Omit<Student, "id">) => {
     try { const result = await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating }); await reload(); if (result.inviteUrl) { await navigator.clipboard?.writeText(result.inviteUrl); toast.success("Ученик создан. Ссылка-приглашение скопирована"); } else toast.success("Ученик сохранён в базе"); }
@@ -86,26 +102,26 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
     register({
       name: "read_day_schedule",
       title: "Расписание на день",
-      description: "Показать занятия преподавателя на выбранный день сентября 2026 года.",
-      inputSchema: { type: "object", properties: { day: { type: "integer", minimum: 1, maximum: 30 } }, required: ["day"], additionalProperties: false },
+      description: "Показать занятия преподавателя на выбранную дату.",
+      inputSchema: { type: "object", properties: { date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } }, required: ["date"], additionalProperties: false },
       annotations: { readOnlyHint: true, untrustedContentHint: false },
       execute(input: unknown) {
-        const day = Number((input as { day?: unknown })?.day);
-        if (!Number.isInteger(day) || day < 1 || day > 30) throw new Error("День должен быть от 1 до 30");
-        return { day, lessons: lessons.filter((lesson) => lesson.day === day).map(({ time, end, name, label }) => ({ time, end, name, status: label })) };
+        const date = (input as { date?: unknown })?.date;
+        if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Дата должна быть в формате ГГГГ-ММ-ДД");
+        return { date, lessons: lessons.filter((lesson) => lesson.date === date).map(({ time, end, name, label }) => ({ time, end, name, status: label })) };
       },
     });
     register({
       name: "create_lesson",
       title: "Добавить урок",
       description: "Создать новый разовый урок и добавить его в видимое расписание.",
-      inputSchema: { type: "object", properties: { student: { type: "string", minLength: 2 }, day: { type: "integer", minimum: 1, maximum: 30 }, time: { type: "string", pattern: "^[0-2][0-9]:[0-5][0-9]$" } }, required: ["student", "day", "time"], additionalProperties: false },
+      inputSchema: { type: "object", properties: { student: { type: "string", minLength: 2 }, date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, time: { type: "string", pattern: "^[0-2][0-9]:[0-5][0-9]$" } }, required: ["student", "date", "time"], additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute(input: unknown) {
-        const { student, day, time } = input as { student?: unknown; day?: unknown; time?: unknown };
-        if (typeof student !== "string" || student.trim().length < 2 || !Number.isInteger(day) || Number(day) < 1 || Number(day) > 30 || typeof time !== "string" || !/^\d{2}:\d{2}$/.test(time)) throw new Error("Проверьте ученика, день и время");
-        void saveAppData({ action: "createLesson", student: student.trim(), day: Number(day), time }).then(reload);
-        return { status: "created", student: student.trim(), day, time };
+        const { student, date, time } = input as { student?: unknown; date?: unknown; time?: unknown };
+        if (typeof student !== "string" || student.trim().length < 2 || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof time !== "string" || !/^\d{2}:\d{2}$/.test(time)) throw new Error("Проверьте ученика, дату и время");
+        void saveAppData({ action: "createLesson", student: student.trim(), date, time, repeat: "once" }).then(reload);
+        return { status: "created", student: student.trim(), date, time };
       },
     });
     return () => lifecycle.abort();
@@ -121,8 +137,8 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
       <Sidebar view={view} setView={setView} onPortal={() => setView("portal")} onLogout={onLogout} requestCount={requests.length} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
         <MobileHeader />
-        {view === "today" && <TodayView lessons={lessons.filter((lesson) => lesson.day === 16)} students={students} onAdd={addLesson} setView={setView} />}
-        {view === "calendar" && <CalendarView lessons={lessons} students={students} onAdd={addLesson} />}
+        {view === "today" && <TodayView lessons={lessons} students={students} onAdd={addLesson} setView={setView} />}
+        {view === "calendar" && <CalendarView lessons={lessons} students={students} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
@@ -161,29 +177,60 @@ function Shell({ eyebrow, title, actions, children }: { eyebrow?: string; title:
   return <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-9 xl:px-12"><div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <p className="mb-1 text-sm font-semibold text-indigo-600">{eyebrow}</p>}<h1 className="text-3xl font-bold tracking-tight md:text-4xl">{title}</h1></div>{actions}</div>{children}</div>;
 }
 
-function TodayView({ lessons, students, onAdd, setView }: { lessons: Lesson[]; students: Student[]; onAdd: (lesson: Omit<Lesson, "id">) => void; setView: (view: View) => void }) {
-  const [offset, setOffset] = useState(0);
-  const title = offset === 0 ? "Сегодня, 16 сентября" : offset === 1 ? "Завтра, 17 сентября" : "Вчера, 15 сентября";
-  return <Shell eyebrow="Ваш рабочий день" title={title} actions={<div className="flex flex-wrap gap-3"><div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><button onClick={() => setOffset(-1)} aria-label="Предыдущий день" className="grid size-11 place-items-center hover:bg-slate-50"><ChevronLeft className="size-5" /></button><button onClick={() => setOffset(0)} className="border-x border-slate-200 px-4 text-sm font-semibold">16 сентября 2026</button><button onClick={() => setOffset(1)} aria-label="Следующий день" className="grid size-11 place-items-center hover:bg-slate-50"><ChevronRight className="size-5" /></button></div><AddLessonDialog onAdd={onAdd} /></div>}>
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_350px]"><section className="card p-4 md:p-7"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-xl font-bold md:text-2xl">Расписание на сегодня</h2><p className="mt-1 text-sm text-slate-500">{lessons.length} занятия · {lessons.length} часа</p></div><button onClick={() => setView("calendar")} className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 md:block">Открыть календарь</button></div><LessonList lessons={lessons} /></section>
+function TodayView({ lessons, students, onAdd, setView }: { lessons: Lesson[]; students: Student[]; onAdd: (lesson: LessonDraft) => void; setView: (view: View) => void }) {
+  const [selectedDate, setSelectedDate] = useState(today);
+  const selectedLessons = lessons.filter((lesson) => lesson.date === selectedDate);
+  const todayDate = today();
+  const relative = selectedDate === todayDate ? "Сегодня" : selectedDate === shiftDate(todayDate, 1) ? "Завтра" : selectedDate === shiftDate(todayDate, -1) ? "Вчера" : "Расписание";
+  return <Shell eyebrow="Ваш рабочий день" title={`${relative}, ${dateTitle(selectedDate)}`} actions={<div className="flex flex-wrap gap-3"><div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><button onClick={() => setSelectedDate((date) => shiftDate(date, -1))} aria-label="Предыдущий день" className="grid size-11 place-items-center hover:bg-slate-50"><ChevronLeft className="size-5" /></button><button onClick={() => setSelectedDate(todayDate)} className="border-x border-slate-200 px-4 text-sm font-semibold">{dateTitle(selectedDate, { day: "numeric", month: "long", year: "numeric" })}</button><button onClick={() => setSelectedDate((date) => shiftDate(date, 1))} aria-label="Следующий день" className="grid size-11 place-items-center hover:bg-slate-50"><ChevronRight className="size-5" /></button></div><AddLessonDialog students={students} defaultDate={selectedDate} onAdd={onAdd} /></div>}>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_350px]"><section className="card p-4 md:p-7"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-xl font-bold md:text-2xl">Расписание на день</h2><p className="mt-1 text-sm text-slate-500">{selectedLessons.length} занятий</p></div><button onClick={() => setView("calendar")} className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 md:block">Открыть календарь</button></div><LessonList lessons={selectedLessons} /></section>
       <aside className="space-y-6"><section className="card p-5 md:p-6"><h2 className="mb-4 text-xl font-bold">Требуют внимания</h2><Attention icon={Bell} tone="rose" title="2 запроса" text="на перенос или отмену" onClick={() => setView("requests")} /><Attention icon={UserRound} tone="rose" title="3 ученика" text="с задолженностью" onClick={() => setView("students")} /><Attention icon={Clock3} tone="amber" title="1 ученик" text="без следующего урока" onClick={() => setView("students")} /></section><section className="rounded-[24px] bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white shadow-xl shadow-indigo-200/70"><p className="text-sm font-semibold text-indigo-100">Ближайший урок</p><p className="mt-3 text-2xl font-bold">Иван · 10:00</p><p className="mt-1 text-sm text-indigo-100">Начнётся через 35 минут</p><button onClick={() => setView("student")} className="mt-5 w-full rounded-xl bg-white/15 px-4 py-3 text-sm font-semibold hover:bg-white/20">Открыть карточку</button></section></aside></div>
   </Shell>;
 }
 
-function LessonList({ lessons }: { lessons: Lesson[] }) {
-  return <div className="space-y-3">{lessons.length ? lessons.map((lesson) => <button key={lesson.id} className="group grid w-full grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md md:grid-cols-[74px_minmax(0,1fr)_auto] md:p-4"><span className="text-sm font-semibold leading-5 text-slate-700"><span className="block">{lesson.time}</span><span className="block font-normal text-slate-400">{lesson.end}</span></span><span className="min-w-0 border-l border-slate-200 pl-3 md:pl-5"><span className="block truncate text-base font-bold md:text-lg">{lesson.name}</span><span className="mt-0.5 block truncate text-sm text-slate-500">Барабаны · Студия</span></span><span className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-1.5 text-xs font-semibold ring-1 sm:inline-flex ${statusStyles[lesson.status]}`}>{lesson.label}</span><ChevronRight className="size-5 text-slate-400" /></span></button>) : <Empty text="На этот день уроков нет" />}</div>;
+function LessonList({ lessons, onSelect }: { lessons: Lesson[]; onSelect?: (lesson: Lesson) => void }) {
+  return <div className="space-y-3">{lessons.length ? lessons.map((lesson) => <button key={lesson.id} onClick={() => onSelect?.(lesson)} className="group grid w-full grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md md:grid-cols-[74px_minmax(0,1fr)_auto] md:p-4"><span className="text-sm font-semibold leading-5 text-slate-700"><span className="block">{lesson.time}</span><span className="block font-normal text-slate-400">{lesson.end}</span></span><span className="min-w-0 border-l border-slate-200 pl-3 md:pl-5"><span className="block truncate text-base font-bold md:text-lg">{lesson.name}</span><span className="mt-0.5 block truncate text-sm text-slate-500">Барабаны · Студия</span></span><span className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-1.5 text-xs font-semibold ring-1 sm:inline-flex ${statusStyles[lesson.status]}`}>{lesson.label}</span>{onSelect && <ChevronRight className="size-5 text-slate-400" />}</span></button>) : <Empty text="На этот день уроков нет" />}</div>;
 }
 
 function Attention({ icon: Icon, tone, title, text, onClick }: { icon: typeof Bell; tone: "rose" | "amber"; title: string; text: string; onClick: () => void }) {
   return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-slate-50"><span className={`grid size-11 place-items-center rounded-xl ${tone === "rose" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}><Icon className="size-5" /></span><span><span className="block text-sm font-bold">{title}</span><span className="block text-sm text-slate-500">{text}</span></span><ChevronRight className="ml-auto size-4 text-slate-400" /></button>;
 }
 
-function CalendarView({ lessons, students, onAdd }: { lessons: Lesson[]; students: Student[]; onAdd: (lesson: Omit<Lesson, "id">) => void }) {
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const days = Array.from({ length: 35 }, (_, index) => index - 1);
-  return <Shell title="Календарь" actions={<AddLessonDialog onAdd={onAdd} />}><div className="card overflow-hidden"><div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between md:p-6"><div className="flex rounded-xl bg-slate-100 p-1"><button className="rounded-lg px-4 py-2 text-sm text-slate-500">День</button><button className="rounded-lg px-4 py-2 text-sm text-slate-500">Неделя</button><button className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm">Месяц</button></div><div className="flex items-center gap-2"><button className="grid size-10 place-items-center rounded-xl border"><ChevronLeft className="size-4" /></button><strong className="min-w-40 text-center text-lg">Сентябрь 2026</strong><button className="grid size-10 place-items-center rounded-xl border"><ChevronRight className="size-4" /></button></div></div><div className="grid grid-cols-7 border-b bg-slate-50">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <div key={day} className="p-3 text-center text-sm font-semibold text-slate-500">{day}</div>)}</div><div className="grid grid-cols-7">{days.map((day, index) => { const realDay = day > 0 && day <= 30; const dayLessons = realDay ? lessons.filter((lesson) => lesson.day === day) : []; return <button key={index} disabled={!realDay} onClick={() => realDay && setSelectedDay(day)} className={`min-h-24 border-b border-r p-2 text-left align-top transition hover:bg-indigo-50/50 md:min-h-32 md:p-3 ${day === 16 ? "bg-indigo-50" : "bg-white"}`}><span className={`grid size-7 place-items-center rounded-full text-sm font-semibold ${day === 16 ? "bg-indigo-600 text-white" : realDay ? "text-slate-700" : "text-slate-300"}`}>{realDay ? day : day <= 0 ? 31 + day : day - 30}</span><span className="mt-2 hidden space-y-1 md:block">{dayLessons.slice(0, 2).map((lesson) => <span key={lesson.id} className={`block truncate rounded-md px-2 py-1 text-xs ${statusStyles[lesson.status]}`}>{lesson.time} {lesson.name.split(" ")[0]}</span>)}</span>{dayLessons.length > 2 && <span className="mt-1 block text-xs text-slate-500">ещё {dayLessons.length - 2}</span>}</button>; })}</div></div>
-    <Dialog open={selectedDay !== null} onOpenChange={(open) => !open && setSelectedDay(null)}><DialogContent className="rounded-3xl sm:max-w-2xl"><DialogHeader><DialogTitle className="text-2xl">{selectedDay} сентября 2026</DialogTitle><DialogDescription>{lessons.filter((lesson) => lesson.day === selectedDay).length} занятия</DialogDescription></DialogHeader><LessonList lessons={lessons.filter((lesson) => lesson.day === selectedDay)} /><DialogFooter><DialogClose asChild><Button variant="outline">Закрыть</Button></DialogClose><AddLessonDialog onAdd={onAdd} compact /></DialogFooter></DialogContent></Dialog>
+function CalendarView({ lessons, students, onAdd, onUpdate, onDelete }: { lessons: Lesson[]; students: Student[]; onAdd: (lesson: LessonDraft) => void; onUpdate: (id: string, date: string, time: string) => void; onDelete: (id: string) => void }) {
+  const [mode, setMode] = useState<"day" | "week" | "month">("month");
+  const [cursor, setCursor] = useState(today);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Lesson | null>(null);
+  const cursorDate = dateAtNoon(cursor);
+  const monthStart = new Date(Date.UTC(cursorDate.getUTCFullYear(), cursorDate.getUTCMonth(), 1, 12));
+  const gridStart = new Date(monthStart); gridStart.setUTCDate(gridStart.getUTCDate() - ((gridStart.getUTCDay() + 6) % 7));
+  const monthDays = Array.from({ length: 42 }, (_, index) => shiftDate(toIsoDate(gridStart), index));
+  const weekStart = shiftDate(cursor, -((cursorDate.getUTCDay() + 6) % 7));
+  const visibleDates = mode === "day" ? [cursor] : Array.from({ length: 7 }, (_, index) => shiftDate(weekStart, index));
+  const move = (direction: number) => setCursor((date) => mode === "day" ? shiftDate(date, direction) : mode === "week" ? shiftDate(date, direction * 7) : shiftMonth(date, direction));
+  const title = mode === "month" ? dateTitle(cursor, { month: "long", year: "numeric" }) : mode === "week" ? `${dateTitle(visibleDates[0])} — ${dateTitle(visibleDates[6], { day: "numeric", month: "long", year: "numeric" })}` : dateTitle(cursor, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const selectedLessons = selectedDate ? lessons.filter((lesson) => lesson.date === selectedDate) : [];
+
+  return <Shell title="Календарь" actions={<AddLessonDialog students={students} defaultDate={cursor} onAdd={onAdd} />}>
+    <div className="card overflow-hidden">
+      <div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between md:p-6">
+        <div className="flex rounded-xl bg-slate-100 p-1">{(["day", "week", "month"] as const).map((item) => <button key={item} onClick={() => setMode(item)} className={`rounded-lg px-4 py-2 text-sm ${mode === item ? "bg-white font-semibold text-indigo-700 shadow-sm" : "text-slate-500"}`}>{item === "day" ? "День" : item === "week" ? "Неделя" : "Месяц"}</button>)}</div>
+        <div className="flex items-center gap-2"><button onClick={() => move(-1)} aria-label="Назад" className="grid size-10 place-items-center rounded-xl border"><ChevronLeft className="size-4" /></button><button onClick={() => setCursor(today())} className="min-w-44 px-2 text-center text-base font-bold capitalize">{title}</button><button onClick={() => move(1)} aria-label="Вперёд" className="grid size-10 place-items-center rounded-xl border"><ChevronRight className="size-4" /></button></div>
+      </div>
+      {mode === "month" ? <MonthGrid dates={monthDays} cursor={cursor} lessons={lessons} onSelect={setSelectedDate} /> : <ScheduleColumns dates={visibleDates} lessons={lessons} onSelectDate={setSelectedDate} onSelectLesson={setEditing} />}
+    </div>
+    <Dialog open={selectedDate !== null} onOpenChange={(open) => !open && setSelectedDate(null)}><DialogContent className="rounded-3xl sm:max-w-2xl"><DialogHeader><DialogTitle className="text-2xl capitalize">{selectedDate && dateTitle(selectedDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</DialogTitle><DialogDescription>{selectedLessons.length} занятий</DialogDescription></DialogHeader><LessonList lessons={selectedLessons} onSelect={setEditing} /><DialogFooter><DialogClose asChild><Button variant="outline">Закрыть</Button></DialogClose>{selectedDate && <AddLessonDialog students={students} defaultDate={selectedDate} onAdd={onAdd} compact />}</DialogFooter></DialogContent></Dialog>
+    <EditLessonDialog lesson={editing} onOpenChange={(open) => !open && setEditing(null)} onUpdate={onUpdate} onDelete={onDelete} />
   </Shell>;
+}
+
+function MonthGrid({ dates, cursor, lessons, onSelect }: { dates: string[]; cursor: string; lessons: Lesson[]; onSelect: (date: string) => void }) {
+  const month = cursor.slice(0, 7);
+  return <><div className="grid grid-cols-7 border-b bg-slate-50">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <div key={day} className="p-3 text-center text-sm font-semibold text-slate-500">{day}</div>)}</div><div className="grid grid-cols-7">{dates.map((date) => { const dayLessons = lessons.filter((lesson) => lesson.date === date); const currentMonth = date.startsWith(month); return <button key={date} onClick={() => onSelect(date)} className={`min-h-20 border-b border-r p-2 text-left transition hover:bg-indigo-50/50 md:min-h-32 md:p-3 ${date === today() ? "bg-indigo-50" : "bg-white"}`}><span className={`grid size-7 place-items-center rounded-full text-sm font-semibold ${date === today() ? "bg-indigo-600 text-white" : currentMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(-2))}</span><span className="mt-2 hidden space-y-1 md:block">{dayLessons.slice(0, 2).map((lesson) => <span key={lesson.id} className={`block truncate rounded-md px-2 py-1 text-xs ${statusStyles[lesson.status]}`}>{lesson.time} {lesson.name.split(" ")[0]}</span>)}</span>{dayLessons.length > 2 && <span className="mt-1 block text-xs text-slate-500">ещё {dayLessons.length - 2}</span>}</button>; })}</div></>;
+}
+
+function ScheduleColumns({ dates, lessons, onSelectDate, onSelectLesson }: { dates: string[]; lessons: Lesson[]; onSelectDate: (date: string) => void; onSelectLesson: (lesson: Lesson) => void }) {
+  return <div className={`grid divide-x ${dates.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-7"}`}>{dates.map((date) => { const dayLessons = lessons.filter((lesson) => lesson.date === date); return <section key={date} className="min-h-64 p-3"><button onClick={() => onSelectDate(date)} className="mb-3 w-full rounded-xl p-2 text-center hover:bg-indigo-50"><span className="block text-xs uppercase text-slate-500">{dateTitle(date, { weekday: "short" })}</span><strong className={date === today() ? "text-indigo-600" : ""}>{dateTitle(date)}</strong></button><div className="space-y-2">{dayLessons.map((lesson) => <button key={lesson.id} onClick={() => onSelectLesson(lesson)} className={`w-full rounded-xl p-3 text-left text-sm ${statusStyles[lesson.status]}`}><strong className="block">{lesson.time}</strong><span className="block truncate">{lesson.name}</span></button>)}{!dayLessons.length && <p className="py-8 text-center text-xs text-slate-400">Нет уроков</p>}</div></section>; })}</div>;
 }
 
 function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd: (student: Omit<Student, "id">) => void; onOpen: (id: string) => void }) {
@@ -194,8 +241,8 @@ function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd:
 
 function Balance({ balance }: { balance: number }) { return <span className={`inline-flex min-w-12 justify-center rounded-xl px-3 py-2 font-bold ${balance < 0 ? "bg-rose-50 text-rose-700" : balance <= 1 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{balance}</span>; }
 
-function StudentView({ student, lessons, onAdd, onBack, onPay }: { student: Student; lessons: Lesson[]; onAdd: (lesson: Omit<Lesson, "id">) => void; onBack: () => void; onPay: (id: string, count: number) => void }) {
-  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3"><AddLessonDialog onAdd={() => toast.success("Урок добавлен")} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История занятий</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p><p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Без даты окончания"}</p></InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.name === student.name && lesson.day >= 16)} /></div></TabsContent><TabsContent value="history"><History /></TabsContent><TabsContent value="payments"><History payments /></TabsContent></Tabs></Shell>;
+function StudentView({ student, lessons, onAdd, onBack, onPay }: { student: Student; lessons: Lesson[]; onAdd: (lesson: LessonDraft) => void; onBack: () => void; onPay: (id: string, count: number) => void }) {
+  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3"><AddLessonDialog students={[student]} defaultDate={today()} onAdd={onAdd} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История занятий</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p><p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Без даты окончания"}</p></InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.name === student.name && lesson.date >= today())} /></div></TabsContent><TabsContent value="history"><History /></TabsContent><TabsContent value="payments"><History payments /></TabsContent></Tabs></Shell>;
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
@@ -210,9 +257,21 @@ function StudentPortal({ onBack, studentMode = false }: { onBack: () => void; st
   return <main className="min-h-screen bg-[#f6f8fc] px-4 pb-24 pt-5 text-slate-950"><div className="mx-auto max-w-lg"><button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="size-4" />{studentMode ? "Выйти" : "К кабинету преподавателя"}</button><div className="mb-7 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Привет, Иван</h1><p className="mt-1 text-slate-500">Ваше ближайшее занятие</p></div><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">И</span></div><section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold">Среда, 18 сентября</h2><p className="mt-2 text-3xl font-bold">17:00–18:00</p><p className="mt-2 text-slate-500">Анна Петрова</p></div><span className="rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700">Запланирован</span></div></section><section className="mt-4 rounded-3xl border border-rose-200 bg-rose-50 p-6"><div className="flex items-center gap-3"><WalletCards className="size-6 text-rose-600" /><div><p className="font-semibold text-slate-600">Баланс</p><p className="text-2xl font-bold text-rose-700">−2 занятия</p></div></div><p className="mt-3 text-slate-600">Необходимо оплатить 2 занятия</p><button onClick={() => toast.info("Открыта история оплат")} className="mt-3 font-semibold text-indigo-600">История оплат</button></section><div className="mt-5 grid gap-3 sm:grid-cols-2"><Button onClick={() => toast.success("Запрос на перенос создан")} size="lg" className="h-12 rounded-xl bg-indigo-600">Запросить перенос</Button><Button onClick={() => toast.info("Отмену можно запросить до вторника, 23:59")} size="lg" variant="outline" className="h-12 rounded-xl">Запросить отмену</Button></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до вторника, 23:59</p></div><Toaster position="top-center" richColors /></main>;
 }
 
-function AddLessonDialog({ onAdd, compact = false }: { onAdd: (lesson: Omit<Lesson, "id">) => void; compact?: boolean }) {
-  const [name, setName] = useState("Иван Сидоров"); const [time, setTime] = useState("20:00");
-  return <Dialog><DialogTrigger asChild><Button size={compact ? "default" : "lg"} className="h-11 rounded-xl bg-indigo-600 px-5 text-base shadow-lg shadow-indigo-200 hover:bg-indigo-700"><Plus />{compact ? "Добавить" : "Добавить урок"}</Button></DialogTrigger><DialogContent className="gap-0 overflow-hidden rounded-[22px] border-0 p-0 sm:max-w-xl"><DialogHeader className="border-b p-6 pr-14"><DialogTitle className="text-2xl">Новый урок</DialogTitle><DialogDescription>Добавьте разовое или постоянное занятие.</DialogDescription></DialogHeader><div className="space-y-5 p-6"><Field label="Ученик"><Select value={name} onValueChange={setName}><SelectTrigger aria-label="Ученик" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{["Иван Сидоров", "Мария Иванова", "Пётр Васильев"].map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Дата"><Input aria-label="Дата" type="date" defaultValue="2026-09-18" className="h-11 rounded-xl" /></Field><Field label="Время"><Input aria-label="Время" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="h-11 rounded-xl" /></Field></div><Field label="Повторение"><Select defaultValue="once"><SelectTrigger aria-label="Повторение" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="once">Не повторять</SelectItem><SelectItem value="weekly">Каждую неделю</SelectItem><SelectItem value="custom">Несколько дней в неделю</SelectItem></SelectContent></Select></Field></div><DialogFooter className="border-t bg-slate-50 p-5"><DialogClose asChild><Button variant="outline">Отмена</Button></DialogClose><DialogClose asChild><Button onClick={() => onAdd({ day: 18, time, end: "21:00", name, status: "paid", label: "Запланирован" })} className="bg-indigo-600">Сохранить урок</Button></DialogClose></DialogFooter></DialogContent></Dialog>;
+function AddLessonDialog({ students, defaultDate, onAdd, compact = false }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => void; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(students[0]?.name ?? "");
+  const [date, setDate] = useState(defaultDate);
+  const [time, setTime] = useState("17:00");
+  const [repeat, setRepeat] = useState<"once" | "weekly">("once");
+  useEffect(() => { if (open) { setDate(defaultDate); setName((current) => students.some((student) => student.name === current) ? current : (students[0]?.name ?? "")); } }, [open, defaultDate, students]);
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size={compact ? "default" : "lg"} className="h-11 rounded-xl bg-indigo-600 px-5 text-base shadow-lg shadow-indigo-200 hover:bg-indigo-700"><Plus />{compact ? "Добавить" : "Добавить урок"}</Button></DialogTrigger><DialogContent className="gap-0 overflow-hidden rounded-[22px] border-0 p-0 sm:max-w-xl"><DialogHeader className="border-b p-6 pr-14"><DialogTitle className="text-2xl">Новый урок</DialogTitle><DialogDescription>Добавьте разовое или постоянное занятие.</DialogDescription></DialogHeader><div className="space-y-5 p-6"><Field label="Ученик"><Select value={name} onValueChange={setName}><SelectTrigger aria-label="Ученик" className="h-11 w-full rounded-xl"><SelectValue placeholder="Выберите ученика" /></SelectTrigger><SelectContent>{students.map((student) => <SelectItem value={student.name} key={student.id}>{student.name}</SelectItem>)}</SelectContent></Select></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Дата"><Input aria-label="Дата" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-11 rounded-xl" /></Field><Field label="Время"><Input aria-label="Время" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="h-11 rounded-xl" /></Field></div><Field label="Повторение"><Select value={repeat} onValueChange={(value) => setRepeat(value as "once" | "weekly")}><SelectTrigger aria-label="Повторение" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="once">Не повторять</SelectItem><SelectItem value="weekly">Каждую неделю</SelectItem></SelectContent></Select></Field></div><DialogFooter className="border-t bg-slate-50 p-5"><Button variant="outline" onClick={() => setOpen(false)}>Отмена</Button><Button disabled={!name || !date || !time} onClick={() => { onAdd({ date, time, name, repeat }); setOpen(false); }} className="bg-indigo-600">Сохранить урок</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function EditLessonDialog({ lesson, onOpenChange, onUpdate, onDelete }: { lesson: Lesson | null; onOpenChange: (open: boolean) => void; onUpdate: (id: string, date: string, time: string) => void; onDelete: (id: string) => void }) {
+  const [date, setDate] = useState(lesson?.date ?? today());
+  const [time, setTime] = useState(lesson?.time ?? "17:00");
+  useEffect(() => { if (lesson) { setDate(lesson.date); setTime(lesson.time); } }, [lesson]);
+  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">{lesson?.name}</DialogTitle><DialogDescription>Перенесите урок или отмените его без списания.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Новая дата"><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Новое время"><Input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></Field></div><DialogFooter className="sm:justify-between"><Button variant="destructive" onClick={() => { if (lesson) onDelete(lesson.id); onOpenChange(false); }}><Trash2 />Отменить урок</Button><div className="flex gap-2"><Button variant="outline" onClick={() => onOpenChange(false)}>Закрыть</Button><Button className="bg-indigo-600" onClick={() => { if (lesson) onUpdate(lesson.id, date, time); onOpenChange(false); }}>Перенести</Button></div></DialogFooter></DialogContent></Dialog>;
 }
 
 function AddStudentSheet({ onAdd }: { onAdd: (student: Omit<Student, "id">) => void }) {
