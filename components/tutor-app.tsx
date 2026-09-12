@@ -17,13 +17,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type View = "today" | "calendar" | "students" | "requests" | "student" | "portal";
+type View = "today" | "calendar" | "students" | "requests" | "notifications" | "student" | "portal";
 type Lesson = { id: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string };
 type LessonDraft = { date: string; time: string; name: string; repeat: "once" | "weekly" };
 type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean };
 type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
 type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string };
-type AppData = { lessons: Lesson[]; students: Student[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; currentStudentId?: string | null };
+type AppNotification = { id: string; type: string; title: string; body: string; read: boolean; createdAt: number };
+type AppData = { lessons: Lesson[]; students: Student[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; notifications: AppNotification[]; currentStudentId?: string | null };
 
 async function readAppData(): Promise<AppData> {
   const response = await fetch("/api/app-data", { cache: "no-store" });
@@ -58,12 +59,13 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
   const [students, setStudents] = useState<Student[]>([]);
   const [requests, setRequests] = useState<LessonRequest[]>([]);
   const [balanceEntries, setBalanceEntries] = useState<BalanceEntry[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("101");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   const applyData = useCallback((data: AppData) => {
-    setLessons(data.lessons); setStudents(data.students); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []);
+    setLessons(data.lessons); setStudents(data.students); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []); setNotifications(data.notifications ?? []);
     setSelectedStudent((current) => data.students.some((student) => student.id === current) ? current : (data.students[0]?.id ?? current));
   }, []);
 
@@ -97,6 +99,7 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
     try { await saveAppData({ action: "submitStudentRequest", ...body }); await reload(); toast.success("Запрос отправлен преподавателю"); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить запрос"); }
   };
+  const markNotificationsRead = async () => { await saveAppData({ action: "markNotificationsRead" }); await reload(); };
 
   useEffect(() => {
     const context = (document as Document & { modelContext?: { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> } }).modelContext;
@@ -136,12 +139,12 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
   if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><CalendarDays className="mx-auto mb-3 size-8 animate-pulse text-indigo-600" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-slate-500">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-indigo-600" onClick={() => { setLoading(true); void reload().catch(() => { setLoadError(true); setLoading(false); }); }}>Повторить</Button></div></main>;
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
-  if (role === "student") return portalStudent ? <StudentPortal student={portalStudent} lessons={lessons} entries={balanceEntries} requests={requests} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} studentMode /> : null;
-  if (view === "portal") return portalStudent ? <StudentPortal student={portalStudent} lessons={lessons.filter((lesson) => lesson.name === portalStudent.name)} entries={balanceEntries.filter((entry) => entry.studentId === portalStudent.id)} requests={requests.filter((request) => request.name === portalStudent.name)} onRequest={submitStudentRequest} onBack={() => setView("today")} /> : null;
+  if (role === "student") return portalStudent ? <StudentPortal student={portalStudent} lessons={lessons} entries={balanceEntries} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} studentMode /> : null;
+  if (view === "portal") return portalStudent ? <StudentPortal student={portalStudent} lessons={lessons.filter((lesson) => lesson.name === portalStudent.name)} entries={balanceEntries.filter((entry) => entry.studentId === portalStudent.id)} requests={requests.filter((request) => request.name === portalStudent.name)} notifications={[]} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={() => setView("today")} /> : null;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <Sidebar view={view} setView={setView} onPortal={() => setView("portal")} onLogout={onLogout} requestCount={requests.length} />
+      <Sidebar view={view} setView={setView} onPortal={() => setView("portal")} onLogout={onLogout} requestCount={requests.length} notificationCount={notifications.filter((item) => !item.read).length} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
         <MobileHeader />
         {view === "today" && <TodayView lessons={lessons} students={students} onAdd={addLesson} setView={setView} />}
@@ -149,6 +152,7 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} balanceEntries={balanceEntries} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
+        {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} />}
       </section>
       <MobileNav view={view} setView={setView} />
       <Toaster position="top-right" richColors />
@@ -156,12 +160,13 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
   );
 }
 
-function Sidebar({ view, setView, onPortal, onLogout, requestCount }: { view: View; setView: (view: View) => void; onPortal: () => void; onLogout?: () => void; requestCount: number }) {
+function Sidebar({ view, setView, onPortal, onLogout, requestCount, notificationCount }: { view: View; setView: (view: View) => void; onPortal: () => void; onLogout?: () => void; requestCount: number; notificationCount: number }) {
   const items = [
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
     { id: "students" as View, label: "Ученики", icon: UsersRound },
     { id: "requests" as View, label: "Запросы", icon: Bell, count: requestCount },
+    { id: "notifications" as View, label: "Уведомления", icon: Bell, count: notificationCount },
     { id: "settings" as View, label: "Настройки", icon: Settings },
   ];
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-slate-200 bg-white lg:flex">
@@ -261,11 +266,15 @@ function RequestsView({ requests, onResolved }: { requests: LessonRequest[]; onR
   return <Shell title="Запросы" eyebrow={`${requests.length} требуют ответа`}><div className="mb-5 flex gap-2 overflow-x-auto">{["Все", "Отмена", "Перенос", "Новый урок"].map((item, index) => <button key={item} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${index === 0 ? "bg-indigo-600 text-white" : "border bg-white text-slate-600"}`}>{item}</button>)}</div><div className="grid gap-4">{requests.map((request, index) => <article key={request.id} className={`card p-5 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-amber-50/40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-amber-700" : "text-indigo-600"}`}>{request.type}</p><h2 className="mt-1 text-xl font-bold">{request.name}</h2><p className="mt-1 text-slate-600">{request.detail}</p><p className="mt-2 text-sm text-slate-500">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => void resolve(request.id, "approved")} className="rounded-xl bg-indigo-600">Подтвердить</Button><Button onClick={() => void resolve(request.id, "declined")} variant="outline" className="rounded-xl">Отклонить</Button></div></div></article>)}{requests.length === 0 && <Empty text="Все запросы обработаны" />}</div></Shell>;
 }
 
-function StudentPortal({ student, lessons, entries, requests, onRequest, onBack, studentMode = false }: { student: Student; lessons: Lesson[]; entries: BalanceEntry[]; requests: LessonRequest[]; onRequest: (body: { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }) => void; onBack: () => void; studentMode?: boolean }) {
+function NotificationsView({ notifications, onRead }: { notifications: AppNotification[]; onRead: () => Promise<void> }) {
+  return <Shell title="Уведомления" eyebrow={`${notifications.filter((item) => !item.read).length} непрочитанных`} actions={<Button variant="outline" disabled={!notifications.some((item) => !item.read)} onClick={() => void onRead()}>Отметить всё прочитанным</Button>}><div className="card divide-y">{notifications.map((item) => <article key={item.id} className={`flex gap-4 p-5 ${item.read ? "opacity-60" : "bg-indigo-50/40"}`}><span className={`mt-1 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-indigo-600"}`} /><div><h2 className="font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.body}</p><p className="mt-2 text-xs text-slate-400">{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(item.createdAt))}</p></div></article>)}{!notifications.length && <Empty text="Новых уведомлений нет" />}</div></Shell>;
+}
+
+function StudentPortal({ student, lessons, entries, requests, notifications, onReadNotifications, onRequest, onBack, studentMode = false }: { student: Student; lessons: Lesson[]; entries: BalanceEntry[]; requests: LessonRequest[]; notifications: AppNotification[]; onReadNotifications: () => Promise<void>; onRequest: (body: { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }) => void; onBack: () => void; studentMode?: boolean }) {
   const futureLessons = lessons.filter((lesson) => lesson.date >= today()).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   const nextLesson = futureLessons[0];
   const paymentEntries = entries.filter((entry) => entry.kind === "payment");
-  return <main className="min-h-screen bg-background px-4 pb-24 pt-5 text-foreground"><div className="mx-auto max-w-lg"><button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="size-4" />{studentMode ? "Выйти" : "К кабинету преподавателя"}</button><div className="mb-7 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Привет, {student.name.split(" ")[0]}</h1><p className="mt-1 text-slate-500">Ваше расписание занятий</p></div><div className="flex items-center gap-2"><ThemeToggle compact /><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">{student.initials.slice(0, 1)}</span></div></div>{nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">Анна Петрова</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}<section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>{student.floating && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} onRequest={onRequest} fullWidth /></div>}{requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}<section className="mt-5"><h2 className="mb-3 text-lg font-bold">История оплат</h2><History entries={paymentEntries} /></section></div><Toaster position="top-center" richColors /></main>;
+  return <main className="min-h-screen bg-background px-4 pb-24 pt-5 text-foreground"><div className="mx-auto max-w-lg"><button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="size-4" />{studentMode ? "Выйти" : "К кабинету преподавателя"}</button><div className="mb-7 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Привет, {student.name.split(" ")[0]}</h1><p className="mt-1 text-slate-500">Ваше расписание занятий</p></div><div className="flex items-center gap-2"><ThemeToggle compact /><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">{student.initials.slice(0, 1)}</span></div></div>{notifications.some((item) => !item.read) && <button onClick={() => void onReadNotifications()} className="mb-4 flex w-full items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-900"><Bell className="mt-0.5 size-5 shrink-0" /><span><strong className="block">{notifications.find((item) => !item.read)?.title}</strong><span className="mt-1 block text-sm">{notifications.find((item) => !item.read)?.body}</span></span></button>}{nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">Анна Петрова</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}<section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>{student.floating && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} onRequest={onRequest} fullWidth /></div>}{requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}<section className="mt-5"><h2 className="mb-3 text-lg font-bold">История оплат</h2><History entries={paymentEntries} /></section></div><Toaster position="top-center" richColors /></main>;
 }
 
 function StudentRequestDialog({ type, lesson, student, onRequest, fullWidth = false }: { type: "cancel" | "reschedule" | "new_lesson"; lesson?: Lesson; student: Student; onRequest: (body: { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }) => void; fullWidth?: boolean }) {
