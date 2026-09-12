@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy,
-  Home, LogOut, Menu, Plus, Search, Settings, Trash2, UserRound, UsersRound, WalletCards,
+  Home, LogOut, Menu, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -88,16 +88,13 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отменить урок"); }
   };
   const addStudent = async (student: Omit<Student, "id">) => {
-    try { const result = await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating }); await reload(); if (result.inviteUrl) { await navigator.clipboard?.writeText(result.inviteUrl); toast.success("Ученик создан. Ссылка-приглашение скопирована"); } else toast.success("Ученик сохранён в базе"); }
+    try { await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating }); await reload(); toast.success("Ученик создан. Пригласить его можно из карточки"); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать ученика"); }
   };
-  const copyStudentInvite = async (studentId: string) => {
-    try {
-      const result = await saveAppData({ action: "createStudentInvite", studentId });
-      if (!result.inviteUrl) throw new Error("Ссылка не была создана");
-      await navigator.clipboard.writeText(result.inviteUrl);
-      toast.success("Новая ссылка-приглашение скопирована");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать приглашение"); }
+  const createStudentInvite = async (studentId: string) => {
+    const result = await saveAppData({ action: "createStudentInvite", studentId });
+    if (!result.inviteUrl) throw new Error("Ссылка не была создана");
+    return result.inviteUrl;
   };
   const addPayment = async (studentId: string, count: number, paymentDate: string) => {
     try { await saveAppData({ action: "addPayment", studentId, count, paymentDate }); await reload(); toast.success(`Добавлено ${count} занятий`); }
@@ -158,7 +155,7 @@ export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" 
         {view === "today" && <TodayView lessons={lessons} students={students} onAdd={addLesson} setView={setView} />}
         {view === "calendar" && <CalendarView lessons={lessons} students={students} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} balanceEntries={balanceEntries} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onCopyInvite={copyStudentInvite} />}
+        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} balanceEntries={balanceEntries} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onCreateInvite={createStudentInvite} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} />}
       </section>
@@ -261,9 +258,17 @@ function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd:
 
 function Balance({ balance }: { balance: number }) { return <span className={`inline-flex min-w-12 justify-center rounded-xl px-3 py-2 font-bold ${balance < 0 ? "bg-rose-50 text-rose-700" : balance <= 1 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{balance}</span>; }
 
-function StudentView({ student, lessons, balanceEntries, onAdd, onBack, onPay, onCopyInvite }: { student: Student; lessons: Lesson[]; balanceEntries: BalanceEntry[]; onAdd: (lesson: LessonDraft) => void; onBack: () => void; onPay: (id: string, count: number, date: string) => void; onCopyInvite: (id: string) => void }) {
+function StudentView({ student, lessons, balanceEntries, onAdd, onBack, onPay, onCreateInvite }: { student: Student; lessons: Lesson[]; balanceEntries: BalanceEntry[]; onAdd: (lesson: LessonDraft) => void; onBack: () => void; onPay: (id: string, count: number, date: string) => void; onCreateInvite: (id: string) => Promise<string> }) {
   const history = balanceEntries.filter((entry) => entry.studentId === student.id);
-  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3">{student.accountStatus === "invited" && <Button variant="outline" className="h-11 rounded-xl" onClick={() => onCopyInvite(student.id)}><Copy />Скопировать приглашение</Button>}<AddLessonDialog students={[student]} defaultDate={today()} onAdd={onAdd} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История занятий</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p><p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Без даты окончания"}</p></InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.name === student.name && lesson.date >= today())} /></div></TabsContent><TabsContent value="history"><History entries={history} /></TabsContent><TabsContent value="payments"><History entries={history.filter((entry) => entry.kind === "payment")} /></TabsContent></Tabs></Shell>;
+  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3">{student.accountStatus === "invited" && <InviteStudentDialog student={student} onCreateInvite={onCreateInvite} />}<AddLessonDialog students={[student]} defaultDate={today()} onAdd={onAdd} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История занятий</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p><p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Без даты окончания"}</p></InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.name === student.name && lesson.date >= today())} /></div></TabsContent><TabsContent value="history"><History entries={history} /></TabsContent><TabsContent value="payments"><History entries={history.filter((entry) => entry.kind === "payment")} /></TabsContent></Tabs></Shell>;
+}
+
+function InviteStudentDialog({ student, onCreateInvite }: { student: Student; onCreateInvite: (id: string) => Promise<string> }) {
+  const [open, setOpen] = useState(false); const [url, setUrl] = useState(""); const [pending, setPending] = useState(false);
+  const prepare = async () => { setOpen(true); setPending(true); setUrl(""); try { setUrl(await onCreateInvite(student.id)); } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать приглашение"); setOpen(false); } finally { setPending(false); } };
+  const copy = async () => { await navigator.clipboard.writeText(url); toast.success("Ссылка скопирована — отправьте её ученику"); };
+  const share = async () => { if (navigator.share) await navigator.share({ title: `Приглашение для ${student.name}`, text: "Войдите в кабинет ученика по ссылке:", url }); else await copy(); };
+  return <Dialog open={open} onOpenChange={setOpen}><Button variant="outline" className="h-11 rounded-xl" onClick={() => void prepare()}><Send />Пригласить ученика</Button><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>Пригласить {student.name}</DialogTitle><DialogDescription>Отправьте эту персональную ссылку ученику в Telegram, WhatsApp, почте или другом удобном месте. По ней ученик задаст пароль и войдёт в свой кабинет.</DialogDescription></DialogHeader>{pending ? <p className="rounded-2xl bg-slate-50 p-4 text-slate-500">Готовим приглашение…</p> : <><Field label="Персональная ссылка"><Input readOnly value={url} onFocus={(event) => event.currentTarget.select()} /></Field><p className="text-sm text-slate-500">Ссылка действует 14 дней. Создание новой ссылки отключит предыдущую.</p></>}<DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Закрыть</Button><Button variant="outline" disabled={!url} onClick={() => void copy()}><Copy />Скопировать ссылку</Button><Button disabled={!url} className="bg-indigo-600" onClick={() => void share()}><Send />Отправить</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
