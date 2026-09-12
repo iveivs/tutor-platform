@@ -22,7 +22,7 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
   if (!enabled) return <TutorApp />;
   if (!ready) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><CalendarDays className="size-8 animate-pulse text-indigo-600" /></main>;
   if (!user) return <LoginScreen onSuccess={setUser} />;
-  return <TutorApp role={user.role} onLogout={logout} />;
+  return <TutorApp role={user.role} user={user} onLogout={logout} />;
 }
 
 function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {

@@ -14,6 +14,7 @@ type ActionBody =
   | { action: "addPayment"; studentId: string; count: number; paymentDate?: string }
   | { action: "resolveRequest"; requestId: string; decision: "approved" | "declined" }
   | { action: "submitStudentRequest"; requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }
+  | { action: "updateProfile"; name: string }
   | { action: "markNotificationsRead" };
 
 const dateLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     const db = getD1();
     await settlePastLessons(db);
     const ownStudentId = auth.role === "student" ? auth.memberId : null;
-    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows] = await Promise.all([
+    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow] = await Promise.all([
       db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
@@ -50,6 +51,10 @@ export async function GET(request: Request) {
         WHERE workspace_id = ? AND (? IS NULL OR student_id = ?) ORDER BY occurred_at DESC, created_at DESC`).bind(WORKSPACE_ID, ownStudentId, ownStudentId).all(),
       db.prepare(`SELECT id, type, title, body, read_at, created_at FROM notifications
         WHERE member_id = ? ORDER BY created_at DESC LIMIT 30`).bind(auth.memberId).all(),
+      db.prepare(`SELECT display_name FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
+        ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(WORKSPACE_ID).first<{ display_name: string }>(),
+      db.prepare(`SELECT m.display_name, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
+        WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, WORKSPACE_ID).first<{ display_name: string; email: string }>(),
     ]);
 
     const seriesByStudent = new Map<string, Array<{ weekday: number; start: number }>>();
@@ -90,7 +95,7 @@ export async function GET(request: Request) {
       note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))),
     }));
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at) }));
-    return Response.json({ students, lessons, requests, balanceEntries, notifications, currentStudentId: ownStudentId });
+    return Response.json({ students, lessons, requests, balanceEntries, notifications, currentStudentId: ownStudentId, teacherName: teacherRow?.display_name ?? "Преподаватель", profile: viewerRow ? { name: viewerRow.display_name, email: viewerRow.email } : undefined });
   } catch (error) {
     console.error("Failed to load app data", error);
     return Response.json({ error: "Не удалось загрузить данные" }, { status: 500 });
@@ -107,7 +112,15 @@ export async function POST(request: Request) {
     const db = getD1();
     const id = crypto.randomUUID();
 
-    if (body.action === "createLesson") {
+    if (body.action === "updateProfile") {
+      const name = body.name?.trim();
+      if (!name || name.length < 2 || name.length > 80) return invalid();
+      await db.batch([
+        db.prepare("UPDATE members SET display_name = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(name, Date.now(), auth.memberId, WORKSPACE_ID),
+        db.prepare("UPDATE users SET full_name = ?, updated_at = ? WHERE id = (SELECT user_id FROM members WHERE id = ?)").bind(name, Date.now(), auth.memberId),
+        db.prepare("UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ? AND ? IN (SELECT id FROM members WHERE role = 'owner')").bind(`Кабинет: ${name}`, Date.now(), WORKSPACE_ID, auth.memberId),
+      ]);
+    } else if (body.action === "createLesson") {
       const range = lessonRange(body.date, body.time, body.durationMinutes);
       if (!range || ![undefined, "once", "weekly"].includes(body.repeat)) return invalid();
       const student = await db.prepare("SELECT id FROM members WHERE workspace_id = ? AND role = 'student' AND display_name = ?").bind(WORKSPACE_ID, body.student.trim()).first<{ id: string }>();
