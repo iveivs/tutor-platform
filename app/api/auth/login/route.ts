@@ -15,8 +15,20 @@ export async function POST(request: Request) {
 
   const db = getD1();
   await db.prepare("UPDATE users SET auth_subject = ?, updated_at = ? WHERE lower(email) = lower(?)").bind(auth.user.id, Date.now(), email.trim()).run();
-  const member = await db.prepare(`SELECT m.id, m.workspace_id, m.role, m.display_name FROM users u JOIN members m ON m.user_id = u.id
+  let member = await db.prepare(`SELECT m.id, m.workspace_id, m.role, m.display_name FROM users u JOIN members m ON m.user_id = u.id
     WHERE u.auth_subject = ? AND m.status = 'active' LIMIT 1`).bind(auth.user.id).first<Record<string, unknown>>();
+  const ownerEmail = process.env.INITIAL_OWNER_EMAIL?.trim().toLowerCase();
+  if (!member && ownerEmail && auth.user.email?.toLowerCase() === ownerEmail) {
+    const userId = crypto.randomUUID();
+    const ownerName = process.env.INITIAL_OWNER_NAME?.trim() || "Преподаватель";
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO workspaces (id, name, timezone) VALUES ('1', ?, 'Europe/Moscow')").bind(`Кабинет: ${ownerName}`),
+      db.prepare("INSERT OR IGNORE INTO users (id, auth_subject, email, full_name) VALUES (?, ?, ?, ?)").bind(userId, auth.user.id, ownerEmail, ownerName),
+      db.prepare("INSERT OR IGNORE INTO members (id, workspace_id, user_id, role, status, display_name, email, schedule_type) VALUES ('1', '1', ?, 'owner', 'active', ?, ?, 'fixed')").bind(userId, ownerName, ownerEmail),
+    ]);
+    member = await db.prepare(`SELECT m.id, m.workspace_id, m.role, m.display_name FROM users u JOIN members m ON m.user_id = u.id
+      WHERE u.auth_subject = ? AND m.status = 'active' LIMIT 1`).bind(auth.user.id).first<Record<string, unknown>>();
+  }
   if (!member) return Response.json({ error: "Для этого аккаунта нет активного кабинета" }, { status: 403 });
 
   const headers = new Headers({ "content-type": "application/json" });
