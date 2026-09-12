@@ -10,6 +10,7 @@ type ActionBody =
   | { action: "updateLesson"; lessonId: string; date: string; time: string; durationMinutes?: number }
   | { action: "deleteLesson"; lessonId: string }
   | { action: "createStudent"; name: string; email?: string; floating: boolean }
+  | { action: "createStudentInvite"; studentId: string }
   | { action: "addPayment"; studentId: string; count: number; paymentDate?: string }
   | { action: "resolveRequest"; requestId: string; decision: "approved" | "declined" }
   | { action: "submitStudentRequest"; requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     await settlePastLessons(db);
     const ownStudentId = auth.role === "student" ? auth.memberId : null;
     const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows] = await Promise.all([
-      db.prepare(`SELECT m.id, m.display_name, m.schedule_type,
+      db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
         FROM members m
@@ -62,9 +63,9 @@ export async function GET(request: Request) {
       const series = seriesByStudent.get(String(row.id)) ?? [];
       const schedule = floating ? "Плавающее" : series.map(({ weekday }) => weekdays[weekday]).join(", ") + (series[0] ? ` · ${minutesToTime(series[0].start)}` : "");
       return {
-        id: String(row.id), name: String(row.display_name), initials: initials(String(row.display_name)),
+        id: String(row.id), name: String(row.display_name), email: row.email ? String(row.email) : undefined, initials: initials(String(row.display_name)),
         schedule, next: row.next_lesson ? `${dateLabel.format(new Date(Number(row.next_lesson)))}, ${timeLabel.format(new Date(Number(row.next_lesson)))}` : "Не назначен",
-        balance: Number(row.balance), floating,
+        balance: Number(row.balance), floating, accountStatus: row.status === "active" ? "active" : "invited",
       };
     });
     const lessons = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
@@ -145,6 +146,18 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?)`).bind(inviteId, WORKSPACE_ID, id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14),
       ]);
       return Response.json({ ok: true, id, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
+    } else if (body.action === "createStudentInvite") {
+      if (!body.studentId) return invalid();
+      const student = await db.prepare("SELECT id, email, status FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(body.studentId, WORKSPACE_ID).first<{ id: string; email: string | null; status: string }>();
+      if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+      if (student.status === "active") return Response.json({ error: "Ученик уже подключил аккаунт" }, { status: 409 });
+      if (!student.email) return Response.json({ error: "Сначала укажите email ученика" }, { status: 409 });
+      const inviteToken = randomToken();
+      await db.batch([
+        db.prepare("UPDATE invitations SET expires_at = ? WHERE member_id = ? AND accepted_at IS NULL").bind(Date.now() - 1, student.id),
+        db.prepare("INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)").bind(id, WORKSPACE_ID, student.id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14),
+      ]);
+      return Response.json({ ok: true, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
     } else if (body.action === "addPayment") {
       if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0 || body.count > 100 || (body.paymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate))) return invalid();
       const occurredAt = body.paymentDate ? new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime() : Date.now();
