@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const { email, password } = await request.json() as { email?: string; password?: string };
   if (!email || !password) return Response.json({ error: "Введите email и пароль" }, { status: 400 });
   const authResponse = await fetch(`${config.url}/auth/v1/token?grant_type=password`, {
-    method: "POST", headers: { apikey: config.anonKey, "content-type": "application/json" }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    method: "POST", headers: { apikey: config.publishableKey, "content-type": "application/json" }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   });
   const auth = await authResponse.json() as { access_token?: string; refresh_token?: string; user?: { id: string; email?: string }; msg?: string; error_description?: string };
   if (!authResponse.ok || !auth.access_token || !auth.refresh_token || !auth.user) return Response.json({ error: "Неверный email или пароль" }, { status: 401 });

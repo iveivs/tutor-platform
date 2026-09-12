@@ -7,16 +7,16 @@ export type AuthMember = { userId: string; memberId: string; workspaceId: string
 
 export function getAuthConfig() {
   const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-  return { url: url.replace(/\/$/, ""), anonKey, serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  if (!url || !publishableKey) return null;
+  return { url: url.replace(/\/$/, ""), publishableKey, secretKey: process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY };
 }
 
 export async function getAuthMember(request: Request): Promise<AuthMember | null> {
   const config = getAuthConfig();
   const accessToken = readCookie(request, ACCESS_COOKIE);
   if (!config || !accessToken) return null;
-  const response = await fetch(`${config.url}/auth/v1/user`, { headers: { apikey: config.anonKey, authorization: `Bearer ${accessToken}` } });
+  const response = await fetch(`${config.url}/auth/v1/user`, { headers: { apikey: config.publishableKey, authorization: `Bearer ${accessToken}` } });
   if (!response.ok) return null;
   const identity = await response.json() as { id: string; email?: string };
   const member = await getD1().prepare(`SELECT u.id AS user_id, u.email, m.id AS member_id, m.workspace_id, m.role, m.display_name
