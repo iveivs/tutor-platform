@@ -31,8 +31,9 @@ async function readAppData(): Promise<AppData> {
 
 async function saveAppData(body: Record<string, unknown>) {
   const response = await fetch("/api/app-data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const result = await response.json() as { error?: string };
+  const result = await response.json() as { error?: string; inviteUrl?: string };
   if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить изменения");
+  return result;
 }
 
 const statusStyles = {
@@ -42,7 +43,7 @@ const statusStyles = {
   request: "bg-amber-50 text-amber-700 ring-amber-100",
 };
 
-export default function TutorApp() {
+export default function TutorApp({ role = "owner", onLogout }: { role?: "owner" | "teacher" | "student"; onLogout?: () => void }) {
   const [view, setView] = useState<View>("today");
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -67,7 +68,7 @@ export default function TutorApp() {
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось добавить урок"); }
   };
   const addStudent = async (student: Omit<Student, "id">) => {
-    try { await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating }); await reload(); toast.success("Ученик сохранён в базе"); }
+    try { const result = await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating }); await reload(); if (result.inviteUrl) { await navigator.clipboard?.writeText(result.inviteUrl); toast.success("Ученик создан. Ссылка-приглашение скопирована"); } else toast.success("Ученик сохранён в базе"); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать ученика"); }
   };
   const addPayment = async (studentId: string, count: number) => {
@@ -110,13 +111,14 @@ export default function TutorApp() {
     return () => lifecycle.abort();
   }, [lessons, reload]);
 
+  if (role === "student") return <StudentPortal onBack={onLogout ?? (() => undefined)} studentMode />;
   if (view === "portal") return <StudentPortal onBack={() => setView("today")} />;
   if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><CalendarDays className="mx-auto mb-3 size-8 animate-pulse text-indigo-600" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-slate-500">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-indigo-600" onClick={() => { setLoading(true); void reload().catch(() => { setLoadError(true); setLoading(false); }); }}>Повторить</Button></div></main>;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <Sidebar view={view} setView={setView} onPortal={() => setView("portal")} requestCount={requests.length} />
+      <Sidebar view={view} setView={setView} onPortal={() => setView("portal")} onLogout={onLogout} requestCount={requests.length} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
         <MobileHeader />
         {view === "today" && <TodayView lessons={lessons.filter((lesson) => lesson.day === 16)} students={students} onAdd={addLesson} setView={setView} />}
@@ -131,7 +133,7 @@ export default function TutorApp() {
   );
 }
 
-function Sidebar({ view, setView, onPortal, requestCount }: { view: View; setView: (view: View) => void; onPortal: () => void; requestCount: number }) {
+function Sidebar({ view, setView, onPortal, onLogout, requestCount }: { view: View; setView: (view: View) => void; onPortal: () => void; onLogout?: () => void; requestCount: number }) {
   const items = [
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
@@ -142,7 +144,7 @@ function Sidebar({ view, setView, onPortal, requestCount }: { view: View; setVie
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-slate-200 bg-white lg:flex">
     <div className="border-b border-slate-200 px-7 py-7"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200"><CalendarDays className="size-6" /></span><div><p className="text-xl font-bold tracking-tight">Репетитор</p><p className="mt-0.5 text-sm text-slate-500">Анна Петрова</p></div></div></div>
     <nav className="flex-1 space-y-2 p-5" aria-label="Основная навигация">{items.map(({ id, label, icon: Icon, count }) => <button key={label} onClick={() => id !== "settings" && setView(id)} className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-base font-medium transition ${view === id || (id === "students" && view === "student") ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}><Icon className="size-5" /><span>{label}</span>{count ? <span className="ml-auto rounded-full bg-indigo-600 px-2 py-0.5 text-xs text-white">{count}</span> : null}</button>)}</nav>
-    <div className="border-t border-slate-200 p-5"><ThemeToggle /><button onClick={onPortal} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl px-4 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"><UserRound className="size-5" />Кабинет ученика</button><button className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 text-sm text-slate-600 hover:bg-slate-50"><LogOut className="size-5" />Выйти</button></div>
+    <div className="border-t border-slate-200 p-5"><ThemeToggle /><button onClick={onPortal} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl px-4 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"><UserRound className="size-5" />Кабинет ученика</button><button onClick={onLogout} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 text-sm text-slate-600 hover:bg-slate-50"><LogOut className="size-5" />Выйти</button></div>
   </aside>;
 }
 
@@ -204,8 +206,8 @@ function RequestsView({ requests, onResolved }: { requests: LessonRequest[]; onR
   return <Shell title="Запросы" eyebrow={`${requests.length} требуют ответа`}><div className="mb-5 flex gap-2 overflow-x-auto">{["Все", "Отмена", "Перенос", "Новый урок"].map((item, index) => <button key={item} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${index === 0 ? "bg-indigo-600 text-white" : "border bg-white text-slate-600"}`}>{item}</button>)}</div><div className="grid gap-4">{requests.map((request, index) => <article key={request.id} className={`card p-5 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-amber-50/40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-amber-700" : "text-indigo-600"}`}>{request.type}</p><h2 className="mt-1 text-xl font-bold">{request.name}</h2><p className="mt-1 text-slate-600">{request.detail}</p><p className="mt-2 text-sm text-slate-500">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => void resolve(request.id, "approved")} className="rounded-xl bg-indigo-600">Подтвердить</Button><Button onClick={() => void resolve(request.id, "declined")} variant="outline" className="rounded-xl">Отклонить</Button></div></div></article>)}{requests.length === 0 && <Empty text="Все запросы обработаны" />}</div></Shell>;
 }
 
-function StudentPortal({ onBack }: { onBack: () => void }) {
-  return <main className="min-h-screen bg-[#f6f8fc] px-4 pb-24 pt-5 text-slate-950"><div className="mx-auto max-w-lg"><button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="size-4" />К кабинету преподавателя</button><div className="mb-7 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Привет, Иван</h1><p className="mt-1 text-slate-500">Ваше ближайшее занятие</p></div><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">И</span></div><section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold">Среда, 18 сентября</h2><p className="mt-2 text-3xl font-bold">17:00–18:00</p><p className="mt-2 text-slate-500">Анна Петрова</p></div><span className="rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700">Запланирован</span></div></section><section className="mt-4 rounded-3xl border border-rose-200 bg-rose-50 p-6"><div className="flex items-center gap-3"><WalletCards className="size-6 text-rose-600" /><div><p className="font-semibold text-slate-600">Баланс</p><p className="text-2xl font-bold text-rose-700">−2 занятия</p></div></div><p className="mt-3 text-slate-600">Необходимо оплатить 2 занятия</p><button onClick={() => toast.info("Открыта история оплат")} className="mt-3 font-semibold text-indigo-600">История оплат</button></section><div className="mt-5 grid gap-3 sm:grid-cols-2"><Button onClick={() => toast.success("Запрос на перенос создан")} size="lg" className="h-12 rounded-xl bg-indigo-600">Запросить перенос</Button><Button onClick={() => toast.info("Отмену можно запросить до вторника, 23:59")} size="lg" variant="outline" className="h-12 rounded-xl">Запросить отмену</Button></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до вторника, 23:59</p></div><Toaster position="top-center" richColors /></main>;
+function StudentPortal({ onBack, studentMode = false }: { onBack: () => void; studentMode?: boolean }) {
+  return <main className="min-h-screen bg-[#f6f8fc] px-4 pb-24 pt-5 text-slate-950"><div className="mx-auto max-w-lg"><button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="size-4" />{studentMode ? "Выйти" : "К кабинету преподавателя"}</button><div className="mb-7 flex items-center justify-between"><div><h1 className="text-3xl font-bold">Привет, Иван</h1><p className="mt-1 text-slate-500">Ваше ближайшее занятие</p></div><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">И</span></div><section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold">Среда, 18 сентября</h2><p className="mt-2 text-3xl font-bold">17:00–18:00</p><p className="mt-2 text-slate-500">Анна Петрова</p></div><span className="rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700">Запланирован</span></div></section><section className="mt-4 rounded-3xl border border-rose-200 bg-rose-50 p-6"><div className="flex items-center gap-3"><WalletCards className="size-6 text-rose-600" /><div><p className="font-semibold text-slate-600">Баланс</p><p className="text-2xl font-bold text-rose-700">−2 занятия</p></div></div><p className="mt-3 text-slate-600">Необходимо оплатить 2 занятия</p><button onClick={() => toast.info("Открыта история оплат")} className="mt-3 font-semibold text-indigo-600">История оплат</button></section><div className="mt-5 grid gap-3 sm:grid-cols-2"><Button onClick={() => toast.success("Запрос на перенос создан")} size="lg" className="h-12 rounded-xl bg-indigo-600">Запросить перенос</Button><Button onClick={() => toast.info("Отмену можно запросить до вторника, 23:59")} size="lg" variant="outline" className="h-12 rounded-xl">Запросить отмену</Button></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до вторника, 23:59</p></div><Toaster position="top-center" richColors /></main>;
 }
 
 function AddLessonDialog({ onAdd, compact = false }: { onAdd: (lesson: Omit<Lesson, "id">) => void; compact?: boolean }) {

@@ -1,4 +1,5 @@
 import { getD1 } from "@/db/d1";
+import { assertSameOrigin, getAuthConfig, getAuthMember, randomToken, sha256 } from "@/lib/auth";
 
 const WORKSPACE_ID = "1";
 const TEACHER_ID = "1";
@@ -13,8 +14,10 @@ type ActionBody =
 const dateLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
 const timeLabel = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await requireTeacher(request);
+    if (auth instanceof Response) return auth;
     const db = getD1();
     const [studentRows, seriesRows, lessonRows, requestRows] = await Promise.all([
       db.prepare(`SELECT m.id, m.display_name, m.schedule_type,
@@ -80,6 +83,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+    const auth = await requireTeacher(request);
+    if (auth instanceof Response) return auth;
     const body = await request.json() as ActionBody;
     const db = getD1();
     const id = crypto.randomUUID();
@@ -94,8 +100,15 @@ export async function POST(request: Request) {
         VALUES (?, ?, ?, ?, ?, ?)`).bind(id, WORKSPACE_ID, student.id, start.getTime(), end.getTime(), TEACHER_ID).run();
     } else if (body.action === "createStudent") {
       if (!body.name?.trim() || (body.email && !/^\S+@\S+\.\S+$/.test(body.email))) return invalid();
-      await db.prepare(`INSERT INTO members (id, workspace_id, role, status, display_name, email, schedule_type)
-        VALUES (?, ?, 'student', 'invited', ?, ?, ?)`).bind(id, WORKSPACE_ID, body.name.trim(), body.email?.trim() || null, body.floating ? "floating" : "fixed").run();
+      const inviteToken = randomToken();
+      const inviteId = crypto.randomUUID();
+      await db.batch([
+        db.prepare(`INSERT INTO members (id, workspace_id, role, status, display_name, email, schedule_type)
+          VALUES (?, ?, 'student', 'invited', ?, ?, ?)`).bind(id, WORKSPACE_ID, body.name.trim(), body.email?.trim() || null, body.floating ? "floating" : "fixed"),
+        db.prepare(`INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at)
+          VALUES (?, ?, ?, ?, ?)`).bind(inviteId, WORKSPACE_ID, id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14),
+      ]);
+      return Response.json({ ok: true, id, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
     } else if (body.action === "addPayment") {
       if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0) return invalid();
       await db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, recorded_by_id)
@@ -116,6 +129,15 @@ export async function POST(request: Request) {
     console.error("Failed to update app data", error);
     return Response.json({ error: "Не удалось сохранить изменения" }, { status: 500 });
   }
+}
+
+async function requireTeacher(request?: Request) {
+  if (!getAuthConfig()) return { role: "owner" as const };
+  if (!request) return Response.json({ error: "Требуется вход" }, { status: 401 });
+  const member = await getAuthMember(request);
+  if (!member) return Response.json({ error: "Требуется вход" }, { status: 401 });
+  if (member.workspaceId !== WORKSPACE_ID || !["owner", "teacher"].includes(member.role)) return Response.json({ error: "Недостаточно прав" }, { status: 403 });
+  return member;
 }
 
 function invalid() { return Response.json({ error: "Проверьте заполненные данные" }, { status: 400 }); }
