@@ -10,7 +10,7 @@ type ActionBody =
   | { action: "updateLesson"; lessonId: string; date: string; time: string; durationMinutes?: number }
   | { action: "deleteLesson"; lessonId: string }
   | { action: "createStudent"; name: string; email?: string; floating: boolean }
-  | { action: "addPayment"; studentId: string; count: number }
+  | { action: "addPayment"; studentId: string; count: number; paymentDate?: string }
   | { action: "resolveRequest"; requestId: string; decision: "approved" | "declined" };
 
 const dateLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
@@ -21,7 +21,8 @@ export async function GET(request: Request) {
     const auth = await requireTeacher(request);
     if (auth instanceof Response) return auth;
     const db = getD1();
-    const [studentRows, seriesRows, lessonRows, requestRows] = await Promise.all([
+    await settlePastLessons(db);
+    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows] = await Promise.all([
       db.prepare(`SELECT m.id, m.display_name, m.schedule_type,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
         JOIN members m ON m.id = r.student_id
         LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.workspace_id = ? AND r.status = 'pending' ORDER BY r.created_at`).bind(WORKSPACE_ID).all(),
+      db.prepare(`SELECT id, student_id, kind, lesson_units, note, occurred_at FROM balance_entries
+        WHERE workspace_id = ? ORDER BY occurred_at DESC, created_at DESC`).bind(WORKSPACE_ID).all(),
     ]);
 
     const seriesByStudent = new Map<string, Array<{ weekday: number; start: number }>>();
@@ -76,7 +79,11 @@ export async function GET(request: Request) {
         : proposedDate ? `${dateLabel.format(proposedDate)} · ${timeLabel.format(proposedDate)}` : sourceDate ? `${dateLabel.format(sourceDate)}, ${timeLabel.format(sourceDate)}` : "Время не выбрано";
       return { id: String(row.id), type: title, kind, name: String(row.display_name), detail, note: String(row.message ?? "Без комментария") };
     });
-    return Response.json({ students, lessons, requests });
+    const balanceEntries = (balanceRows.results as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), studentId: String(row.student_id), kind: String(row.kind), units: Number(row.lesson_units),
+      note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))),
+    }));
+    return Response.json({ students, lessons, requests, balanceEntries });
   } catch (error) {
     console.error("Failed to load app data", error);
     return Response.json({ error: "Не удалось загрузить данные" }, { status: 500 });
@@ -132,9 +139,12 @@ export async function POST(request: Request) {
       ]);
       return Response.json({ ok: true, id, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
     } else if (body.action === "addPayment") {
-      if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0) return invalid();
-      await db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, recorded_by_id)
-        VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?)`).bind(id, WORKSPACE_ID, body.studentId, body.count, TEACHER_ID).run();
+      if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0 || body.count > 100 || (body.paymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate))) return invalid();
+      const occurredAt = body.paymentDate ? new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime() : Date.now();
+      const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(body.studentId, WORKSPACE_ID).first();
+      if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+      await db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
+        VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, WORKSPACE_ID, body.studentId, body.count, occurredAt, TEACHER_ID).run();
     } else if (body.action === "resolveRequest") {
       if (!body.requestId || !["approved", "declined"].includes(body.decision)) return invalid();
       const row = await db.prepare("SELECT type, student_id, lesson_id, proposed_starts_at, proposed_ends_at FROM lesson_requests WHERE id = ? AND workspace_id = ? AND status = 'pending'").bind(body.requestId, WORKSPACE_ID).first<Record<string, unknown>>();
@@ -181,4 +191,19 @@ async function hasConflict(db: ReturnType<typeof getD1>, start: number, end: num
   const row = await db.prepare(`SELECT id FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND id != ? AND starts_at < ? AND ends_at > ? LIMIT 1`)
     .bind(WORKSPACE_ID, exceptId, end, start).first();
   return Boolean(row);
+}
+async function settlePastLessons(db: ReturnType<typeof getD1>) {
+  const now = Date.now();
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO balance_entries (id, workspace_id, student_id, lesson_id, kind, lesson_units, note, occurred_at, recorded_by_id)
+      SELECT lower(hex(randomblob(16))), l.workspace_id, l.student_id, l.id, 'lesson_charge', -1, 'Урок проведён', l.ends_at, l.created_by_id
+      FROM lessons l
+      WHERE l.workspace_id = ? AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = l.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+      .bind(WORKSPACE_ID, now),
+    db.prepare(`UPDATE lessons SET status = 'completed', charge_status = 'charged', completed_at = ends_at, updated_at = ?
+      WHERE workspace_id = ? AND status = 'scheduled' AND charge_status = 'pending' AND ends_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = lessons.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+      .bind(now, WORKSPACE_ID, now),
+  ]);
 }
