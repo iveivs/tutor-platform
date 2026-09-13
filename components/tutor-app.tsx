@@ -27,14 +27,23 @@ type BalanceEntry = { id: string; studentId: string; kind: string; units: number
 type AppNotification = { id: string; type: string; title: string; body: string; read: boolean; createdAt: number };
 type AppData = { lessons: Lesson[]; students: Student[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; notifications: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string } };
 
+async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
+  let response = await fetch(input, init);
+  if (response.status === 401) {
+    const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
+    if (refreshed.ok) response = await fetch(input, init);
+  }
+  return response;
+}
+
 async function readAppData(): Promise<AppData> {
-  const response = await fetch("/api/app-data", { cache: "no-store" });
+  const response = await appFetch("/api/app-data", { cache: "no-store" });
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   return response.json() as Promise<AppData>;
 }
 
 async function saveAppData(body: Record<string, unknown>) {
-  const response = await fetch("/api/app-data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const response = await appFetch("/api/app-data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const result = await response.json() as { error?: string; inviteUrl?: string };
   if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить изменения");
   return result;

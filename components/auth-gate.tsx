@@ -9,13 +9,22 @@ import { Label } from "@/components/ui/label";
 
 type User = { name: string; email: string; role: "owner" | "teacher" | "student" };
 
+async function loadSession() {
+  let response = await fetch("/api/auth/session", { cache: "no-store" });
+  if (response.status === 401) {
+    const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
+    if (refreshed.ok) response = await fetch("/api/auth/session", { cache: "no-store" });
+  }
+  return response.ok ? response.json() as Promise<{ user?: User }> : null;
+}
+
 export function AuthGate({ enabled }: { enabled: boolean }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(!enabled);
 
   useEffect(() => {
     if (!enabled) return;
-    void fetch("/api/auth/session").then(async (response) => response.ok ? response.json() : null).then((data) => setUser(data?.user ?? null)).finally(() => setReady(true));
+    void loadSession().then((data) => setUser(data?.user ?? null)).finally(() => setReady(true));
   }, [enabled]);
 
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); setUser(null); };
