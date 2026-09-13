@@ -152,15 +152,18 @@ export async function POST(request: Request) {
       if (!result.meta.changes) return Response.json({ error: "Урок не найден" }, { status: 404 });
     } else if (body.action === "createStudent") {
       if (!body.name?.trim() || (body.email && !/^\S+@\S+\.\S+$/.test(body.email))) return invalid();
-      const inviteToken = randomToken();
-      const inviteId = crypto.randomUUID();
-      await db.batch([
-        db.prepare(`INSERT INTO members (id, workspace_id, role, status, display_name, email, schedule_type)
-          VALUES (?, ?, 'student', 'invited', ?, ?, ?)`).bind(id, auth.workspaceId, body.name.trim(), body.email?.trim() || null, body.floating ? "floating" : "fixed"),
-        db.prepare(`INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at)
-          VALUES (?, ?, ?, ?, ?)`).bind(inviteId, auth.workspaceId, id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14),
-      ]);
-      return Response.json({ ok: true, id, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
+      const email = body.email?.trim() || null;
+      const statements = [db.prepare(`INSERT INTO members (id, workspace_id, role, status, display_name, email, schedule_type)
+        VALUES (?, ?, 'student', 'invited', ?, ?, ?)`).bind(id, auth.workspaceId, body.name.trim(), email, body.floating ? "floating" : "fixed")];
+      let inviteUrl: string | undefined;
+      if (email) {
+        const inviteToken = randomToken();
+        statements.push(db.prepare(`INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at)
+          VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), auth.workspaceId, id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14));
+        inviteUrl = new URL(`/invite/${inviteToken}`, request.url).toString();
+      }
+      await db.batch(statements);
+      return Response.json({ ok: true, id, inviteUrl });
     } else if (body.action === "createStudentInvite") {
       if (!body.studentId) return invalid();
       const student = await db.prepare("SELECT id, email, status FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string }>();
