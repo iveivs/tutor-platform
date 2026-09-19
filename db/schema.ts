@@ -87,7 +87,7 @@ export const lessons = sqliteTable("lessons", {
   index("idx_lessons_workspace_starts_at").on(table.workspaceId, table.startsAt),
   index("idx_lessons_student_starts_at").on(table.studentId, table.startsAt),
   index("idx_lessons_pending_charge").on(table.chargeStatus, table.startsAt),
-  uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt),
+  uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);
 
 /** Signed lesson units: payments are positive, completed lessons are negative. */
