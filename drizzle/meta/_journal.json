@@ -8,6 +8,13 @@
       "when": 1789162837847,
       "tag": "0000_silent_hellcat",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789383798139,
+      "tag": "0001_free_wither",
+      "breakpoints": true
     }
   ]
 }

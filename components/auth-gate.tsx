@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { CalendarDays, LogIn } from "lucide-react";
+import { toast } from "sonner";
 import TutorApp from "@/components/tutor-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,15 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
     void loadSession().then((data) => setUser(data?.user ?? null)).finally(() => setReady(true));
   }, [enabled]);
 
-  const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); setUser(null); };
+  const logout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error();
+      setUser(null);
+    } catch {
+      toast.error("Не удалось выйти. Проверьте соединение и попробуйте снова.");
+    }
+  };
   if (!enabled) return <TutorApp />;
   if (!ready) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><CalendarDays className="size-8 animate-pulse text-indigo-600" /></main>;
   if (!user) return <LoginScreen onSuccess={setUser} />;

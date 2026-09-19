@@ -11,11 +11,11 @@
 }
 .dark {
   color-scheme: dark;
-  --background: #0a0f1d; --foreground: #f8fafc; --card: #111827; --card-foreground: #f8fafc;
-  --popover: #111827; --popover-foreground: #f8fafc; --primary: #818cf8; --primary-foreground: #0b1020;
-  --secondary: #1e293b; --secondary-foreground: #e0e7ff; --muted: #182235; --muted-foreground: #94a3b8;
-  --accent: #242c52; --accent-foreground: #e0e7ff; --destructive: #fb7185; --border: #263247;
-  --input: #334155; --ring: #818cf8;
+  --background: #1c1c1e; --foreground: #f2f2f7; --card: #202022; --card-foreground: #f2f2f7;
+  --popover: #252527; --popover-foreground: #f2f2f7; --primary: #8b83ff; --primary-foreground: #ffffff;
+  --secondary: #303033; --secondary-foreground: #f2f2f7; --muted: #2a2a2d; --muted-foreground: #a1a1a6;
+  --accent: #363638; --accent-foreground: #ffffff; --destructive: #ff6b7a; --border: #404043;
+  --input: #4a4a4e; --ring: #8b83ff;
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
@@ -31,19 +31,29 @@ body { margin: 0; background: var(--background); color: var(--foreground); font-
 button, input { font: inherit; } button { cursor: pointer; } ::selection { background: #c7d2fe; color: #1e1b4b; }
 .card { border: 1px solid var(--border); border-radius: 1.5rem; background: var(--card); color: var(--card-foreground); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.04); }
 .dark .card { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22); }
+.calendar-surface { background-color: #ffffff; }
+.calendar-weekday { background-color: #ffffff; }
+.calendar-weekend { background-color: #f2f4f7; }
+.calendar-weekend-header { background-color: #edf0f4; }
+.calendar-weekend-date { color: #64748b; }
+.dark .calendar-surface { background-color: #252527; border-color: #48484c; }
+.dark .calendar-weekday { background-color: #222224; }
+.dark .calendar-weekend { background-color: #303033; }
+.dark .calendar-weekend-header { background-color: #303033; }
+.dark .calendar-weekend-date { color: #a1a1a6; }
 
 /* Dark counterparts for the remaining palette utilities in the prototype. */
 .dark [class~="bg-[#f6f8fc]"] { background-color: var(--background); }
 .dark [class~="bg-white"] { background-color: var(--card); }
-.dark [class~="bg-white/90"], .dark [class~="bg-white/95"] { background-color: rgb(17 24 39 / 0.94); }
-.dark [class~="bg-slate-50"] { background-color: #182235; }
-.dark [class~="bg-slate-100"] { background-color: #1e293b; }
+.dark [class~="bg-white/90"], .dark [class~="bg-white/95"] { background-color: rgb(32 32 34 / 0.94); }
+.dark [class~="bg-slate-50"] { background-color: #29292c; }
+.dark [class~="bg-slate-100"] { background-color: #303033; }
 .dark [class~="border-slate-200"] { border-color: var(--border); }
 .dark [class~="text-slate-950"] { color: var(--foreground); }
-.dark [class~="text-slate-700"] { color: #e2e8f0; }
-.dark [class~="text-slate-600"] { color: #cbd5e1; }
-.dark [class~="text-slate-500"], .dark [class~="text-slate-400"] { color: #94a3b8; }
-.dark [class~="text-slate-300"] { color: #64748b; }
+.dark [class~="text-slate-700"] { color: #e5e5ea; }
+.dark [class~="text-slate-600"] { color: #c7c7cc; }
+.dark [class~="text-slate-500"], .dark [class~="text-slate-400"] { color: #98989d; }
+.dark [class~="text-slate-300"] { color: #6f6f74; }
 .dark [class~="bg-indigo-50"], .dark [class~="bg-indigo-50/50"] { background-color: rgb(49 46 129 / 0.34); }
 .dark [class~="bg-indigo-100"] { background-color: rgb(67 56 202 / 0.34); }
 .dark [class~="text-indigo-700"], .dark [class~="text-indigo-800"] { color: #a5b4fc; }
