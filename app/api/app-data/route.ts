@@ -1,5 +1,6 @@
 import { getD1 } from "@/db/d1";
 import { assertSameOrigin, getAuthConfig, getAuthMember, randomToken, sha256 } from "@/lib/auth";
+import { isLocalDemoRequest } from "@/lib/demo-mode";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
 import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
 import { env } from "cloudflare:workers";
@@ -334,7 +335,10 @@ export async function POST(request: Request) {
 }
 
 async function requireMember(request?: Request) {
-  if (!getAuthConfig()) return { role: "owner" as const, memberId: "1", workspaceId: "1", userId: "1", name: "Преподаватель", email: "" };
+  if (!getAuthConfig()) {
+    if (isLocalDemoRequest(request)) return { role: "owner" as const, memberId: "1", workspaceId: "1", userId: "1", name: "Преподаватель", email: "" };
+    return Response.json({ error: "Авторизация не настроена" }, { status: 503 });
+  }
   if (!request) return Response.json({ error: "Требуется вход" }, { status: 401 });
   const member = await getAuthMember(request);
   if (!member) return Response.json({ error: "Требуется вход" }, { status: 401 });

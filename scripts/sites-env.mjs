@@ -11,6 +11,7 @@ process.env.WRANGLER_WRITE_LOGS ||= "false";
 process.env.WRANGLER_LOG_PATH ||= path.join(runtimeRoot, "wrangler/logs");
 process.env.WRANGLER_REGISTRY_PATH ||= path.join(runtimeRoot, "wrangler/dev-registry");
 process.env.MINIFLARE_REGISTRY_PATH ||= path.join(runtimeRoot, "wrangler/registry");
+process.env.ALLOW_INSECURE_DEMO_MODE ||= "true";
 
 process.chdir(projectRoot);
 for (const directory of [
