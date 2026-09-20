@@ -1,22 +1,32 @@
 import { getD1 } from "@/db/d1";
 import { assertSameOrigin, getAuthConfig, getAuthMember, randomToken, sha256 } from "@/lib/auth";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
+import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
 
 const MOSCOW_OFFSET = "+03:00";
 
-type ActionBody =
-  | { action: "createLesson"; studentId: string; date: string; time: string; durationMinutes?: number; repeat?: "once" | "weekly" }
-  | { action: "updateLesson"; lessonId: string; date: string; time: string; durationMinutes?: number }
-  | { action: "deleteLesson"; lessonId: string }
-  | { action: "stopLessonSeries"; seriesId: string }
-  | { action: "createStudent"; name: string; email?: string; floating: boolean; weekday?: number; time?: string; durationMinutes?: number }
-  | { action: "updateStudent"; studentId: string; name: string; email?: string }
-  | { action: "createStudentInvite"; studentId: string }
-  | { action: "addPayment"; studentId: string; count: number; paymentDate?: string }
-  | { action: "resolveRequest"; requestId: string; decision: "approved" | "declined" }
-  | { action: "submitStudentRequest"; requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }
-  | { action: "updateProfile"; name: string }
-  | { action: "markNotificationsRead" };
+const id = z.string().min(1).max(128);
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const duration = z.number().int().min(15).max(240).optional();
+const email = z.union([z.literal(""), z.string().email().max(254)]).optional();
+const actionBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("createLesson"), studentId: id, date, time, durationMinutes: duration, repeat: z.enum(["once", "weekly"]).optional() }).strict(),
+  z.object({ action: z.literal("updateLesson"), lessonId: id, date, time, durationMinutes: duration }).strict(),
+  z.object({ action: z.literal("deleteLesson"), lessonId: id }).strict(),
+  z.object({ action: z.literal("stopLessonSeries"), seriesId: id }).strict(),
+  z.object({ action: z.literal("createStudent"), name: z.string().trim().min(1).max(80), email, floating: z.boolean(), weekday: z.number().int().min(1).max(7).optional(), time: time.optional(), durationMinutes: duration }).strict(),
+  z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email }).strict(),
+  z.object({ action: z.literal("createStudentInvite"), studentId: id }).strict(),
+  z.object({ action: z.literal("addPayment"), studentId: id, count: z.number().int().min(1).max(100), paymentDate: date.optional() }).strict(),
+  z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
+  z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
+  z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80) }).strict(),
+  z.object({ action: z.literal("markNotificationsRead") }).strict(),
+]);
+type ActionBody = z.infer<typeof actionBodySchema>;
 
 const dateLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
 const timeLabel = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" });
@@ -118,9 +128,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+    const json = await readLimitedJson<unknown>(request);
+    if (!json.ok) return json.response;
+    const parsed = actionBodySchema.safeParse(json.value);
+    if (!parsed.success) return invalid();
+    const body: ActionBody = parsed.data;
     const auth = await requireMember(request);
     if (auth instanceof Response) return auth;
-    const body = await request.json() as ActionBody;
+    if (auth.role === "student" && body.action === "submitStudentRequest") {
+      const limited = await enforceRateLimit(env.STUDENT_REQUEST_RATE_LIMITER, `${auth.workspaceId}:${auth.memberId}`, "student_request");
+      if (limited) return limited;
+    }
     if (!["submitStudentRequest", "markNotificationsRead"].includes(body.action) && !["owner", "teacher"].includes(auth.role)) return Response.json({ error: "Недостаточно прав" }, { status: 403 });
     const db = getD1();
     const id = crypto.randomUUID();
@@ -309,6 +327,7 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true, id });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("UNIQUE constraint failed: lesson_requests.")) return Response.json({ error: "Такой запрос уже ожидает решения" }, { status: 409 });
     console.error("Failed to update app data", error);
     return Response.json({ error: "Не удалось сохранить изменения" }, { status: 500 });
   }

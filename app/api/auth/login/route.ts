@@ -1,12 +1,22 @@
 import { getD1 } from "@/db/d1";
 import { assertSameOrigin, authCookies, getAuthConfig } from "@/lib/auth";
+import { readLimitedJson } from "@/lib/request-security";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(1).max(256),
+}).strict();
 
 export async function POST(request: Request) {
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   if (!config) return Response.json({ error: "Авторизация ещё не настроена" }, { status: 503 });
-  const { email, password } = await request.json() as { email?: string; password?: string };
-  if (!email || !password) return Response.json({ error: "Введите email и пароль" }, { status: 400 });
+  const json = await readLimitedJson<unknown>(request);
+  if (!json.ok) return json.response;
+  const parsed = loginSchema.safeParse(json.value);
+  if (!parsed.success) return Response.json({ error: "Введите корректные email и пароль" }, { status: 400 });
+  const { email, password } = parsed.data;
   const authResponse = await fetch(`${config.url}/auth/v1/token?grant_type=password`, {
     method: "POST", headers: { apikey: config.publishableKey, "content-type": "application/json" }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   });

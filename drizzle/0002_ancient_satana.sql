@@ -1,0 +1,4 @@
+DROP INDEX `lessons_series_start_unique`;--> statement-breakpoint
+CREATE UNIQUE INDEX `lessons_series_start_unique` ON `lessons` (`series_id`,`starts_at`) WHERE "lessons"."status" <> 'cancelled';--> statement-breakpoint
+CREATE UNIQUE INDEX `lesson_requests_pending_lesson_unique` ON `lesson_requests` (`student_id`,`type`,`lesson_id`) WHERE "lesson_requests"."status" = 'pending' and "lesson_requests"."lesson_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `lesson_requests_pending_new_lesson_unique` ON `lesson_requests` (`student_id`,`type`) WHERE "lesson_requests"."status" = 'pending' and "lesson_requests"."lesson_id" is null;

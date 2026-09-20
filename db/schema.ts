@@ -128,6 +128,8 @@ export const lessonRequests = sqliteTable("lesson_requests", {
   check("lesson_requests_status_check", sql`${table.status} in ('pending', 'approved', 'declined', 'expired')`),
   index("idx_lesson_requests_workspace_status").on(table.workspaceId, table.status),
   index("idx_lesson_requests_student_created").on(table.studentId, table.createdAt),
+  uniqueIndex("lesson_requests_pending_lesson_unique").on(table.studentId, table.type, table.lessonId).where(sql`${table.status} = 'pending' and ${table.lessonId} is not null`),
+  uniqueIndex("lesson_requests_pending_new_lesson_unique").on(table.studentId, table.type).where(sql`${table.status} = 'pending' and ${table.lessonId} is null`),
 ]);
 
 /** Only a token hash is persisted; the invitation URL contains the secret token. */

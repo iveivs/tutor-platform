@@ -15,6 +15,13 @@
       "when": 1789383798139,
       "tag": "0001_free_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789919210771,
+      "tag": "0002_ancient_satana",
+      "breakpoints": true
     }
   ]
 }
