@@ -6,7 +6,7 @@ import { applySecurityHeaders } from "./lib/security-headers";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (request.method === "POST" && ["/api/auth/login", "/api/auth/invite"].includes(url.pathname)) {
+    if (request.method === "POST" && ["/api/auth/login", "/api/auth/invite", "/api/auth/recover", "/api/auth/reset-password"].includes(url.pathname)) {
       const limited = await enforceRateLimit(env.AUTH_RATE_LIMITER, await anonymousRequestKey(request, url.pathname), "public_auth");
       if (limited) return applySecurityHeaders(limited, request);
     }
