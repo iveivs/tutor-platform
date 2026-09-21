@@ -90,6 +90,28 @@ export const lessons = sqliteTable("lessons", {
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);
 
+/** Immutable lesson lifecycle entries preserve changes even when the lesson row is updated. */
+export const lessonEvents = sqliteTable("lesson_events", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  studentId: text("student_id").notNull().references(() => members.id, { onDelete: "restrict" }),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  actorMemberId: text("actor_member_id").references(() => members.id, { onDelete: "set null" }),
+  sourceKey: text("source_key").notNull(),
+  eventType: text("event_type").notNull(),
+  previousStartsAt: integer("previous_starts_at", { mode: "timestamp_ms" }),
+  startsAt: integer("starts_at", { mode: "timestamp_ms" }),
+  endsAt: integer("ends_at", { mode: "timestamp_ms" }),
+  note: text("note"),
+  occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
+}, (table) => [
+  check("lesson_events_type_check", sql`${table.eventType} in ('scheduled', 'rescheduled', 'cancelled', 'completed', 'series_stopped')`),
+  uniqueIndex("lesson_events_source_key_unique").on(table.sourceKey),
+  index("idx_lesson_events_workspace_occurred").on(table.workspaceId, table.occurredAt),
+  index("idx_lesson_events_student_occurred").on(table.studentId, table.occurredAt),
+]);
+
 /** Signed lesson units: payments are positive, completed lessons are negative. */
 export const balanceEntries = sqliteTable("balance_entries", {
   id: text("id").primaryKey(),

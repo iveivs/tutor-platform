@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy,
-  Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
+  History as HistoryIcon, Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type View = "today" | "calendar" | "students" | "requests" | "notifications" | "student" | "settings";
+type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
 type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student" };
 type Lesson = { id: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string };
 type LessonDraft = { date: string; time: string; studentId: string; repeat: "once" | "weekly" };
@@ -26,8 +26,9 @@ type RecurringSlot = { id: string; studentId: string; label: string; durationMin
 type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; accountStatus: "invited" | "active" };
 type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
 type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string };
+type HistoryEvent = { id: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; occurredAt: number };
 type AppNotification = { id: string; type: string; title: string; body: string; read: boolean; createdAt: number };
-type AppData = { lessons: Lesson[]; students: Student[]; recurringSlots?: RecurringSlot[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; notifications: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string } };
+type AppData = { lessons: Lesson[]; students: Student[]; recurringSlots?: RecurringSlot[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string } };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -76,6 +77,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [recurringSlots, setRecurringSlots] = useState<RecurringSlot[]>([]);
   const [requests, setRequests] = useState<LessonRequest[]>([]);
   const [balanceEntries, setBalanceEntries] = useState<BalanceEntry[]>([]);
+  const [historyEvents, setHistoryEvents] = useState<HistoryEvent[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [profile, setProfile] = useState({ name: user?.name ?? "Преподаватель", email: user?.email ?? "" });
   const [teacherName, setTeacherName] = useState(user?.name ?? "Преподаватель");
@@ -84,7 +86,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [loadError, setLoadError] = useState(false);
 
   const applyData = useCallback((data: AppData) => {
-    setLessons(data.lessons); setStudents(data.students); setRecurringSlots(data.recurringSlots ?? []); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []); setNotifications(data.notifications ?? []); setTeacherName(data.teacherName ?? "Преподаватель"); if (data.profile) setProfile(data.profile);
+    setLessons(data.lessons); setStudents(data.students); setRecurringSlots(data.recurringSlots ?? []); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []); setHistoryEvents(data.historyEvents ?? []); setNotifications(data.notifications ?? []); setTeacherName(data.teacherName ?? "Преподаватель"); if (data.profile) setProfile(data.profile);
     setSelectedStudent((current) => data.students.some((student) => student.id === current) ? current : (data.students[0]?.id ?? current));
   }, []);
 
@@ -195,7 +197,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-slate-500">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-indigo-600" onClick={() => { setLoading(true); void reload().catch(() => { setLoadError(true); setLoading(false); }); }}>Повторить</Button></div></main>;
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
   if (role === "student") return portalStudent
-    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
+    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-slate-500">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (
@@ -206,7 +208,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "today" && <TodayView lessons={lessons} students={students} requests={requests} onAdd={addLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "calendar" && <CalendarView lessons={lessons} students={students} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} />}
+        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} />}
+        {view === "history" && <HistoryView events={historyEvents} students={students} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} />}
         {view === "settings" && <SettingsView profile={profile} onSave={updateProfile} />}
@@ -222,6 +225,7 @@ function Sidebar({ view, setView, name, onLogout, requestCount, notificationCoun
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
     { id: "students" as View, label: "Ученики", icon: UsersRound },
+    { id: "history" as View, label: "История", icon: HistoryIcon },
     { id: "requests" as View, label: "Запросы", icon: Bell, count: requestCount },
     { id: "notifications" as View, label: "Уведомления", icon: Bell, count: notificationCount },
     { id: "settings" as View, label: "Настройки", icon: Settings },
@@ -238,8 +242,8 @@ function MobileHeader({ name, notificationCount, onNotifications }: { name: stri
 }
 
 function MobileNav({ view, setView }: { view: View; setView: (view: View) => void }) {
-  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "settings" as View, label: "Настройки", icon: Settings }];
-  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => <button key={label} onClick={() => setView(id)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium ${view === id || (id === "students" && view === "student") ? "text-indigo-600" : "text-slate-500"}`}><Icon className="size-5" />{label}</button>)}</nav>;
+  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "history" as View, label: "История", icon: HistoryIcon }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "settings" as View, label: "Настройки", icon: Settings }];
+  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => <button key={label} onClick={() => setView(id)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-medium ${view === id || (id === "students" && view === "student") ? "text-indigo-600" : "text-slate-500"}`}><Icon className="size-5" />{label}</button>)}</nav>;
 }
 
 function Shell({ eyebrow, title, actions, children }: { eyebrow?: string; title: string; actions?: React.ReactNode; children: React.ReactNode }) {
@@ -313,10 +317,11 @@ function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd:
 
 function Balance({ balance }: { balance: number }) { return <span className={`inline-flex min-w-12 justify-center rounded-xl px-3 py-2 font-bold ${balance < 0 ? "bg-rose-50 text-rose-700" : balance <= 1 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{balance}</span>; }
 
-function StudentView({ student, lessons, recurringSlots, balanceEntries, onAdd, onBack, onPay, onCreateInvite, onUpdate, onStopSeries }: { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean> }) {
+function StudentView({ student, lessons, recurringSlots, balanceEntries, historyEvents, onAdd, onBack, onPay, onCreateInvite, onUpdate, onStopSeries }: { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; historyEvents: HistoryEvent[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean> }) {
   const history = balanceEntries.filter((entry) => entry.studentId === student.id);
+  const studentHistory = historyEvents.filter((event) => event.studentId === student.id);
   const studentSlots = recurringSlots.filter((slot) => slot.studentId === student.id);
-  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3"><EditStudentDialog student={student} onUpdate={onUpdate} />{student.accountStatus === "invited" && student.email && <InviteStudentDialog student={student} onCreateInvite={onCreateInvite} />}<AddLessonDialog students={[student]} defaultDate={today()} onAdd={onAdd} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История занятий</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p>{studentSlots.length ? <div className="mt-4 space-y-2">{studentSlots.map((slot) => <div key={slot.id} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span>{slot.label}</span><StopSeriesDialog slot={slot} onStop={onStopSeries} /></div>)}</div> : <p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Постоянные занятия не заданы"}</p>}</InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.studentId === student.id && lesson.date >= today())} /></div></TabsContent><TabsContent value="history"><History entries={history.filter((entry) => entry.kind === "lesson_charge")} /></TabsContent><TabsContent value="payments"><History entries={history.filter((entry) => entry.kind === "payment")} /></TabsContent></Tabs></Shell>;
+  return <Shell title={student.name} eyebrow={student.floating ? "Плавающее расписание" : "Постоянное расписание"} actions={<div className="flex flex-wrap gap-3"><EditStudentDialog student={student} onUpdate={onUpdate} />{student.accountStatus === "invited" && student.email && <InviteStudentDialog student={student} onCreateInvite={onCreateInvite} />}<AddLessonDialog students={[student]} defaultDate={today()} onAdd={onAdd} compact /><PaymentDialog student={student} onPay={onPay} /></div>}><button onClick={onBack} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-indigo-600"><ArrowLeft className="size-4" />Назад к ученикам</button><div className={`mb-5 rounded-2xl border p-4 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><strong>Баланс: {student.balance} занятия</strong>{student.balance < 0 && <span className="ml-2 text-sm">Необходимо оплатить {Math.abs(student.balance)} занятия</span>}</div><Tabs defaultValue="overview"><TabsList variant="line" className="mb-5 max-w-full overflow-x-auto"><TabsTrigger value="overview">Обзор</TabsTrigger><TabsTrigger value="lessons">Будущие уроки</TabsTrigger><TabsTrigger value="history">История</TabsTrigger><TabsTrigger value="payments">Оплаты</TabsTrigger></TabsList><TabsContent value="overview"><div className="grid gap-5 md:grid-cols-2"><InfoCard title="Следующий урок" icon={CalendarDays}><p className="text-2xl font-bold">{student.next}</p><p className="mt-1 text-slate-500">Продолжительность: 1 час</p></InfoCard><InfoCard title="Расписание" icon={Clock3}><p className="text-lg font-bold">{student.floating ? "Регулярного расписания нет" : student.schedule}</p>{studentSlots.length ? <div className="mt-4 space-y-2">{studentSlots.map((slot) => <div key={slot.id} className="flex items-center justify-between gap-3 rounded-xl border p-3"><span>{slot.label}</span><StopSeriesDialog slot={slot} onStop={onStopSeries} /></div>)}</div> : <p className="mt-1 text-slate-500">{student.floating ? "Следующий урок назначается отдельно" : "Постоянные занятия не заданы"}</p>}</InfoCard></div></TabsContent><TabsContent value="lessons"><div className="card p-5"><LessonList lessons={lessons.filter((lesson) => lesson.studentId === student.id && lesson.date >= today())} /></div></TabsContent><TabsContent value="history"><HistoryTimeline events={studentHistory} showStudent={false} /></TabsContent><TabsContent value="payments"><BalanceHistory entries={history.filter((entry) => entry.kind === "payment")} /></TabsContent></Tabs></Shell>;
 }
 
 function StopSeriesDialog({ slot, onStop }: { slot: RecurringSlot; onStop: (id: string) => Promise<boolean> }) {
@@ -351,7 +356,23 @@ function InviteStudentDialog({ student, onCreateInvite }: { student: Student; on
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
-function History({ entries }: { entries: BalanceEntry[] }) { return <div className="card divide-y">{entries.map((entry) => <div key={entry.id} className="flex items-center gap-4 p-5"><span className={`grid size-11 place-items-center rounded-xl font-bold ${entry.units > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{entry.units > 0 ? "+" : ""}{entry.units}</span><span><strong className="block">{entry.note}</strong><span className="text-sm text-slate-500">{dateTitle(entry.date, { day: "numeric", month: "long", year: "numeric" })}</span></span></div>)}{!entries.length && <Empty text="История пока пуста" />}</div>; }
+
+function HistoryView({ events, students }: { events: HistoryEvent[]; students: Student[] }) {
+  const [category, setCategory] = useState<"all" | HistoryEvent["category"]>("all");
+  const [studentId, setStudentId] = useState("all");
+  const visible = events.filter((event) => (category === "all" || event.category === category) && (studentId === "all" || event.studentId === studentId));
+  return <Shell title="История" eyebrow="Уроки, оплаты и запросы"><div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="flex gap-2 overflow-x-auto pb-1">{[["all", "Все"], ["lesson", "Уроки"], ["payment", "Баланс"], ["request", "Запросы"]].map(([value, label]) => <button key={value} onClick={() => setCategory(value as "all" | HistoryEvent["category"])} className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold ${category === value ? "bg-indigo-600 text-white" : "border bg-white text-slate-600"}`}>{label}</button>)}</div><Select value={studentId} onValueChange={setStudentId}><SelectTrigger className="h-11 w-full rounded-xl bg-white xl:w-72" aria-label="Ученик"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все ученики</SelectItem>{students.map((student) => <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>)}</SelectContent></Select></div><HistoryTimeline events={visible} /></Shell>;
+}
+
+function HistoryTimeline({ events, showStudent = true }: { events: HistoryEvent[]; showStudent?: boolean }) {
+  const colors = { lesson: "bg-indigo-50 text-indigo-700", payment: "bg-emerald-50 text-emerald-700", request: "bg-amber-50 text-amber-700" };
+  const labels = { lesson: "Урок", payment: "Баланс", request: "Запрос" };
+  const Icons = { lesson: CalendarDays, payment: WalletCards, request: Bell };
+  const dateTime = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
+  return <div className="card divide-y">{events.map((event) => { const Icon = Icons[event.category]; return <article key={event.id} className="flex gap-4 p-5 md:p-6"><span className={`grid size-11 shrink-0 place-items-center rounded-xl ${colors[event.category]}`}><Icon className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"><div><span className={`mr-2 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${colors[event.category]}`}>{labels[event.category]}</span><strong>{event.title}</strong></div><time className="shrink-0 text-xs text-slate-400">{dateTime.format(new Date(event.occurredAt))}</time></div>{showStudent && <p className="mt-1 font-medium text-slate-700">{event.studentName}</p>}{event.detail && <p className="mt-1 text-sm text-slate-500">{event.detail}</p>}{event.actor && <p className="mt-2 text-xs text-slate-400">Кто: {event.actor}</p>}</div></article>; })}{!events.length && <Empty text="История пока пуста" />}</div>;
+}
+
+function BalanceHistory({ entries }: { entries: BalanceEntry[] }) { return <div className="card divide-y">{entries.map((entry) => <div key={entry.id} className="flex items-center gap-4 p-5"><span className={`grid size-11 place-items-center rounded-xl font-bold ${entry.units > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{entry.units > 0 ? "+" : ""}{entry.units}</span><span><strong className="block">{entry.note}</strong><span className="text-sm text-slate-500">{dateTitle(entry.date, { day: "numeric", month: "long", year: "numeric" })}</span></span></div>)}{!entries.length && <Empty text="История пока пуста" />}</div>; }
 
 function SettingsView({ profile, onSave }: { profile: { name: string; email: string }; onSave: (name: string) => Promise<void> }) {
   const [name, setName] = useState(profile.name);
@@ -377,7 +398,7 @@ function NotificationsView({ notifications, onRead }: { notifications: AppNotifi
   return <Shell title="Уведомления" eyebrow={`${notifications.filter((item) => !item.read).length} непрочитанных`} actions={<Button variant="outline" disabled={!notifications.some((item) => !item.read)} onClick={() => void onRead()}>Отметить всё прочитанным</Button>}><div className="card divide-y">{notifications.map((item) => <article key={item.id} className={`flex gap-4 p-5 ${item.read ? "opacity-60" : "bg-indigo-50/40"}`}><span className={`mt-1 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-indigo-600"}`} /><div><h2 className="font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.body}</p><p className="mt-2 text-xs text-slate-400">{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(item.createdAt))}</p></div></article>)}{!notifications.length && <Empty text="Новых уведомлений нет" />}</div></Shell>;
 }
 
-function StudentPortal({ student, teacherName, lessons, entries, requests, notifications, onReadNotifications, onRequest, onBack }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; requests: LessonRequest[]; notifications: AppNotification[]; onReadNotifications: () => Promise<void>; onRequest: (body: { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }) => Promise<boolean>; onBack: () => void }) {
+function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, onReadNotifications, onRequest, onBack }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; historyEvents: HistoryEvent[]; requests: LessonRequest[]; notifications: AppNotification[]; onReadNotifications: () => Promise<void>; onRequest: (body: { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; message?: string; studentId?: string }) => Promise<boolean>; onBack: () => void }) {
   const futureLessons = lessons.filter((lesson) => lesson.date >= today()).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   const nextLesson = futureLessons[0];
   const paymentEntries = entries.filter((entry) => entry.kind === "payment");
@@ -390,7 +411,8 @@ function StudentPortal({ student, teacherName, lessons, entries, requests, notif
     <section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>
     {student.floating && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} onRequest={onRequest} fullWidth /></div>}
     {requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}
-    <section className="mt-5"><h2 className="mb-3 text-lg font-bold">История оплат</h2><History entries={paymentEntries} /></section>
+    <section className="mt-5"><h2 className="mb-3 text-lg font-bold">История</h2><HistoryTimeline events={historyEvents} showStudent={false} /></section>
+    <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Оплаты</h2><BalanceHistory entries={paymentEntries} /></section>
   </div><Toaster position="top-center" richColors /></main>;
 }
 

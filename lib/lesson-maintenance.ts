@@ -1,5 +1,11 @@
 export async function settlePastLessons(db: D1Database, workspaceId: string, now = Date.now()) {
   await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO lesson_events (id, workspace_id, student_id, lesson_id, source_key, event_type, starts_at, ends_at, occurred_at)
+      SELECT 'completed-' || l.id, l.workspace_id, l.student_id, l.id, 'lesson-completed:' || l.id, 'completed', l.starts_at, l.ends_at, l.ends_at
+      FROM lessons l
+      WHERE l.workspace_id = ? AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = l.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+      .bind(workspaceId, now),
     db.prepare(`INSERT OR IGNORE INTO balance_entries (id, workspace_id, student_id, lesson_id, kind, lesson_units, note, occurred_at, recorded_by_id)
       SELECT lower(hex(randomblob(16))), l.workspace_id, l.student_id, l.id, 'lesson_charge', -1, 'Урок проведён', l.ends_at, l.created_by_id
       FROM lessons l

@@ -31,6 +31,7 @@ type ActionBody = z.infer<typeof actionBodySchema>;
 
 const dateLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
 const timeLabel = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" });
+const historyMomentLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" });
 
 export async function GET(request: Request) {
   try {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     await ensureSeriesLessons(db, auth.workspaceId);
     await settlePastLessons(db, auth.workspaceId);
     const ownStudentId = auth.role === "student" ? auth.memberId : null;
-    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow] = await Promise.all([
+    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows] = await Promise.all([
       db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
@@ -68,6 +69,28 @@ export async function GET(request: Request) {
         ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(auth.workspaceId).first<{ display_name: string }>(),
       db.prepare(`SELECT m.display_name, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
         WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; email: string }>(),
+      db.prepare(`SELECT e.id, e.student_id, e.event_type, e.previous_starts_at, e.starts_at, e.ends_at, e.note, e.occurred_at,
+        student.display_name, actor.display_name AS actor_name
+        FROM lesson_events e
+        JOIN members student ON student.id = e.student_id
+        LEFT JOIN members actor ON actor.id = e.actor_member_id
+        WHERE e.workspace_id = ? AND (? IS NULL OR e.student_id = ?)
+        ORDER BY e.occurred_at DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
+      db.prepare(`SELECT r.id, r.student_id, r.type, r.status, r.proposed_starts_at, r.message, r.created_at, r.resolved_at,
+        student.display_name, resolver.display_name AS actor_name, l.starts_at AS lesson_starts_at
+        FROM lesson_requests r
+        JOIN members student ON student.id = r.student_id
+        LEFT JOIN members resolver ON resolver.id = r.resolved_by_id
+        LEFT JOIN lessons l ON l.id = r.lesson_id
+        WHERE r.workspace_id = ? AND (? IS NULL OR r.student_id = ?)
+        ORDER BY COALESCE(r.resolved_at, r.created_at) DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
+      db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at,
+        student.display_name, actor.display_name AS actor_name
+        FROM balance_entries b
+        JOIN members student ON student.id = b.student_id
+        LEFT JOIN members actor ON actor.id = b.recorded_by_id
+        WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?)
+        ORDER BY b.occurred_at DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
     ]);
 
     const seriesByStudent = new Map<string, Array<{ weekday: number; start: number }>>();
@@ -118,8 +141,32 @@ export async function GET(request: Request) {
       id: String(row.id), studentId: String(row.student_id), kind: String(row.kind), units: Number(row.lesson_units),
       note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))),
     }));
+    const lessonHistory = (lessonEventRows.results as Array<Record<string, unknown>>).map((row) => {
+      const eventType = String(row.event_type);
+      const titles: Record<string, string> = { scheduled: "Урок назначен", rescheduled: "Урок перенесён", cancelled: "Урок отменён", completed: "Урок проведён", series_stopped: "Постоянное расписание остановлено" };
+      const current = row.starts_at ? formatHistoryLesson(Number(row.starts_at), row.ends_at ? Number(row.ends_at) : null) : "";
+      const previous = row.previous_starts_at ? historyMomentLabel.format(new Date(Number(row.previous_starts_at))) : "";
+      const detail = eventType === "rescheduled" && previous ? `${previous} → ${current}` : [current, row.note ? String(row.note) : ""].filter(Boolean).join(" · ");
+      return { id: `lesson:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "lesson", type: eventType, title: titles[eventType] ?? "Изменение урока", detail, actor: row.actor_name ? String(row.actor_name) : eventType === "completed" ? "Автоматически" : undefined, occurredAt: Number(row.occurred_at) };
+    });
+    const requestTypeNames: Record<string, string> = { cancel: "отмену", reschedule: "перенос", new_lesson: "новый урок" };
+    const requestStatusNames: Record<string, string> = { pending: "ожидает решения", approved: "подтверждён", declined: "отклонён", expired: "истёк" };
+    const requestHistory = (historyRequestRows.results as Array<Record<string, unknown>>).map((row) => {
+      const requestType = String(row.type);
+      const status = String(row.status);
+      const target = row.proposed_starts_at ?? row.lesson_starts_at;
+      const detail = [target ? historyMomentLabel.format(new Date(Number(target))) : "", row.message ? String(row.message) : ""].filter(Boolean).join(" · ");
+      return { id: `request:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "request", type: status, title: `Запрос на ${requestTypeNames[requestType] ?? "изменение"} ${requestStatusNames[status] ?? status}`, detail, actor: status === "pending" ? String(row.display_name) : row.actor_name ? String(row.actor_name) : undefined, occurredAt: Number(row.resolved_at ?? row.created_at) };
+    });
+    const balanceHistory = (historyBalanceRows.results as Array<Record<string, unknown>>).map((row) => {
+      const kind = String(row.kind);
+      const units = Number(row.lesson_units);
+      const titles: Record<string, string> = { payment: "Оплата учтена", lesson_charge: "Списание за урок", adjustment: "Корректировка баланса", refund: "Возврат" };
+      return { id: `balance:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: titles[kind] ?? "Операция баланса", detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, occurredAt: Number(row.occurred_at) };
+    });
+    const historyEvents = [...lessonHistory, ...requestHistory, ...balanceHistory].sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 500);
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at) }));
-    return Response.json({ students, lessons, recurringSlots, requests, balanceEntries, notifications, currentStudentId: ownStudentId, teacherName: teacherRow?.display_name ?? "Преподаватель", profile: viewerRow ? { name: viewerRow.display_name, email: viewerRow.email } : undefined });
+    return Response.json({ students, lessons, recurringSlots, requests, balanceEntries, historyEvents, notifications, currentStudentId: ownStudentId, teacherName: teacherRow?.display_name ?? "Преподаватель", profile: viewerRow ? { name: viewerRow.display_name, email: viewerRow.email } : undefined });
   } catch (error) {
     console.error("Failed to load app data", error);
     return Response.json({ error: "Не удалось загрузить данные" }, { status: 500 });
@@ -170,6 +217,7 @@ export async function POST(request: Request) {
       }
       statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, starts_at, ends_at, created_by_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.workspaceId, student.id, seriesId, range.start, range.end, auth.memberId));
+      statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId: id, actorMemberId: auth.memberId, sourceKey: `lesson-created:${id}`, eventType: "scheduled", startsAt: range.start, endsAt: range.end, note: body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
       statements.push(db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_created', 'Назначен урок', ?)")
         .bind(crypto.randomUUID(), student.id, `Урок назначен на ${body.date} в ${body.time}.`));
       await db.batch(statements);
@@ -181,25 +229,30 @@ export async function POST(request: Request) {
       if (await hasConflict(db, auth.workspaceId, range.start, range.end, body.lessonId)) return conflict();
       if (lesson.series_id) {
         const now = Date.now();
+        const movedLessonId = crypto.randomUUID();
         await db.batch([
           db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(now, now, body.lessonId, auth.workspaceId),
-          db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), auth.workspaceId, lesson.student_id, range.start, range.end, auth.memberId),
+          db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, range.start, range.end, auth.memberId),
+          lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
           db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, `Новое время: ${body.date}, ${body.time}.`),
         ]);
       } else {
+        const now = Date.now();
         await db.batch([
-          db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(range.start, range.end, Date.now(), body.lessonId, auth.workspaceId),
+          db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(range.start, range.end, now, body.lessonId, auth.workspaceId),
+          lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: lesson.id, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
           db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, `Новое время: ${body.date}, ${body.time}.`),
         ]);
       }
     } else if (body.action === "deleteLesson") {
       if (!body.lessonId) return invalid();
-      const lesson = await db.prepare("SELECT student_id FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, auth.workspaceId).first<{ student_id: string }>();
+      const lesson = await db.prepare("SELECT student_id, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, auth.workspaceId).first<{ student_id: string; starts_at: number; ends_at: number }>();
       if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
       const now = Date.now();
       await db.batch([
         db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(now, now, body.lessonId, auth.workspaceId),
         db.prepare("UPDATE lesson_requests SET status = 'approved', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id = ? AND status = 'pending'").bind(auth.memberId, now, now, body.lessonId),
+        lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: body.lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${body.lessonId}`, eventType: "cancelled", startsAt: lesson.starts_at, endsAt: lesson.ends_at, occurredAt: now }),
         db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_cancelled', 'Урок отменён', 'Преподаватель отменил урок без списания.')").bind(crypto.randomUUID(), lesson.student_id),
       ]);
     } else if (body.action === "stopLessonSeries") {
@@ -211,6 +264,7 @@ export async function POST(request: Request) {
         db.prepare("UPDATE lesson_series SET is_active = 0, active_until = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(toMoscowDate(new Date(now)), now, body.seriesId, auth.workspaceId),
         db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE series_id = ? AND workspace_id = ? AND status = 'scheduled' AND starts_at > ?").bind(now, now, body.seriesId, auth.workspaceId, now),
         db.prepare("UPDATE lesson_requests SET status = 'declined', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id IN (SELECT id FROM lessons WHERE series_id = ?) AND status = 'pending'").bind(auth.memberId, now, now, body.seriesId),
+        lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: series.student_id, actorMemberId: auth.memberId, sourceKey: `series-stopped:${body.seriesId}`, eventType: "series_stopped", note: "Будущие уроки постоянного расписания отменены", occurredAt: now }),
         db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'series_stopped', 'Постоянное занятие отменено', 'Будущие уроки этого времени удалены из расписания без списания.')").bind(crypto.randomUUID(), series.student_id),
       ]);
     } else if (body.action === "createStudent") {
@@ -278,23 +332,32 @@ export async function POST(request: Request) {
         .bind(crypto.randomUUID(), body.studentId, `Баланс пополнен на ${body.count} занятий.`).run();
     } else if (body.action === "resolveRequest") {
       if (!body.requestId || !["approved", "declined"].includes(body.decision)) return invalid();
-      const row = await db.prepare(`SELECT r.type, r.student_id, r.lesson_id, r.proposed_starts_at, r.proposed_ends_at, l.series_id
+      const row = await db.prepare(`SELECT r.type, r.student_id, r.lesson_id, r.proposed_starts_at, r.proposed_ends_at, l.series_id, l.starts_at, l.ends_at
         FROM lesson_requests r LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.id = ? AND r.workspace_id = ? AND r.status = 'pending'`).bind(body.requestId, auth.workspaceId).first<Record<string, unknown>>();
       if (!row) return Response.json({ error: "Запрос уже обработан" }, { status: 409 });
       if (body.decision === "approved" && row.proposed_starts_at && Number(row.proposed_starts_at) <= Date.now()) return Response.json({ error: "Предложенное время уже прошло" }, { status: 409 });
       if (body.decision === "approved" && row.proposed_starts_at && row.proposed_ends_at && await hasConflict(db, auth.workspaceId, Number(row.proposed_starts_at), Number(row.proposed_ends_at), String(row.lesson_id ?? ""))) return conflict();
-      const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, Date.now(), Date.now(), body.requestId), db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
-      if (body.decision === "approved" && row.lesson_id && row.type === "cancel") statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(Date.now(), Date.now(), row.lesson_id));
-      if (body.decision === "approved" && row.lesson_id && row.type === "reschedule" && row.proposed_starts_at && row.proposed_ends_at) {
-        if (row.series_id) {
-          statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(Date.now(), Date.now(), row.lesson_id));
-          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
-        } else {
-          statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(row.proposed_starts_at, row.proposed_ends_at, Date.now(), row.lesson_id));
-        }
+      const resolvedAt = Date.now();
+      const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, resolvedAt, resolvedAt, body.requestId), db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
+      if (body.decision === "approved" && row.lesson_id && row.type === "cancel") {
+        statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, row.lesson_id));
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: String(row.lesson_id), actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${String(row.lesson_id)}`, eventType: "cancelled", startsAt: Number(row.starts_at), endsAt: Number(row.ends_at), occurredAt: resolvedAt }));
       }
-      if (body.decision === "approved" && row.type === "new_lesson" && row.student_id && row.proposed_starts_at && row.proposed_ends_at) statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(id, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
+      if (body.decision === "approved" && row.lesson_id && row.type === "reschedule" && row.proposed_starts_at && row.proposed_ends_at) {
+        const movedLessonId = row.series_id ? crypto.randomUUID() : String(row.lesson_id);
+        if (row.series_id) {
+          statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, row.lesson_id));
+          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
+        } else {
+          statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(row.proposed_starts_at, row.proposed_ends_at, resolvedAt, row.lesson_id));
+        }
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: Number(row.starts_at), startsAt: Number(row.proposed_starts_at), endsAt: Number(row.proposed_ends_at), occurredAt: resolvedAt }));
+      }
+      if (body.decision === "approved" && row.type === "new_lesson" && row.student_id && row.proposed_starts_at && row.proposed_ends_at) {
+        statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(id, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: id, actorMemberId: auth.memberId, sourceKey: `lesson-created:${id}`, eventType: "scheduled", startsAt: Number(row.proposed_starts_at), endsAt: Number(row.proposed_ends_at), occurredAt: resolvedAt }));
+      }
       await db.batch(statements);
     } else if (body.action === "submitStudentRequest") {
       if (!(["cancel", "reschedule", "new_lesson"] as const).includes(body.requestType)) return invalid();
@@ -349,6 +412,30 @@ function invalid() { return Response.json({ error: "Проверьте запо�
 function conflict() { return Response.json({ error: "На это время уже назначен другой урок" }, { status: 409 }); }
 function initials(name: string) { return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(); }
 function minutesToTime(minutes: number) { return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; }
+function formatHistoryLesson(start: number, end: number | null) {
+  const startLabel = historyMomentLabel.format(new Date(start));
+  return end ? `${startLabel}–${timeLabel.format(new Date(end))}` : startLabel;
+}
+function lessonEventStatement(db: ReturnType<typeof getD1>, input: {
+  workspaceId: string;
+  studentId: string;
+  lessonId?: string | null;
+  actorMemberId?: string | null;
+  sourceKey?: string;
+  eventType: "scheduled" | "rescheduled" | "cancelled" | "completed" | "series_stopped";
+  previousStartsAt?: number | null;
+  startsAt?: number | null;
+  endsAt?: number | null;
+  note?: string | null;
+  occurredAt?: number;
+}) {
+  const eventId = crypto.randomUUID();
+  return db.prepare(`INSERT INTO lesson_events (id, workspace_id, student_id, lesson_id, actor_member_id, source_key, event_type, previous_starts_at, starts_at, ends_at, note, occurred_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+    eventId, input.workspaceId, input.studentId, input.lessonId ?? null, input.actorMemberId ?? null, input.sourceKey ?? eventId,
+    input.eventType, input.previousStartsAt ?? null, input.startsAt ?? null, input.endsAt ?? null, input.note ?? null, input.occurredAt ?? Date.now(),
+  );
+}
 function toMoscowDate(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Moscow" }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
