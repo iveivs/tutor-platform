@@ -1,0 +1,2 @@
+ALTER TABLE `balance_entries` ADD `reverses_entry_id` text;--> statement-breakpoint
+CREATE UNIQUE INDEX `balance_entries_reversal_unique` ON `balance_entries` (`reverses_entry_id`) WHERE "balance_entries"."reverses_entry_id" is not null;

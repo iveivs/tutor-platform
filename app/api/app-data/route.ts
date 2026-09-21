@@ -22,6 +22,7 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email }).strict(),
   z.object({ action: z.literal("createStudentInvite"), studentId: id }).strict(),
   z.object({ action: z.literal("addPayment"), studentId: id, count: z.number().int().min(1).max(100), paymentDate: date.optional() }).strict(),
+  z.object({ action: z.literal("reversePayment"), paymentId: id }).strict(),
   z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
   z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
   z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80) }).strict(),
@@ -61,8 +62,10 @@ export async function GET(request: Request) {
         JOIN members m ON m.id = r.student_id
         LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.workspace_id = ? AND r.status = 'pending' AND (? IS NULL OR r.student_id = ?) ORDER BY r.created_at`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
-      db.prepare(`SELECT id, student_id, kind, lesson_units, note, occurred_at FROM balance_entries
-        WHERE workspace_id = ? AND (? IS NULL OR student_id = ?) ORDER BY occurred_at DESC, created_at DESC`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
+      db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at,
+        EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed
+        FROM balance_entries b
+        WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?) ORDER BY b.occurred_at DESC, b.created_at DESC`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
       db.prepare(`SELECT id, type, title, body, read_at, created_at FROM notifications
         WHERE member_id = ? ORDER BY created_at DESC LIMIT 30`).bind(auth.memberId).all(),
       db.prepare(`SELECT display_name FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
@@ -84,7 +87,8 @@ export async function GET(request: Request) {
         LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.workspace_id = ? AND (? IS NULL OR r.student_id = ?)
         ORDER BY COALESCE(r.resolved_at, r.created_at) DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
-      db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at,
+      db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at, b.reverses_entry_id,
+        EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed,
         student.display_name, actor.display_name AS actor_name
         FROM balance_entries b
         JOIN members student ON student.id = b.student_id
@@ -139,7 +143,7 @@ export async function GET(request: Request) {
     });
     const balanceEntries = (balanceRows.results as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id), studentId: String(row.student_id), kind: String(row.kind), units: Number(row.lesson_units),
-      note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))),
+      note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))), reversed: Boolean(row.reversed),
     }));
     const lessonHistory = (lessonEventRows.results as Array<Record<string, unknown>>).map((row) => {
       const eventType = String(row.event_type);
@@ -161,8 +165,9 @@ export async function GET(request: Request) {
     const balanceHistory = (historyBalanceRows.results as Array<Record<string, unknown>>).map((row) => {
       const kind = String(row.kind);
       const units = Number(row.lesson_units);
-      const titles: Record<string, string> = { payment: "Оплата учтена", lesson_charge: "Списание за урок", adjustment: "Корректировка баланса", refund: "Возврат" };
-      return { id: `balance:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: titles[kind] ?? "Операция баланса", detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, occurredAt: Number(row.occurred_at) };
+      const titles: Record<string, string> = { payment: "Оплата учтена", lesson_charge: "Списание за урок", adjustment: "Корректировка баланса", refund: "Отмена оплаты" };
+      const reversed = Boolean(row.reversed);
+      return { id: `balance:${row.id}`, sourceId: String(row.id), studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: `${titles[kind] ?? "Операция баланса"}${reversed ? " · отменена" : ""}`, detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, canReverse: kind === "payment" && !reversed, occurredAt: Number(row.occurred_at) };
     });
     const historyEvents = [...lessonHistory, ...requestHistory, ...balanceHistory].sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 500);
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at) }));
@@ -326,10 +331,30 @@ export async function POST(request: Request) {
       if (!Number.isFinite(occurredAt) || occurredAt > Date.now()) return Response.json({ error: "Дата оплаты не может быть в будущем" }, { status: 400 });
       const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(body.studentId, auth.workspaceId).first();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
-      await db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
-        VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, occurredAt, auth.memberId).run();
-      await db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'payment_recorded', 'Оплата учтена', ?)")
-        .bind(crypto.randomUUID(), body.studentId, `Баланс пополнен на ${body.count} занятий.`).run();
+      await db.batch([
+        db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
+          VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, occurredAt, auth.memberId),
+        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'payment_recorded', 'Оплата учтена', ?)")
+          .bind(crypto.randomUUID(), body.studentId, `Баланс пополнен на ${body.count} занятий.`),
+      ]);
+    } else if (body.action === "reversePayment") {
+      const payment = await db.prepare(`SELECT b.id, b.student_id, b.lesson_units
+        FROM balance_entries b
+        JOIN members student ON student.id = b.student_id
+        WHERE b.id = ? AND b.workspace_id = ? AND b.kind = 'payment' AND b.lesson_units > 0
+          AND student.workspace_id = ? AND student.role = 'student' LIMIT 1`)
+        .bind(body.paymentId, auth.workspaceId, auth.workspaceId)
+        .first<{ id: string; student_id: string; lesson_units: number }>();
+      if (!payment) return Response.json({ error: "Оплата не найдена" }, { status: 404 });
+      const existingReversal = await db.prepare("SELECT id FROM balance_entries WHERE reverses_entry_id = ? LIMIT 1").bind(payment.id).first();
+      if (existingReversal) return Response.json({ error: "Эта оплата уже отменена" }, { status: 409 });
+      await db.batch([
+        db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, reverses_entry_id, note, occurred_at, recorded_by_id)
+          VALUES (?, ?, ?, 'refund', ?, ?, 'Отмена ошибочной оплаты', ?, ?)`)
+          .bind(id, auth.workspaceId, payment.student_id, -payment.lesson_units, payment.id, Date.now(), auth.memberId),
+        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'payment_reversed', 'Оплата отменена', ?)")
+          .bind(crypto.randomUUID(), payment.student_id, `Ошибочная оплата на ${payment.lesson_units} занятий отменена.`),
+      ]);
     } else if (body.action === "resolveRequest") {
       if (!body.requestId || !["approved", "declined"].includes(body.decision)) return invalid();
       const row = await db.prepare(`SELECT r.type, r.student_id, r.lesson_id, r.proposed_starts_at, r.proposed_ends_at, l.series_id, l.starts_at, l.ends_at
@@ -392,6 +417,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, id });
   } catch (error) {
     if (error instanceof Error && error.message.includes("UNIQUE constraint failed: lesson_requests.")) return Response.json({ error: "Такой запрос уже ожидает решения" }, { status: 409 });
+    if (error instanceof Error && error.message.includes("UNIQUE constraint failed: balance_entries.reverses_entry_id")) return Response.json({ error: "Эта оплата уже отменена" }, { status: 409 });
     console.error("Failed to update app data", error);
     return Response.json({ error: "Не удалось сохранить изменения" }, { status: 500 });
   }

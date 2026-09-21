@@ -121,6 +121,7 @@ export const balanceEntries = sqliteTable("balance_entries", {
   kind: text("kind").notNull(),
   lessonUnits: integer("lesson_units").notNull(),
   amountCents: integer("amount_cents"),
+  reversesEntryId: text("reverses_entry_id"),
   note: text("note"),
   occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
   recordedById: text("recorded_by_id").references(() => members.id, { onDelete: "set null" }),
@@ -129,6 +130,7 @@ export const balanceEntries = sqliteTable("balance_entries", {
   check("balance_entries_kind_check", sql`${table.kind} in ('payment', 'lesson_charge', 'adjustment', 'refund')`),
   index("idx_balance_entries_student_occurred").on(table.studentId, table.occurredAt),
   uniqueIndex("balance_entries_lesson_charge_unique").on(table.lessonId, table.kind),
+  uniqueIndex("balance_entries_reversal_unique").on(table.reversesEntryId).where(sql`${table.reversesEntryId} is not null`),
 ]);
 
 export const lessonRequests = sqliteTable("lesson_requests", {
