@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy,
   History as HistoryIcon, Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { syncDelayForMoscowHour } from "@/lib/incremental-sync";
 
 type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
 type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student" };
@@ -33,7 +34,7 @@ type AppNotification = {
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
-type AppData = { lessons: Lesson[]; students: Student[]; recurringSlots?: RecurringSlot[]; requests: LessonRequest[]; balanceEntries: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string } };
+type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string }; syncCursor?: number };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -44,8 +45,11 @@ async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   return response;
 }
 
-async function readAppData(includePastLessons = false): Promise<AppData> {
-  const response = await appFetch(`/api/app-data${includePastLessons ? "?includePastLessons=1" : ""}`, { cache: "no-store" });
+async function readAppData(includePastLessons = false, cursor?: number): Promise<AppData> {
+  const params = new URLSearchParams();
+  if (includePastLessons) params.set("includePastLessons", "1");
+  if (cursor !== undefined) params.set("cursor", String(cursor));
+  const response = await appFetch(`/api/app-data${params.size ? `?${params}` : ""}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   return response.json() as Promise<AppData>;
 }
@@ -91,10 +95,25 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [loadError, setLoadError] = useState(false);
   const [showPastLessons, setShowPastLessons] = useState(false);
   const [pastLessonsLoading, setPastLessonsLoading] = useState(false);
+  const syncCursorRef = useRef(0);
+  const syncInFlightRef = useRef(false);
+  const requestIdsRef = useRef(new Set<string>());
+  const notificationIdsRef = useRef(new Set<string>());
 
   const applyData = useCallback((data: AppData) => {
-    setLessons(data.lessons); setStudents(data.students); setRecurringSlots(data.recurringSlots ?? []); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []); setHistoryEvents(data.historyEvents ?? []); setNotifications(data.notifications ?? []); setTeacherName(data.teacherName ?? "Преподаватель"); if (data.profile) setProfile(data.profile);
-    setSelectedStudent((current) => data.students.some((student) => student.id === current) ? current : (data.students[0]?.id ?? current));
+    if (data.lessons) setLessons(data.lessons);
+    if (data.students) {
+      setStudents(data.students);
+      setSelectedStudent((current) => data.students?.some((student) => student.id === current) ? current : (data.students?.[0]?.id ?? current));
+    }
+    if (data.recurringSlots) setRecurringSlots(data.recurringSlots);
+    if (data.requests) { setRequests(data.requests); requestIdsRef.current = new Set(data.requests.map((request) => request.id)); }
+    if (data.balanceEntries) setBalanceEntries(data.balanceEntries);
+    if (data.historyEvents) setHistoryEvents(data.historyEvents);
+    if (data.notifications) { setNotifications(data.notifications); notificationIdsRef.current = new Set(data.notifications.map((notification) => notification.id)); }
+    if (data.teacherName) setTeacherName(data.teacherName);
+    if (data.profile) setProfile(data.profile);
+    if (typeof data.syncCursor === "number") syncCursorRef.current = data.syncCursor;
   }, []);
 
   const reload = useCallback(async () => {
@@ -114,6 +133,47 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     void readAppData().then((data) => { if (active) { applyData(data); setLoadError(false); setLoading(false); } }).catch(() => { if (active) { setLoadError(true); setLoading(false); } });
     return () => { active = false; };
   }, [applyData]);
+
+  const syncChanges = useCallback(async () => {
+    if (syncInFlightRef.current || !navigator.onLine) return;
+    syncInFlightRef.current = true;
+    try {
+      const data = await readAppData(showPastLessons, syncCursorRef.current);
+      const newRequest = data.requests?.find((request) => !requestIdsRef.current.has(request.id));
+      const newNotification = data.notifications?.find((notification) => !notificationIdsRef.current.has(notification.id) && !notification.read);
+      applyData(data);
+      if (newRequest && role !== "student") toast.info(`Новый запрос: ${newRequest.name}`);
+      else if (newNotification) toast.info(newNotification.title);
+    } catch {
+      // Фоновая синхронизация повторится по расписанию или при возвращении на вкладку.
+    } finally {
+      syncInFlightRef.current = false;
+    }
+  }, [applyData, role, showPastLessons]);
+
+  useEffect(() => {
+    if (loading) return;
+    let active = true;
+    let timer: number | undefined;
+    const delay = () => {
+      const hourPart = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Moscow" }).formatToParts(new Date()).find((part) => part.type === "hour");
+      const hour = Number(hourPart?.value ?? 12);
+      return syncDelayForMoscowHour(hour);
+    };
+    const schedule = () => { timer = window.setTimeout(async () => { await syncChanges(); if (active) schedule(); }, delay()); };
+    const syncNow = () => { if (document.visibilityState === "visible") void syncChanges(); };
+    schedule();
+    window.addEventListener("focus", syncNow);
+    window.addEventListener("online", syncNow);
+    document.addEventListener("visibilitychange", syncNow);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("focus", syncNow);
+      window.removeEventListener("online", syncNow);
+      document.removeEventListener("visibilitychange", syncNow);
+    };
+  }, [loading, syncChanges]);
 
   const addLesson = async (lesson: LessonDraft) => {
     try { await saveAppData({ action: "createLesson", studentId: lesson.studentId, date: lesson.date, time: lesson.time, repeat: lesson.repeat }); await reload(); toast.success("Урок добавлен в расписание"); return true; }

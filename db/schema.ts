@@ -185,3 +185,15 @@ export const notifications = sqliteTable("notifications", {
 }, (table) => [
   index("idx_notifications_member_read_created").on(table.memberId, table.readAt, table.createdAt),
 ]);
+
+/** Small per-member journal used to discover which client sections need refreshing. */
+export const dataChanges = sqliteTable("data_changes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  audienceMemberId: text("audience_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  sections: text("sections").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
+}, (table) => [
+  index("idx_data_changes_audience_id").on(table.audienceMemberId, table.id),
+  index("idx_data_changes_workspace_id").on(table.workspaceId, table.id),
+]);

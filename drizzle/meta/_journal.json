@@ -43,6 +43,13 @@
       "when": 1790458725552,
       "tag": "0005_freezing_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790460625004,
+      "tag": "0006_nostalgic_thor_girl",
+      "breakpoints": true
     }
   ]
 }
