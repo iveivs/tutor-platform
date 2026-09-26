@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
 type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student" };
-type Lesson = { id: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string };
+type Lesson = { id: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string; past?: boolean };
 type LessonDraft = { date: string; time: string; studentId: string; repeat: "once" | "weekly" };
 type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
 type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
@@ -39,8 +40,8 @@ async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   return response;
 }
 
-async function readAppData(): Promise<AppData> {
-  const response = await appFetch("/api/app-data", { cache: "no-store" });
+async function readAppData(includePastLessons = false): Promise<AppData> {
+  const response = await appFetch(`/api/app-data${includePastLessons ? "?includePastLessons=1" : ""}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Не удалось загрузить данные");
   return response.json() as Promise<AppData>;
 }
@@ -84,6 +85,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [selectedStudent, setSelectedStudent] = useState("101");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [showPastLessons, setShowPastLessons] = useState(false);
+  const [pastLessonsLoading, setPastLessonsLoading] = useState(false);
 
   const applyData = useCallback((data: AppData) => {
     setLessons(data.lessons); setStudents(data.students); setRecurringSlots(data.recurringSlots ?? []); setRequests(data.requests); setBalanceEntries(data.balanceEntries ?? []); setHistoryEvents(data.historyEvents ?? []); setNotifications(data.notifications ?? []); setTeacherName(data.teacherName ?? "Преподаватель"); if (data.profile) setProfile(data.profile);
@@ -91,8 +94,16 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   }, []);
 
   const reload = useCallback(async () => {
-    const data = await readAppData(); applyData(data); setLoadError(false); setLoading(false);
-  }, [applyData]);
+    const data = await readAppData(showPastLessons); applyData(data); setLoadError(false); setLoading(false);
+  }, [applyData, showPastLessons]);
+
+  const changePastLessonsVisibility = async (show: boolean) => {
+    if (!show) { setShowPastLessons(false); return; }
+    setPastLessonsLoading(true);
+    try { const data = await readAppData(true); applyData(data); setShowPastLessons(true); }
+    catch { toast.error("Не удалось загрузить прошедшие уроки"); }
+    finally { setPastLessonsLoading(false); }
+  };
 
   useEffect(() => {
     let active = true;
@@ -175,7 +186,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       execute(input: unknown) {
         const date = (input as { date?: unknown })?.date;
         if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Дата должна быть в формате ГГГГ-ММ-ДД");
-        return { date, lessons: lessons.filter((lesson) => lesson.date === date).map(({ time, end, name, label }) => ({ time, end, name, status: label })) };
+        return { date, lessons: lessons.filter((lesson) => !lesson.past && lesson.date === date).map(({ time, end, name, label }) => ({ time, end, name, status: label })) };
       },
     });
     register({
@@ -199,9 +210,10 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
 
   if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><CalendarDays className="mx-auto mb-3 size-8 animate-pulse text-indigo-600" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-slate-500">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-indigo-600" onClick={() => { setLoading(true); void reload().catch(() => { setLoadError(true); setLoading(false); }); }}>Повторить</Button></div></main>;
+  const activeLessons = lessons.filter((lesson) => !lesson.past);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
   if (role === "student") return portalStudent
-    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
+    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={activeLessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-slate-500">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (
@@ -209,10 +221,10 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       <Sidebar view={view} setView={setView} name={profile.name} onLogout={onLogout} requestCount={requests.length} notificationCount={notifications.filter((item) => !item.read).length} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
         <MobileHeader name={profile.name} notificationCount={notifications.filter((item) => !item.read).length} onNotifications={() => setView("notifications")} />
-        {view === "today" && <TodayView lessons={lessons} students={students} requests={requests} onAdd={addLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "calendar" && <CalendarView lessons={lessons} students={students} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} />}
+        {view === "today" && <TodayView lessons={activeLessons} students={students} requests={requests} onAdd={addLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "calendar" && <CalendarView lessons={lessons} students={students} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={lessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} />}
+        {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} />}
         {view === "history" && <HistoryView events={historyEvents} students={students} onReversePayment={reversePayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} />}
@@ -269,14 +281,14 @@ function TodayView({ lessons, students, requests, onAdd, setView, onOpenStudent 
 }
 
 function LessonList({ lessons, onSelect }: { lessons: Lesson[]; onSelect?: (lesson: Lesson) => void }) {
-  return <div className="space-y-3">{lessons.length ? lessons.map((lesson) => <button key={lesson.id} onClick={() => onSelect?.(lesson)} className="group grid w-full grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md md:grid-cols-[74px_minmax(0,1fr)_auto] md:p-4"><span className="text-sm font-semibold leading-5 text-slate-700"><span className="block">{lesson.time}</span><span className="block font-normal text-slate-400">{lesson.end}</span></span><span className="min-w-0 border-l border-slate-200 pl-3 md:pl-5"><span className="block truncate text-base font-bold md:text-lg">{lesson.name}</span><span className="mt-0.5 block truncate text-sm text-slate-500">Барабаны · Студия</span></span><span className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-1.5 text-xs font-semibold ring-1 sm:inline-flex ${statusStyles[lesson.status]}`}>{lesson.label}</span>{onSelect && <ChevronRight className="size-5 text-slate-400" />}</span></button>) : <Empty text="На этот день уроков нет" />}</div>;
+  return <div className="space-y-3">{lessons.length ? lessons.map((lesson) => <button key={lesson.id} type="button" disabled={lesson.past} onClick={() => !lesson.past && onSelect?.(lesson)} className={`group grid w-full grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 p-3 text-left transition md:grid-cols-[74px_minmax(0,1fr)_auto] md:p-4 ${lesson.past ? "cursor-default opacity-75" : "hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"}`}><span className="text-sm font-semibold leading-5 text-slate-700"><span className="block">{lesson.time}</span><span className="block font-normal text-slate-400">{lesson.end}</span></span><span className="min-w-0 border-l border-slate-200 pl-3 md:pl-5"><span className="block truncate text-base font-bold md:text-lg">{lesson.name}</span><span className="mt-0.5 block truncate text-sm text-slate-500">Барабаны · Студия</span></span><span className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-1.5 text-xs font-semibold ring-1 sm:inline-flex ${statusStyles[lesson.status]}`}>{lesson.label}</span>{onSelect && !lesson.past && <ChevronRight className="size-5 text-slate-400" />}</span></button>) : <Empty text="На этот день уроков нет" />}</div>;
 }
 
 function Attention({ icon: Icon, tone, title, text, onClick }: { icon: typeof Bell; tone: "rose" | "amber"; title: string; text: string; onClick: () => void }) {
   return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-slate-50"><span className={`grid size-11 place-items-center rounded-xl ${tone === "rose" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}><Icon className="size-5" /></span><span><span className="block text-sm font-bold">{title}</span><span className="block text-sm text-slate-500">{text}</span></span><ChevronRight className="ml-auto size-4 text-slate-400" /></button>;
 }
 
-function CalendarView({ lessons, students, onAdd, onUpdate, onDelete }: { lessons: Lesson[]; students: Student[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onUpdate: (id: string, date: string, time: string) => Promise<boolean>; onDelete: (id: string) => Promise<boolean> }) {
+function CalendarView({ lessons, students, showPastLessons, pastLessonsLoading, onShowPastLessonsChange, onAdd, onUpdate, onDelete }: { lessons: Lesson[]; students: Student[]; showPastLessons: boolean; pastLessonsLoading: boolean; onShowPastLessonsChange: (show: boolean) => Promise<void>; onAdd: (lesson: LessonDraft) => Promise<boolean>; onUpdate: (id: string, date: string, time: string) => Promise<boolean>; onDelete: (id: string) => Promise<boolean> }) {
   const [mode, setMode] = useState<"day" | "week" | "month">("month");
   const [cursor, setCursor] = useState(today);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -289,15 +301,16 @@ function CalendarView({ lessons, students, onAdd, onUpdate, onDelete }: { lesson
   const visibleDates = mode === "day" ? [cursor] : Array.from({ length: 7 }, (_, index) => shiftDate(weekStart, index));
   const move = (direction: number) => setCursor((date) => mode === "day" ? shiftDate(date, direction) : mode === "week" ? shiftDate(date, direction * 7) : shiftMonth(date, direction));
   const title = mode === "month" ? dateTitle(cursor, { month: "long", year: "numeric" }) : mode === "week" ? `${dateTitle(visibleDates[0])} — ${dateTitle(visibleDates[6], { day: "numeric", month: "long", year: "numeric" })}` : dateTitle(cursor, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const selectedLessons = selectedDate ? lessons.filter((lesson) => lesson.date === selectedDate) : [];
+  const visibleLessons = showPastLessons ? lessons : lessons.filter((lesson) => !lesson.past);
+  const selectedLessons = selectedDate ? visibleLessons.filter((lesson) => lesson.date === selectedDate) : [];
 
   return <Shell title="Календарь" actions={<AddLessonDialog students={students} defaultDate={cursor} onAdd={onAdd} />}>
     <div className="card calendar-surface overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between md:p-6">
-        <div className="flex rounded-xl bg-slate-100 p-1">{(["day", "week", "month"] as const).map((item) => <button key={item} onClick={() => setMode(item)} className={`rounded-lg px-4 py-2 text-sm ${mode === item ? "bg-white font-semibold text-indigo-700 shadow-sm" : "text-slate-500"}`}>{item === "day" ? "День" : item === "week" ? "Неделя" : "Месяц"}</button>)}</div>
+        <div className="flex flex-wrap items-center gap-4"><div className="flex rounded-xl bg-slate-100 p-1">{(["day", "week", "month"] as const).map((item) => <button key={item} onClick={() => setMode(item)} className={`rounded-lg px-4 py-2 text-sm ${mode === item ? "bg-white font-semibold text-indigo-700 shadow-sm" : "text-slate-500"}`}>{item === "day" ? "День" : item === "week" ? "Неделя" : "Месяц"}</button>)}</div><label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-600"><Checkbox checked={showPastLessons} disabled={pastLessonsLoading} onCheckedChange={(checked) => void onShowPastLessonsChange(checked === true)} /><span>{pastLessonsLoading ? "Загружаю прошедшие…" : "Показывать прошедшие уроки"}</span></label></div>
         <div className="flex items-center gap-2"><button onClick={() => move(-1)} aria-label="Назад" className="grid size-10 place-items-center rounded-xl border"><ChevronLeft className="size-4" /></button><button onClick={() => setCursor(today())} className="min-w-44 px-2 text-center text-base font-bold capitalize">{title}</button><button onClick={() => move(1)} aria-label="Вперёд" className="grid size-10 place-items-center rounded-xl border"><ChevronRight className="size-4" /></button></div>
       </div>
-      {mode === "month" ? <MonthGrid dates={monthDays} cursor={cursor} lessons={lessons} onSelect={setSelectedDate} /> : <ScheduleColumns dates={visibleDates} lessons={lessons} onSelectDate={setSelectedDate} onSelectLesson={setEditing} />}
+      {mode === "month" ? <MonthGrid dates={monthDays} cursor={cursor} lessons={visibleLessons} onSelect={setSelectedDate} /> : <ScheduleColumns dates={visibleDates} lessons={visibleLessons} onSelectDate={setSelectedDate} onSelectLesson={setEditing} />}
     </div>
     <Dialog open={selectedDate !== null} onOpenChange={(open) => !open && setSelectedDate(null)}><DialogContent className="rounded-3xl sm:max-w-2xl"><DialogHeader><DialogTitle className="text-2xl capitalize">{selectedDate && dateTitle(selectedDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</DialogTitle><DialogDescription>{selectedLessons.length} занятий</DialogDescription></DialogHeader><LessonList lessons={selectedLessons} onSelect={setEditing} /><DialogFooter><DialogClose asChild><Button variant="outline">Закрыть</Button></DialogClose>{selectedDate && <AddLessonDialog students={students} defaultDate={selectedDate} onAdd={onAdd} compact />}</DialogFooter></DialogContent></Dialog>
     <EditLessonDialog key={editing?.id ?? "no-lesson"} lesson={editing} onOpenChange={(open) => !open && setEditing(null)} onUpdate={onUpdate} onDelete={onDelete} />
@@ -310,7 +323,7 @@ function MonthGrid({ dates, cursor, lessons, onSelect }: { dates: string[]; curs
 }
 
 function ScheduleColumns({ dates, lessons, onSelectDate, onSelectLesson }: { dates: string[]; lessons: Lesson[]; onSelectDate: (date: string) => void; onSelectLesson: (lesson: Lesson) => void }) {
-  return <div className={`grid divide-x ${dates.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-7"}`}>{dates.map((date) => { const dayLessons = lessons.filter((lesson) => lesson.date === date); const weekend = [0, 6].includes(dateAtNoon(date).getUTCDay()); return <section key={date} className={`min-h-64 p-3 ${weekend ? "calendar-weekend" : ""}`}><button onClick={() => onSelectDate(date)} className="mb-3 w-full rounded-xl p-2 text-center hover:bg-indigo-50"><span className="block text-xs uppercase text-slate-500">{dateTitle(date, { weekday: "short" })}</span><strong className={date === today() ? "text-indigo-600" : weekend ? "calendar-weekend-date" : ""}>{dateTitle(date)}</strong></button><div className="space-y-2">{dayLessons.map((lesson) => <button key={lesson.id} onClick={() => onSelectLesson(lesson)} className={`w-full rounded-xl p-3 text-left text-sm ${statusStyles[lesson.status]}`}><strong className="block">{lesson.time}</strong><span className="block truncate">{lesson.name}</span></button>)}{!dayLessons.length && <p className="py-8 text-center text-xs text-slate-400">Нет уроков</p>}</div></section>; })}</div>;
+  return <div className={`grid divide-x ${dates.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-7"}`}>{dates.map((date) => { const dayLessons = lessons.filter((lesson) => lesson.date === date); const weekend = [0, 6].includes(dateAtNoon(date).getUTCDay()); return <section key={date} className={`min-h-64 p-3 ${weekend ? "calendar-weekend" : ""}`}><button onClick={() => onSelectDate(date)} className="mb-3 w-full rounded-xl p-2 text-center hover:bg-indigo-50"><span className="block text-xs uppercase text-slate-500">{dateTitle(date, { weekday: "short" })}</span><strong className={date === today() ? "text-indigo-600" : weekend ? "calendar-weekend-date" : ""}>{dateTitle(date)}</strong></button><div className="space-y-2">{dayLessons.map((lesson) => <button key={lesson.id} type="button" disabled={lesson.past} onClick={() => !lesson.past && onSelectLesson(lesson)} className={`w-full rounded-xl p-3 text-left text-sm ${lesson.past ? "cursor-default opacity-75" : ""} ${statusStyles[lesson.status]}`}><strong className="block">{lesson.time}</strong><span className="block truncate">{lesson.name}</span><span className="mt-1 block text-xs opacity-75">{lesson.label}</span></button>)}{!dayLessons.length && <p className="py-8 text-center text-xs text-slate-400">Нет уроков</p>}</div></section>; })}</div>;
 }
 
 function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd: (student: StudentDraft) => Promise<boolean>; onOpen: (id: string) => void }) {
@@ -470,7 +483,7 @@ function AddStudentSheet({ onAdd }: { onAdd: (student: StudentDraft) => Promise<
 }
 
 function PaymentDialog({ student, onPay }: { student: Student; onPay: (id: string, count: number, date: string) => Promise<boolean> }) {
-  const [open, setOpen] = useState(false); const [count, setCount] = useState(8); const [paymentDate, setPaymentDate] = useState(today); const [pending, setPending] = useState(false);
+  const [open, setOpen] = useState(false); const [count, setCount] = useState(1); const [paymentDate, setPaymentDate] = useState(today); const [pending, setPending] = useState(false);
   const submit = async () => { setPending(true); const saved = await onPay(student.id, count, paymentDate); setPending(false); if (saved) setOpen(false); };
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="lg" className="h-11 rounded-xl bg-indigo-600"><Plus />Добавить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">Добавить оплату</DialogTitle><DialogDescription>{student.name}</DialogDescription></DialogHeader><div className={`rounded-2xl p-4 font-semibold ${student.balance < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"}`}>Текущий баланс: {student.balance} занятия</div><Field label="Количество занятий"><Input aria-label="Количество занятий" type="number" min="1" max="100" value={count} onChange={(event) => setCount(Number(event.target.value))} className="h-11 rounded-xl" /></Field><Field label="Дата оплаты"><Input aria-label="Дата оплаты" type="date" max={today()} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} className="h-11 rounded-xl" /></Field><div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800">После оплаты баланс составит <strong>{student.balance + count} занятий</strong></div><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button disabled={pending || !Number.isInteger(count) || count < 1 || !paymentDate} onClick={() => void submit()} className="bg-indigo-600">{pending ? "Сохраняю…" : "Добавить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }

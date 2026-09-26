@@ -38,6 +38,7 @@ export async function GET(request: Request) {
   try {
     const auth = await requireMember(request);
     if (auth instanceof Response) return auth;
+    const includePastLessons = new URL(request.url).searchParams.get("includePastLessons") === "1";
     const db = getD1();
     await ensureSeriesLessons(db, auth.workspaceId);
     await settlePastLessons(db, auth.workspaceId);
@@ -51,12 +52,14 @@ export async function GET(request: Request) {
         ORDER BY m.display_name`).bind(Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all(),
       db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
-      db.prepare(`SELECT l.id, l.student_id, l.starts_at, l.ends_at, m.display_name,
+      db.prepare(`SELECT l.id, l.student_id, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
         (SELECT r.type FROM lesson_requests r WHERE r.lesson_id = l.id AND r.status = 'pending' ORDER BY r.created_at LIMIT 1) AS request_type
         FROM lessons l JOIN members m ON m.id = l.student_id
-        WHERE l.workspace_id = ? AND l.status = 'scheduled' AND l.ends_at > ? AND (? IS NULL OR l.student_id = ?)
-        ORDER BY l.starts_at`).bind(auth.workspaceId, Date.now(), ownStudentId, ownStudentId).all(),
+        WHERE l.workspace_id = ?
+          AND ((l.status = 'scheduled' AND l.ends_at > ?) OR (? = 1 AND l.status = 'completed'))
+          AND (? IS NULL OR l.student_id = ?)
+        ORDER BY l.starts_at`).bind(auth.workspaceId, Date.now(), includePastLessons ? 1 : 0, ownStudentId, ownStudentId).all(),
       db.prepare(`SELECT r.id, r.type, r.message, r.proposed_starts_at, l.starts_at,
         m.display_name FROM lesson_requests r
         JOIN members m ON m.id = r.student_id
@@ -124,12 +127,13 @@ export async function GET(request: Request) {
       const balance = Number(row.balance);
       const remaining = remainingByStudent.get(studentId) ?? Math.max(0, balance);
       const requestType = row.request_type ? String(row.request_type) : null;
+      const past = row.lesson_status === "completed";
       const covered = remaining > 0;
-      if (requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
-      const status = requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
-      const label = status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
+      if (!past && requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
+      const status = past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
+      const label = past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label };
+      return { id: String(row.id), studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, past };
     });
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {
       const kind = String(row.type);
