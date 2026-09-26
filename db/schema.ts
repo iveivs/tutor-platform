@@ -173,6 +173,10 @@ export const invitations = sqliteTable("invitations", {
 export const notifications = sqliteTable("notifications", {
   id: text("id").primaryKey(),
   memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  studentId: text("student_id").references(() => members.id, { onDelete: "set null" }),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  requestId: text("request_id").references(() => lessonRequests.id, { onDelete: "set null" }),
+  balanceEntryId: text("balance_entry_id").references(() => balanceEntries.id, { onDelete: "set null" }),
   type: text("type").notNull(),
   title: text("title").notNull(),
   body: text("body").notNull(),

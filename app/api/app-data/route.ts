@@ -69,8 +69,18 @@ export async function GET(request: Request) {
         EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed
         FROM balance_entries b
         WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?) ORDER BY b.occurred_at DESC, b.created_at DESC`).bind(auth.workspaceId, ownStudentId, ownStudentId).all(),
-      db.prepare(`SELECT id, type, title, body, read_at, created_at FROM notifications
-        WHERE member_id = ? ORDER BY created_at DESC LIMIT 30`).bind(auth.memberId).all(),
+      db.prepare(`SELECT n.id, n.type, n.title, n.body, n.read_at, n.created_at,
+        student.display_name AS student_name,
+        request.type AS request_type, request.status AS request_status, request.message AS request_message,
+        request.proposed_starts_at, request.proposed_ends_at,
+        lesson.starts_at AS lesson_starts_at, lesson.ends_at AS lesson_ends_at,
+        balance.lesson_units
+        FROM notifications n
+        LEFT JOIN lesson_requests request ON request.id = n.request_id
+        LEFT JOIN lessons lesson ON lesson.id = COALESCE(n.lesson_id, request.lesson_id)
+        LEFT JOIN balance_entries balance ON balance.id = n.balance_entry_id
+        LEFT JOIN members student ON student.id = COALESCE(n.student_id, request.student_id, lesson.student_id, balance.student_id)
+        WHERE n.member_id = ? ORDER BY n.created_at DESC LIMIT 30`).bind(auth.memberId).all(),
       db.prepare(`SELECT display_name FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
         ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(auth.workspaceId).first<{ display_name: string }>(),
       db.prepare(`SELECT m.display_name, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
@@ -174,7 +184,18 @@ export async function GET(request: Request) {
       return { id: `balance:${row.id}`, sourceId: String(row.id), studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: `${titles[kind] ?? "Операция баланса"}${reversed ? " · отменена" : ""}`, detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, canReverse: kind === "payment" && !reversed, occurredAt: Number(row.occurred_at) };
     });
     const historyEvents = [...lessonHistory, ...requestHistory, ...balanceHistory].sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 500);
-    const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at) }));
+    const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at),
+      studentName: row.student_name ? String(row.student_name) : undefined,
+      requestType: row.request_type ? String(row.request_type) : undefined,
+      requestStatus: row.request_status ? String(row.request_status) : undefined,
+      requestMessage: row.request_message ? String(row.request_message) : undefined,
+      lessonStartsAt: row.lesson_starts_at ? Number(row.lesson_starts_at) : undefined,
+      lessonEndsAt: row.lesson_ends_at ? Number(row.lesson_ends_at) : undefined,
+      proposedStartsAt: row.proposed_starts_at ? Number(row.proposed_starts_at) : undefined,
+      proposedEndsAt: row.proposed_ends_at ? Number(row.proposed_ends_at) : undefined,
+      lessonUnits: row.lesson_units === null || row.lesson_units === undefined ? undefined : Number(row.lesson_units),
+    }));
     return Response.json({ students, lessons, recurringSlots, requests, balanceEntries, historyEvents, notifications, currentStudentId: ownStudentId, teacherName: teacherRow?.display_name ?? "Преподаватель", profile: viewerRow ? { name: viewerRow.display_name, email: viewerRow.email } : undefined });
   } catch (error) {
     console.error("Failed to load app data", error);
@@ -227,8 +248,8 @@ export async function POST(request: Request) {
       statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, starts_at, ends_at, created_by_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.workspaceId, student.id, seriesId, range.start, range.end, auth.memberId));
       statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId: id, actorMemberId: auth.memberId, sourceKey: `lesson-created:${id}`, eventType: "scheduled", startsAt: range.start, endsAt: range.end, note: body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
-      statements.push(db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_created', 'Назначен урок', ?)")
-        .bind(crypto.randomUUID(), student.id, `Урок назначен на ${body.date} в ${body.time}.`));
+      statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_created', 'Назначен урок', ?)")
+        .bind(crypto.randomUUID(), student.id, student.id, id, `Урок назначен на ${body.date} в ${body.time}.`));
       await db.batch(statements);
     } else if (body.action === "updateLesson") {
       const range = lessonRange(body.date, body.time, body.durationMinutes);
@@ -243,14 +264,14 @@ export async function POST(request: Request) {
           db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(now, now, body.lessonId, auth.workspaceId),
           db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, range.start, range.end, auth.memberId),
           lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
-          db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, `Новое время: ${body.date}, ${body.time}.`),
+          db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, movedLessonId, `Новое время: ${body.date}, ${body.time}.`),
         ]);
       } else {
         const now = Date.now();
         await db.batch([
           db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(range.start, range.end, now, body.lessonId, auth.workspaceId),
           lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: lesson.id, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
-          db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, `Новое время: ${body.date}, ${body.time}.`),
+          db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, lesson.id, `Новое время: ${body.date}, ${body.time}.`),
         ]);
       }
     } else if (body.action === "deleteLesson") {
@@ -262,7 +283,7 @@ export async function POST(request: Request) {
         db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(now, now, body.lessonId, auth.workspaceId),
         db.prepare("UPDATE lesson_requests SET status = 'approved', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id = ? AND status = 'pending'").bind(auth.memberId, now, now, body.lessonId),
         lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: body.lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${body.lessonId}`, eventType: "cancelled", startsAt: lesson.starts_at, endsAt: lesson.ends_at, occurredAt: now }),
-        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'lesson_cancelled', 'Урок отменён', 'Преподаватель отменил урок без списания.')").bind(crypto.randomUUID(), lesson.student_id),
+        db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_cancelled', 'Урок отменён', 'Преподаватель отменил урок без списания.')").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, body.lessonId),
       ]);
     } else if (body.action === "stopLessonSeries") {
       if (!body.seriesId) return invalid();
@@ -274,7 +295,7 @@ export async function POST(request: Request) {
         db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE series_id = ? AND workspace_id = ? AND status = 'scheduled' AND starts_at > ?").bind(now, now, body.seriesId, auth.workspaceId, now),
         db.prepare("UPDATE lesson_requests SET status = 'declined', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id IN (SELECT id FROM lessons WHERE series_id = ?) AND status = 'pending'").bind(auth.memberId, now, now, body.seriesId),
         lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: series.student_id, actorMemberId: auth.memberId, sourceKey: `series-stopped:${body.seriesId}`, eventType: "series_stopped", note: "Будущие уроки постоянного расписания отменены", occurredAt: now }),
-        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'series_stopped', 'Постоянное занятие отменено', 'Будущие уроки этого времени удалены из расписания без списания.')").bind(crypto.randomUUID(), series.student_id),
+        db.prepare("INSERT INTO notifications (id, member_id, student_id, type, title, body) VALUES (?, ?, ?, 'series_stopped', 'Постоянное занятие отменено', 'Будущие уроки этого времени удалены из расписания без списания.')").bind(crypto.randomUUID(), series.student_id, series.student_id),
       ]);
     } else if (body.action === "createStudent") {
       if (!body.name?.trim() || body.name.trim().length > 80 || (body.email && !/^\S+@\S+\.\S+$/.test(body.email.trim()))) return invalid();
@@ -338,8 +359,8 @@ export async function POST(request: Request) {
       await db.batch([
         db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
           VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, occurredAt, auth.memberId),
-        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'payment_recorded', 'Оплата учтена', ?)")
-          .bind(crypto.randomUUID(), body.studentId, `Баланс пополнен на ${body.count} занятий.`),
+        db.prepare("INSERT INTO notifications (id, member_id, student_id, balance_entry_id, type, title, body) VALUES (?, ?, ?, ?, 'payment_recorded', 'Оплата учтена', ?)")
+          .bind(crypto.randomUUID(), body.studentId, body.studentId, id, `Баланс пополнен на ${body.count} занятий.`),
       ]);
     } else if (body.action === "reversePayment") {
       const payment = await db.prepare(`SELECT b.id, b.student_id, b.lesson_units
@@ -356,8 +377,8 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, reverses_entry_id, note, occurred_at, recorded_by_id)
           VALUES (?, ?, ?, 'refund', ?, ?, 'Отмена ошибочной оплаты', ?, ?)`)
           .bind(id, auth.workspaceId, payment.student_id, -payment.lesson_units, payment.id, Date.now(), auth.memberId),
-        db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'payment_reversed', 'Оплата отменена', ?)")
-          .bind(crypto.randomUUID(), payment.student_id, `Ошибочная оплата на ${payment.lesson_units} занятий отменена.`),
+        db.prepare("INSERT INTO notifications (id, member_id, student_id, balance_entry_id, type, title, body) VALUES (?, ?, ?, ?, 'payment_reversed', 'Оплата отменена', ?)")
+          .bind(crypto.randomUUID(), payment.student_id, payment.student_id, id, `Ошибочная оплата на ${payment.lesson_units} занятий отменена.`),
       ]);
     } else if (body.action === "resolveRequest") {
       if (!body.requestId || !["approved", "declined"].includes(body.decision)) return invalid();
@@ -368,7 +389,7 @@ export async function POST(request: Request) {
       if (body.decision === "approved" && row.proposed_starts_at && Number(row.proposed_starts_at) <= Date.now()) return Response.json({ error: "Предложенное время уже прошло" }, { status: 409 });
       if (body.decision === "approved" && row.proposed_starts_at && row.proposed_ends_at && await hasConflict(db, auth.workspaceId, Number(row.proposed_starts_at), Number(row.proposed_ends_at), String(row.lesson_id ?? ""))) return conflict();
       const resolvedAt = Date.now();
-      const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, resolvedAt, resolvedAt, body.requestId), db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
+      const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, resolvedAt, resolvedAt, body.requestId), db.prepare("INSERT INTO notifications (id, member_id, student_id, request_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, row.student_id, body.requestId, row.lesson_id ?? null, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
       if (body.decision === "approved" && row.lesson_id && row.type === "cancel") {
         statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, row.lesson_id));
         statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: String(row.lesson_id), actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${String(row.lesson_id)}`, eventType: "cancelled", startsAt: Number(row.starts_at), endsAt: Number(row.ends_at), occurredAt: resolvedAt }));
@@ -413,7 +434,7 @@ export async function POST(request: Request) {
       const owner = await db.prepare("SELECT id FROM members WHERE workspace_id = ? AND role = 'owner' AND status = 'active' LIMIT 1").bind(auth.workspaceId).first<{ id: string }>();
       if (!owner) return Response.json({ error: "Преподаватель не найден" }, { status: 409 });
       await db.batch([db.prepare(`INSERT INTO lesson_requests (id, workspace_id, student_id, lesson_id, type, proposed_starts_at, proposed_ends_at, message, cancellation_deadline_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.workspaceId, studentId, lesson?.id ?? null, body.requestType, proposal?.start ?? null, proposal?.end ?? null, body.message?.trim() || null, deadline), db.prepare("INSERT INTO notifications (id, member_id, type, title, body) VALUES (?, ?, 'new_request', 'Новый запрос ученика', ?)").bind(crypto.randomUUID(), owner.id, `${body.requestType === "cancel" ? "Отмена" : body.requestType === "reschedule" ? "Перенос" : "Новое занятие"}: запрос требует ответа`)]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.workspaceId, studentId, lesson?.id ?? null, body.requestType, proposal?.start ?? null, proposal?.end ?? null, body.message?.trim() || null, deadline), db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, request_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'new_request', 'Новый запрос ученика', ?)").bind(crypto.randomUUID(), owner.id, studentId, lesson?.id ?? null, id, `${body.requestType === "cancel" ? "Отмена" : body.requestType === "reschedule" ? "Перенос" : "Новое занятие"}: запрос требует ответа`)]);
     } else if (body.action === "markNotificationsRead") {
       await db.prepare("UPDATE notifications SET read_at = ? WHERE member_id = ? AND read_at IS NULL").bind(Date.now(), auth.memberId).run();
     } else return invalid();
