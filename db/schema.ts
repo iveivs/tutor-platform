@@ -72,6 +72,7 @@ export const lessons = sqliteTable("lessons", {
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   studentId: text("student_id").notNull().references(() => members.id, { onDelete: "restrict" }),
   seriesId: text("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
+  groupId: text("group_id"),
   startsAt: integer("starts_at", { mode: "timestamp_ms" }).notNull(),
   endsAt: integer("ends_at", { mode: "timestamp_ms" }).notNull(),
   status: text("status").notNull().default("scheduled"),
@@ -86,6 +87,7 @@ export const lessons = sqliteTable("lessons", {
   check("lessons_time_check", sql`${table.endsAt} > ${table.startsAt}`),
   index("idx_lessons_workspace_starts_at").on(table.workspaceId, table.startsAt),
   index("idx_lessons_student_starts_at").on(table.studentId, table.startsAt),
+  index("idx_lessons_group_id").on(table.groupId),
   index("idx_lessons_pending_charge").on(table.chargeStatus, table.startsAt),
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);

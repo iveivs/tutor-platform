@@ -13,9 +13,10 @@ const id = z.string().min(1).max(128);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const duration = z.number().int().min(15).max(240).optional();
+const lessonCount = z.union([z.literal(1), z.literal(2)]).optional();
 const email = z.union([z.literal(""), z.string().email().max(254)]).optional();
 const actionBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("createLesson"), studentId: id, date, time, durationMinutes: duration, repeat: z.enum(["once", "weekly"]).optional() }).strict(),
+  z.object({ action: z.literal("createLesson"), studentId: id, date, time, durationMinutes: duration, lessonCount, repeat: z.enum(["once", "weekly"]).optional() }).strict(),
   z.object({ action: z.literal("updateLesson"), lessonId: id, date, time, durationMinutes: duration }).strict(),
   z.object({ action: z.literal("deleteLesson"), lessonId: id }).strict(),
   z.object({ action: z.literal("stopLessonSeries"), seriesId: id }).strict(),
@@ -77,14 +78,20 @@ export async function GET(request: Request) {
         ORDER BY m.display_name`).bind(Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("students", "lessons"), () => db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
-      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name,
+      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
-        (SELECT r.type FROM lesson_requests r WHERE r.lesson_id = l.id AND r.status = 'pending' ORDER BY r.created_at LIMIT 1) AS request_type
+        (SELECT r.type FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
+          WHERE r.status = 'pending' AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id))
+          ORDER BY r.created_at LIMIT 1) AS request_type
         FROM lessons l JOIN members m ON m.id = l.student_id
         WHERE l.workspace_id = ?
-          AND ((l.status = 'scheduled' AND l.ends_at > ?) OR (? = 1 AND l.status = 'completed'))
+          AND ((l.status = 'scheduled' AND l.ends_at > ?)
+            OR (l.group_id IS NOT NULL AND l.status = 'completed' AND EXISTS (
+              SELECT 1 FROM lessons peer WHERE peer.group_id = l.group_id AND peer.status = 'scheduled' AND peer.ends_at > ?
+            ))
+            OR (? = 1 AND l.status = 'completed'))
           AND (? IS NULL OR l.student_id = ?)
-        ORDER BY l.starts_at`).bind(auth.workspaceId, Date.now(), includePastLessons ? 1 : 0, ownStudentId, ownStudentId).all()),
+        ORDER BY l.starts_at`).bind(auth.workspaceId, Date.now(), Date.now(), includePastLessons ? 1 : 0, ownStudentId, ownStudentId).all()),
       loadRows(needs("requests"), () => db.prepare(`SELECT r.id, r.type, r.message, r.proposed_starts_at, l.starts_at,
         m.display_name FROM lesson_requests r
         JOIN members m ON m.id = r.student_id
@@ -157,7 +164,7 @@ export async function GET(request: Request) {
       };
     });
     const remainingByStudent = new Map<string, number>();
-    const lessons = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
+    const lessonParts = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
       const studentId = String(row.student_id);
       const balance = Number(row.balance);
       const remaining = remainingByStudent.get(studentId) ?? Math.max(0, balance);
@@ -168,8 +175,9 @@ export async function GET(request: Request) {
       const status = past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
       const label = past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, past };
+      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, past, startsAt: Number(row.starts_at), units: 1 };
     });
+    const lessons = groupLessonParts(lessonParts);
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {
       const kind = String(row.type);
       const sourceDate = row.starts_at ? new Date(Number(row.starts_at)) : null;
@@ -268,12 +276,19 @@ export async function POST(request: Request) {
       if (auth.role === "owner") statements.push(db.prepare("UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?").bind(`Кабинет: ${name}`, Date.now(), auth.workspaceId));
       await db.batch(statements);
     } else if (body.action === "createLesson") {
-      const range = lessonRange(body.date, body.time, body.durationMinutes);
+      const count = body.lessonCount ?? 1;
+      const range = lessonRange(body.date, body.time, count === 2 ? 120 : body.durationMinutes);
       if (!body.studentId || !range || range.start <= Date.now() || ![undefined, "once", "weekly"].includes(body.repeat)) return invalid();
+      if (count === 2 && toMoscowDate(new Date(range.end - 1)) !== body.date) return Response.json({ error: "Двойной урок должен завершиться в тот же день" }, { status: 400 });
       const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
       if (await hasConflict(db, auth.workspaceId, range.start, range.end)) return conflict();
       const seriesId = body.repeat === "weekly" ? crypto.randomUUID() : null;
+      const groupId = count === 2 ? crypto.randomUUID() : null;
+      const lessonIds = [id, ...(count === 2 ? [crypto.randomUUID()] : [])];
+      const lessonRanges = count === 2
+        ? [lessonRange(body.date, body.time, 60)!, { start: range.start + 60 * 60_000, end: range.end, duration: 60 }]
+        : [range];
       const statements = [];
       if (body.repeat === "weekly") {
         const weekday = new Date(`${body.date}T12:00:00Z`).getUTCDay() || 7;
@@ -282,46 +297,59 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(seriesId, auth.workspaceId, student.id, weekday, hours * 60 + minutes, range.duration, body.date));
         statements.push(db.prepare("UPDATE members SET schedule_type = 'fixed', updated_at = ? WHERE id = ? AND workspace_id = ?").bind(Date.now(), student.id, auth.workspaceId));
       }
-      statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, starts_at, ends_at, created_by_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.workspaceId, student.id, seriesId, range.start, range.end, auth.memberId));
-      statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId: id, actorMemberId: auth.memberId, sourceKey: `lesson-created:${id}`, eventType: "scheduled", startsAt: range.start, endsAt: range.end, note: body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
+      lessonRanges.forEach((lessonRange, index) => {
+        const lessonId = lessonIds[index];
+        statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, group_id, starts_at, ends_at, created_by_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(lessonId, auth.workspaceId, student.id, seriesId, groupId, lessonRange.start, lessonRange.end, auth.memberId));
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-created:${lessonId}`, eventType: "scheduled", startsAt: lessonRange.start, endsAt: lessonRange.end, note: count === 2 ? `Двойной урок · часть ${index + 1} из 2` : body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
+      });
       statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_created', 'Назначен урок', ?)")
-        .bind(crypto.randomUUID(), student.id, student.id, id, `Урок назначен на ${body.date} в ${body.time}.`));
+        .bind(crypto.randomUUID(), student.id, student.id, id, `${count === 2 ? "Двойной урок" : "Урок"} назначен на ${body.date} в ${body.time}.`));
       await db.batch(statements);
     } else if (body.action === "updateLesson") {
-      const range = lessonRange(body.date, body.time, body.durationMinutes);
-      if (!body.lessonId || !range || range.start <= Date.now()) return invalid();
-      const lesson = await db.prepare("SELECT id, student_id, series_id, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, auth.workspaceId).first<{ id: string; student_id: string; series_id: string | null; starts_at: number; ends_at: number }>();
-      if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
-      if (await hasConflict(db, auth.workspaceId, range.start, range.end, body.lessonId)) return conflict();
-      if (lesson.series_id) {
-        const now = Date.now();
-        const movedLessonId = crypto.randomUUID();
-        await db.batch([
-          db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(now, now, body.lessonId, auth.workspaceId),
-          db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, range.start, range.end, auth.memberId),
-          lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
-          db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, movedLessonId, `Новое время: ${body.date}, ${body.time}.`),
-        ]);
-      } else {
-        const now = Date.now();
-        await db.batch([
-          db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(range.start, range.end, now, body.lessonId, auth.workspaceId),
-          lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: lesson.id, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: range.start, endsAt: range.end, occurredAt: now }),
-          db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, lesson.id, `Новое время: ${body.date}, ${body.time}.`),
-        ]);
+      if (!body.lessonId) return invalid();
+      const lessonGroup = await getScheduledLessonGroup(db, auth.workspaceId, body.lessonId);
+      if (!lessonGroup.length) return Response.json({ error: "Урок не найден" }, { status: 404 });
+      const totalDuration = lessonGroup.reduce((sum, lesson) => sum + Math.round((lesson.ends_at - lesson.starts_at) / 60_000), 0);
+      const range = lessonRange(body.date, body.time, lessonGroup.length > 1 ? totalDuration : body.durationMinutes ?? totalDuration);
+      if (!range || range.start <= Date.now()) return invalid();
+      if (lessonGroup.length > 1 && toMoscowDate(new Date(range.end - 1)) !== body.date) return Response.json({ error: "Двойной урок должен завершиться в тот же день" }, { status: 400 });
+      if (await hasConflict(db, auth.workspaceId, range.start, range.end, lessonGroup.map((lesson) => lesson.id))) return conflict();
+      const now = Date.now();
+      const statements: ReturnType<typeof db.prepare>[] = [];
+      const movedIds: string[] = [];
+      let offset = 0;
+      for (const lesson of lessonGroup) {
+        const durationMinutes = Math.round((lesson.ends_at - lesson.starts_at) / 60_000);
+        const movedStart = range.start + offset * 60_000;
+        const movedEnd = movedStart + durationMinutes * 60_000;
+        const movedLessonId = lesson.series_id ? crypto.randomUUID() : lesson.id;
+        movedIds.push(movedLessonId);
+        if (lesson.series_id) {
+          statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(now, now, lesson.id, auth.workspaceId));
+          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, lesson.group_id, movedStart, movedEnd, auth.memberId));
+        } else {
+          statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(movedStart, movedEnd, now, lesson.id, auth.workspaceId));
+        }
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: movedStart, endsAt: movedEnd, occurredAt: now, note: lessonGroup.length > 1 ? "Перенесён двойной урок" : null }));
+        offset += durationMinutes;
       }
+      statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_rescheduled', 'Урок перенесён', ?)").bind(crypto.randomUUID(), lessonGroup[0].student_id, lessonGroup[0].student_id, movedIds[0], `Новое время: ${body.date}, ${body.time}.${lessonGroup.length > 1 ? " Перенесены оба занятия." : ""}`));
+      await db.batch(statements);
     } else if (body.action === "deleteLesson") {
       if (!body.lessonId) return invalid();
-      const lesson = await db.prepare("SELECT student_id, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, auth.workspaceId).first<{ student_id: string; starts_at: number; ends_at: number }>();
-      if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
+      const lessonGroup = await getScheduledLessonGroup(db, auth.workspaceId, body.lessonId);
+      if (!lessonGroup.length) return Response.json({ error: "Урок не найден" }, { status: 404 });
       const now = Date.now();
-      await db.batch([
-        db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND status = 'scheduled'").bind(now, now, body.lessonId, auth.workspaceId),
-        db.prepare("UPDATE lesson_requests SET status = 'approved', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id = ? AND status = 'pending'").bind(auth.memberId, now, now, body.lessonId),
-        lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: body.lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${body.lessonId}`, eventType: "cancelled", startsAt: lesson.starts_at, endsAt: lesson.ends_at, occurredAt: now }),
-        db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_cancelled', 'Урок отменён', 'Преподаватель отменил урок без списания.')").bind(crypto.randomUUID(), lesson.student_id, lesson.student_id, body.lessonId),
-      ]);
+      const lessonIds = lessonGroup.map((lesson) => lesson.id);
+      const placeholders = lessonIds.map(() => "?").join(", ");
+      const statements: ReturnType<typeof db.prepare>[] = [
+        db.prepare(`UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE workspace_id = ? AND status = 'scheduled' AND id IN (${placeholders})`).bind(now, now, auth.workspaceId, ...lessonIds),
+        db.prepare(`UPDATE lesson_requests SET status = 'approved', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE lesson_id IN (${placeholders}) AND status = 'pending'`).bind(auth.memberId, now, now, ...lessonIds),
+      ];
+      for (const lesson of lessonGroup) statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: lesson.student_id, lessonId: lesson.id, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${lesson.id}`, eventType: "cancelled", startsAt: lesson.starts_at, endsAt: lesson.ends_at, occurredAt: now, note: lessonGroup.length > 1 ? "Отменён двойной урок без списания" : null }));
+      statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_cancelled', 'Урок отменён', ?)").bind(crypto.randomUUID(), lessonGroup[0].student_id, lessonGroup[0].student_id, lessonGroup[0].id, lessonGroup.length > 1 ? "Двойной урок отменён без списания двух занятий." : "Преподаватель отменил урок без списания."));
+      await db.batch(statements);
     } else if (body.action === "stopLessonSeries") {
       if (!body.seriesId) return invalid();
       const series = await db.prepare("SELECT student_id FROM lesson_series WHERE id = ? AND workspace_id = ? AND is_active = 1").bind(body.seriesId, auth.workspaceId).first<{ student_id: string }>();
@@ -423,23 +451,33 @@ export async function POST(request: Request) {
         FROM lesson_requests r LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.id = ? AND r.workspace_id = ? AND r.status = 'pending'`).bind(body.requestId, auth.workspaceId).first<Record<string, unknown>>();
       if (!row) return Response.json({ error: "Запрос уже обработан" }, { status: 409 });
+      const lessonGroup = row.lesson_id ? await getScheduledLessonGroup(db, auth.workspaceId, String(row.lesson_id)) : [];
       if (body.decision === "approved" && row.proposed_starts_at && Number(row.proposed_starts_at) <= Date.now()) return Response.json({ error: "Предложенное время уже прошло" }, { status: 409 });
-      if (body.decision === "approved" && row.proposed_starts_at && row.proposed_ends_at && await hasConflict(db, auth.workspaceId, Number(row.proposed_starts_at), Number(row.proposed_ends_at), String(row.lesson_id ?? ""))) return conflict();
+      if (body.decision === "approved" && row.lesson_id && !lessonGroup.length) return Response.json({ error: "Урок уже изменён" }, { status: 409 });
+      if (body.decision === "approved" && row.proposed_starts_at && row.proposed_ends_at && await hasConflict(db, auth.workspaceId, Number(row.proposed_starts_at), Number(row.proposed_ends_at), lessonGroup.map((lesson) => lesson.id))) return conflict();
       const resolvedAt = Date.now();
       const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, resolvedAt, resolvedAt, body.requestId), db.prepare("INSERT INTO notifications (id, member_id, student_id, request_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, row.student_id, body.requestId, row.lesson_id ?? null, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
       if (body.decision === "approved" && row.lesson_id && row.type === "cancel") {
-        statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, row.lesson_id));
-        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: String(row.lesson_id), actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${String(row.lesson_id)}`, eventType: "cancelled", startsAt: Number(row.starts_at), endsAt: Number(row.ends_at), occurredAt: resolvedAt }));
+        const ids = lessonGroup.map((lesson) => lesson.id);
+        statements.push(db.prepare(`UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id IN (${ids.map(() => "?").join(", ")})`).bind(resolvedAt, resolvedAt, ...ids));
+        for (const lesson of lessonGroup) statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: lesson.id, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${lesson.id}`, eventType: "cancelled", startsAt: lesson.starts_at, endsAt: lesson.ends_at, occurredAt: resolvedAt, note: lessonGroup.length > 1 ? "Отменён двойной урок без списания" : null }));
       }
       if (body.decision === "approved" && row.lesson_id && row.type === "reschedule" && row.proposed_starts_at && row.proposed_ends_at) {
-        const movedLessonId = row.series_id ? crypto.randomUUID() : String(row.lesson_id);
-        if (row.series_id) {
-          statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, row.lesson_id));
-          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
-        } else {
-          statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(row.proposed_starts_at, row.proposed_ends_at, resolvedAt, row.lesson_id));
+        let offset = 0;
+        for (const lesson of lessonGroup) {
+          const durationMinutes = Math.round((lesson.ends_at - lesson.starts_at) / 60_000);
+          const movedStart = Number(row.proposed_starts_at) + offset * 60_000;
+          const movedEnd = movedStart + durationMinutes * 60_000;
+          const movedLessonId = lesson.series_id ? crypto.randomUUID() : lesson.id;
+          if (lesson.series_id) {
+            statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, lesson.id));
+            statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, row.student_id, lesson.group_id, movedStart, movedEnd, auth.memberId));
+          } else {
+            statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(movedStart, movedEnd, resolvedAt, lesson.id));
+          }
+          statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: lesson.starts_at, startsAt: movedStart, endsAt: movedEnd, occurredAt: resolvedAt, note: lessonGroup.length > 1 ? "Перенесён двойной урок" : null }));
+          offset += durationMinutes;
         }
-        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: movedLessonId, actorMemberId: auth.memberId, eventType: "rescheduled", previousStartsAt: Number(row.starts_at), startsAt: Number(row.proposed_starts_at), endsAt: Number(row.proposed_ends_at), occurredAt: resolvedAt }));
       }
       if (body.decision === "approved" && row.type === "new_lesson" && row.student_id && row.proposed_starts_at && row.proposed_ends_at) {
         statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(id, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
@@ -455,8 +493,9 @@ export async function POST(request: Request) {
       let lesson: { id: string; starts_at: number; ends_at: number } | null = null;
       if (body.requestType !== "new_lesson") {
         if (!body.lessonId) return invalid();
-        lesson = await db.prepare("SELECT id, starts_at, ends_at FROM lessons WHERE id = ? AND student_id = ? AND workspace_id = ? AND status = 'scheduled'").bind(body.lessonId, studentId, auth.workspaceId).first<{ id: string; starts_at: number; ends_at: number }>();
-        if (!lesson || lesson.starts_at <= Date.now()) return Response.json({ error: "Можно изменить только будущий урок" }, { status: 409 });
+        const lessonGroup = await getScheduledLessonGroup(db, auth.workspaceId, body.lessonId);
+        if (!lessonGroup.length || lessonGroup[0].student_id !== studentId || lessonGroup[0].starts_at <= Date.now()) return Response.json({ error: "Можно изменить только будущий урок" }, { status: 409 });
+        lesson = { id: lessonGroup[0].id, starts_at: lessonGroup[0].starts_at, ends_at: lessonGroup.at(-1)?.ends_at ?? lessonGroup[0].ends_at };
       } else if (student.schedule_type !== "floating") return Response.json({ error: "Предлагать новый урок можно только при плавающем расписании" }, { status: 409 });
       const proposal = body.requestType === "cancel" ? null : lessonRange(body.proposedDate ?? "", body.proposedTime ?? "", lesson ? Math.round((lesson.ends_at - lesson.starts_at) / 60_000) : 60);
       if (body.requestType !== "cancel" && (!proposal || proposal.start <= Date.now())) return invalid();
@@ -535,9 +574,49 @@ function lessonRange(date: string, time: string, durationMinutes = 60) {
   if (!Number.isFinite(start)) return null;
   return { start, end: start + durationMinutes * 60_000, duration: durationMinutes };
 }
-async function hasConflict(db: ReturnType<typeof getD1>, workspaceId: string, start: number, end: number, exceptId = "") {
-  const row = await db.prepare(`SELECT id FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND id != ? AND starts_at < ? AND ends_at > ? LIMIT 1`)
-    .bind(workspaceId, exceptId, end, start).first();
+type LessonPart = {
+  id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string;
+  status: "paid" | "low" | "debt" | "request"; label: string; past: boolean; startsAt: number; units: number;
+};
+function groupLessonParts(parts: LessonPart[]) {
+  const grouped = new Map<string, LessonPart[]>();
+  for (const part of parts) {
+    const key = part.groupId ? `group:${part.groupId}` : `lesson:${part.id}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), part]);
+  }
+  return [...grouped.values()].map((members) => {
+    members.sort((a, b) => a.startsAt - b.startsAt);
+    const first = members[0];
+    const last = members.at(-1) ?? first;
+    const actionable = members.find((member) => !member.past) ?? first;
+    const units = members.length;
+    const past = members.every((member) => member.past);
+    const status = members.some((member) => member.status === "request") ? "request"
+      : members.some((member) => member.status === "debt") ? "debt"
+        : members.some((member) => member.status === "low") ? "low" : "paid";
+    const label = units === 1 ? first.label : past ? "Проведён · списано 2"
+      : status === "request" ? "Двойной · ожидает ответа"
+        : status === "debt" ? `Двойной · ${first.label}`
+          : members.every((member) => member.status === "paid") ? "Двойной · оплачен" : "Двойной · частично оплачен";
+    const { startsAt: _startsAt, ...lesson } = first;
+    void _startsAt;
+    return { ...lesson, id: actionable.id, end: last.end, status, label, past, units };
+  }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+}
+type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; starts_at: number; ends_at: number };
+async function getScheduledLessonGroup(db: ReturnType<typeof getD1>, workspaceId: string, lessonId: string) {
+  const lesson = await db.prepare("SELECT id, student_id, series_id, group_id, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'")
+    .bind(lessonId, workspaceId).first<ScheduledLessonRow>();
+  if (!lesson) return [];
+  if (!lesson.group_id) return [lesson];
+  const rows = await db.prepare("SELECT id, student_id, series_id, group_id, starts_at, ends_at FROM lessons WHERE group_id = ? AND workspace_id = ? AND status = 'scheduled' ORDER BY starts_at")
+    .bind(lesson.group_id, workspaceId).all<ScheduledLessonRow>();
+  return rows.results;
+}
+async function hasConflict(db: ReturnType<typeof getD1>, workspaceId: string, start: number, end: number, exceptIds: string[] = []) {
+  const exclusion = exceptIds.length ? `AND id NOT IN (${exceptIds.map(() => "?").join(", ")})` : "";
+  const row = await db.prepare(`SELECT id FROM lessons WHERE workspace_id = ? AND status = 'scheduled' ${exclusion} AND starts_at < ? AND ends_at > ? LIMIT 1`)
+    .bind(workspaceId, ...exceptIds, end, start).first();
   return Boolean(row);
 }
 async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspaceId: string) {
@@ -550,7 +629,7 @@ async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspaceId: st
   const horizonDate = horizon.toISOString().slice(0, 10);
   const horizonEnd = new Date(`${horizonDate}T23:59:59${MOSCOW_OFFSET}`).getTime();
   const dayStart = new Date(`${startDate}T00:00:00${MOSCOW_OFFSET}`).getTime();
-  const existing = await db.prepare(`SELECT id, series_id, student_id, starts_at, ends_at, status FROM lessons
+  const existing = await db.prepare(`SELECT id, series_id, group_id, student_id, starts_at, ends_at, status FROM lessons
     WHERE workspace_id = ? AND starts_at <= ? AND ends_at >= ?`)
     .bind(workspaceId, horizonEnd, dayStart).all<Record<string, unknown>>();
   const occurrenceKey = (lesson: Record<string, unknown>) => `${String(lesson.series_id)}:${Number(lesson.starts_at)}`;
@@ -572,14 +651,23 @@ async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspaceId: st
     for (let date = firstDate; date <= horizonDate; date = shiftIsoDate(date, 1)) {
       const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7;
       if (weekday !== Number(row.weekday) || (activeUntil && date > activeUntil)) continue;
-      const range = lessonRange(date, minutesToTime(Number(row.start_minutes)), Number(row.duration_minutes));
-      if (!range) continue;
+      const totalRange = lessonRange(date, minutesToTime(Number(row.start_minutes)), Number(row.duration_minutes));
+      if (!totalRange) continue;
       const studentId = String(row.student_id);
-      if (knownOccurrences.has(`${String(row.id)}:${range.start}`)) continue;
-      if (occupied.some((lesson) => lesson.studentId === studentId && lesson.start === range.start) || occupied.some((lesson) => lesson.start < range.end && lesson.end > range.start)) continue;
-      statements.push(db.prepare(`INSERT OR IGNORE INTO lessons (id, workspace_id, student_id, series_id, starts_at, ends_at, created_by_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workspaceId, row.student_id, row.id, range.start, range.end, owner.id));
-      occupied.push({ studentId, start: range.start, end: range.end });
+      const count = Number(row.duration_minutes) === 120 ? 2 : 1;
+      const ranges = count === 2
+        ? [{ start: totalRange.start, end: totalRange.start + 60 * 60_000 }, { start: totalRange.start + 60 * 60_000, end: totalRange.end }]
+        : [{ start: totalRange.start, end: totalRange.end }];
+      const missing = ranges.filter((range) => !knownOccurrences.has(`${String(row.id)}:${range.start}`));
+      if (!missing.length) continue;
+      if (missing.some((range) => occupied.some((lesson) => lesson.start < range.end && lesson.end > range.start))) continue;
+      const existingGroup = existing.results.find((lesson) => lesson.series_id === row.id && ranges.some((range) => Number(lesson.starts_at) === range.start) && lesson.group_id)?.group_id;
+      const groupId = count === 2 ? String(existingGroup ?? crypto.randomUUID()) : null;
+      for (const range of missing) {
+        statements.push(db.prepare(`INSERT OR IGNORE INTO lessons (id, workspace_id, student_id, series_id, group_id, starts_at, ends_at, created_by_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workspaceId, row.student_id, row.id, groupId, range.start, range.end, owner.id));
+        occupied.push({ studentId, start: range.start, end: range.end });
+      }
     }
   }
   if (statements.length) await db.batch(statements);

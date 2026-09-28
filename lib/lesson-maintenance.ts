@@ -4,21 +4,28 @@ export async function settlePastLessons(db: D1Database, workspaceId: string, now
       SELECT 'completed-' || l.id, l.workspace_id, l.student_id, l.id, 'lesson-completed:' || l.id, 'completed', l.starts_at, l.ends_at, l.ends_at
       FROM lessons l
       WHERE l.workspace_id = ? AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= ?
-        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = l.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
+          WHERE r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at
+            AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id)))`)
       .bind(workspaceId, now),
     db.prepare(`INSERT OR IGNORE INTO balance_entries (id, workspace_id, student_id, lesson_id, kind, lesson_units, note, occurred_at, recorded_by_id)
       SELECT lower(hex(randomblob(16))), l.workspace_id, l.student_id, l.id, 'lesson_charge', -1, 'Урок проведён', l.ends_at, l.created_by_id
       FROM lessons l
       WHERE l.workspace_id = ? AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= ?
-        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = l.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
+          WHERE r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at
+            AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id)))`)
       .bind(workspaceId, now),
     db.prepare(`UPDATE lessons SET status = 'completed', charge_status = 'charged', completed_at = ends_at, updated_at = ?
       WHERE workspace_id = ? AND status = 'scheduled' AND charge_status = 'pending' AND ends_at <= ?
-        AND NOT EXISTS (SELECT 1 FROM lesson_requests r WHERE r.lesson_id = lessons.id AND r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at)`)
+        AND NOT EXISTS (SELECT 1 FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
+          WHERE r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at
+            AND (r.lesson_id = lessons.id OR (lessons.group_id IS NOT NULL AND requested.group_id = lessons.group_id)))`)
       .bind(now, workspaceId, now),
     db.prepare(`INSERT OR IGNORE INTO notifications (id, member_id, student_id, lesson_id, type, title, body)
       SELECT 'debt-' || l.id, l.student_id, l.student_id, l.id, 'negative_balance', 'Отрицательный баланс', 'После урока баланс стал отрицательным. Пожалуйста, свяжитесь с преподавателем.'
       FROM lessons l WHERE l.workspace_id = ? AND l.charge_status = 'charged' AND l.updated_at = ?
+        AND (l.group_id IS NULL OR l.ends_at = (SELECT MAX(peer.ends_at) FROM lessons peer WHERE peer.group_id = l.group_id))
         AND (SELECT COALESCE(SUM(b.lesson_units), 0) FROM balance_entries b WHERE b.student_id = l.student_id) < 0`)
       .bind(workspaceId, now),
   ]);

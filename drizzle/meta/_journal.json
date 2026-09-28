@@ -50,6 +50,13 @@
       "when": 1790460625004,
       "tag": "0006_nostalgic_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790599423007,
+      "tag": "0007_daily_cobalt_man",
+      "breakpoints": true
     }
   ]
 }
