@@ -5,10 +5,10 @@ describe("incremental synchronization", () => {
   it("collects only known changed sections and advances to the newest cursor", () => {
     const result = collectChangedSections([
       { sections: "requests,lessons,historyEvents", id: 12 },
-      { sections: "notifications,unknown", id: 15 },
+      { sections: "notifications,availability,unknown", id: 15 },
     ], 10);
 
-    expect([...result.sections]).toEqual(["requests", "lessons", "historyEvents", "notifications"]);
+    expect([...result.sections]).toEqual(["requests", "lessons", "historyEvents", "notifications", "availability"]);
     expect(result.cursor).toBe(15);
   });
 

@@ -39,6 +39,7 @@ export const members = sqliteTable("members", {
   displayName: text("display_name").notNull(),
   email: text("email"),
   scheduleType: text("schedule_type").notNull().default("floating"),
+  canViewAvailability: integer("can_view_availability", { mode: "boolean" }).notNull().default(false),
   ...timestamps,
 }, (table) => [
   check("members_role_check", sql`${table.role} in ('owner', 'teacher', 'student')`),
@@ -46,6 +47,21 @@ export const members = sqliteTable("members", {
   check("members_schedule_type_check", sql`${table.scheduleType} in ('fixed', 'floating')`),
   index("idx_members_workspace_role").on(table.workspaceId, table.role),
   uniqueIndex("members_workspace_user_unique").on(table.workspaceId, table.userId),
+]);
+
+/** Weekly working intervals. endMinutes may exceed 1440 when an interval continues after midnight. */
+export const availabilityWindows = sqliteTable("availability_windows", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull(),
+  startMinutes: integer("start_minutes").notNull(),
+  endMinutes: integer("end_minutes").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
+}, (table) => [
+  check("availability_windows_weekday_check", sql`${table.weekday} between 1 and 7`),
+  check("availability_windows_start_check", sql`${table.startMinutes} between 0 and 1439`),
+  check("availability_windows_end_check", sql`${table.endMinutes} > ${table.startMinutes} and ${table.endMinutes} <= ${table.startMinutes} + 1440`),
+  index("idx_availability_windows_workspace_weekday").on(table.workspaceId, table.weekday),
 ]);
 
 /** Weekly templates generate concrete lessons; floating students have no template. */

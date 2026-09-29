@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { minutesToInputTime } from "@/lib/availability";
 import { syncDelayForMoscowHour } from "@/lib/incremental-sync";
 
 type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
@@ -26,7 +27,9 @@ type LessonDraft = { date: string; time: string; studentId: string; repeat: "onc
 type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
 type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
 type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
-type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; accountStatus: "invited" | "active" };
+type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; accountStatus: "invited" | "active" };
+type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
+type AvailableSlot = { startsAt: number; endsAt: number; maxUnits: 1 | 2 };
 type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
 type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean };
 type HistoryEvent = { id: string; sourceId?: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; canReverse?: boolean; occurredAt: number };
@@ -35,7 +38,7 @@ type AppNotification = {
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
-type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string }; syncCursor?: number };
+type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string }; syncCursor?: number };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -70,6 +73,8 @@ const statusStyles = {
 };
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date());
+const moscowDate = (value: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date(value));
+const moscowTime = (value: number) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" }).format(new Date(value));
 const dateAtNoon = (value: string) => new Date(`${value}T12:00:00Z`);
 const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
 const shiftDate = (value: string, days: number) => { const date = dateAtNoon(value); date.setUTCDate(date.getUTCDate() + days); return toIsoDate(date); };
@@ -89,6 +94,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [balanceEntries, setBalanceEntries] = useState<BalanceEntry[]>([]);
   const [historyEvents, setHistoryEvents] = useState<HistoryEvent[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [profile, setProfile] = useState({ name: user?.name ?? "Преподаватель", email: user?.email ?? "" });
   const [teacherName, setTeacherName] = useState(user?.name ?? "Преподаватель");
   const [selectedStudent, setSelectedStudent] = useState("101");
@@ -112,6 +119,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     if (data.balanceEntries) setBalanceEntries(data.balanceEntries);
     if (data.historyEvents) setHistoryEvents(data.historyEvents);
     if (data.notifications) { setNotifications(data.notifications); notificationIdsRef.current = new Set(data.notifications.map((notification) => notification.id)); }
+    if (data.availabilityWindows) setAvailabilityWindows(data.availabilityWindows);
+    if (data.availableSlots) setAvailableSlots(data.availableSlots);
     if (data.teacherName) setTeacherName(data.teacherName);
     if (data.profile) setProfile(data.profile);
     if (typeof data.syncCursor === "number") syncCursorRef.current = data.syncCursor;
@@ -192,8 +201,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     try { await saveAppData({ action: "stopLessonSeries", seriesId }); await reload(); toast.success("Постоянное занятие остановлено"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось остановить расписание"); return false; }
   };
-  const updateStudent = async (student: Pick<Student, "id" | "name" | "email">) => {
-    try { await saveAppData({ action: "updateStudent", studentId: student.id, name: student.name, email: student.email }); await reload(); toast.success("Данные ученика сохранены"); return true; }
+  const updateStudent = async (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => {
+    try { await saveAppData({ action: "updateStudent", studentId: student.id, name: student.name, email: student.email, canViewAvailability: student.canViewAvailability }); await reload(); toast.success("Данные ученика сохранены"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить данные ученика"); return false; }
   };
   const addStudent = async (student: StudentDraft) => {
@@ -233,6 +242,11 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     setProfile((current) => ({ ...current, name }));
     setTeacherName(name);
     toast.success("Имя сохранено");
+  };
+  const updateAvailability = async (windows: Array<{ weekday: number; start: string; end: string }>) => {
+    await saveAppData({ action: "replaceAvailability", windows });
+    await reload();
+    toast.success("Рабочие часы сохранены");
   };
 
   useEffect(() => {
@@ -278,7 +292,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const activeLessons = lessons.filter((lesson) => !lesson.past);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
   if (role === "student") return portalStudent
-    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={activeLessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
+    ? <StudentPortal student={portalStudent} teacherName={teacherName} lessons={activeLessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} availableSlots={availableSlots} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onBack={onLogout ?? (() => undefined)} />
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-slate-500">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (
@@ -293,7 +307,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "history" && <HistoryView events={historyEvents} students={students} onReversePayment={reversePayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} onOpenRequests={() => setView("requests")} />}
-        {view === "settings" && <SettingsView profile={profile} onSave={updateProfile} />}
+        {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} />}
       </section>
       <MobileNav view={view} setView={setView} />
       <Toaster position="top-right" richColors />
@@ -399,7 +413,7 @@ function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd:
 
 function Balance({ balance }: { balance: number }) { return <span className={`inline-flex min-w-12 justify-center rounded-xl px-3 py-2 font-bold ${balance < 0 ? "bg-rose-50 text-rose-700" : balance <= 1 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{balance}</span>; }
 
-function StudentView({ student, lessons, recurringSlots, balanceEntries, historyEvents, onAdd, onBack, onPay, onReversePayment, onCreateInvite, onUpdate, onStopSeries }: { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; historyEvents: HistoryEvent[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string) => Promise<boolean>; onReversePayment: (id: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean> }) {
+function StudentView({ student, lessons, recurringSlots, balanceEntries, historyEvents, onAdd, onBack, onPay, onReversePayment, onCreateInvite, onUpdate, onStopSeries }: { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; historyEvents: HistoryEvent[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string) => Promise<boolean>; onReversePayment: (id: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean> }) {
   const history = balanceEntries.filter((entry) => entry.studentId === student.id);
   const studentHistory = historyEvents.filter((event) => event.studentId === student.id);
   const studentSlots = recurringSlots.filter((slot) => slot.studentId === student.id);
@@ -413,21 +427,22 @@ function StopSeriesDialog({ slot, onStop }: { slot: RecurringSlot; onStop: (id: 
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Остановить</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Остановить постоянное занятие?</DialogTitle><DialogDescription>{slot.label}. Все будущие уроки этого времени будут отменены без списания. Уже проведённые занятия сохранятся в истории.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void stop()}>{pending ? "Останавливаю…" : "Остановить расписание"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function EditStudentDialog({ student, onUpdate }: { student: Student; onUpdate: (student: Pick<Student, "id" | "name" | "email">) => Promise<boolean> }) {
+function EditStudentDialog({ student, onUpdate }: { student: Student; onUpdate: (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => Promise<boolean> }) {
   const [open, setOpen] = useState(false);
   const [firstName, ...surnameParts] = student.name.split(/\s+/);
   const [name, setName] = useState(firstName ?? "");
   const [surname, setSurname] = useState(surnameParts.join(" "));
   const [email, setEmail] = useState(student.email ?? "");
+  const [canViewAvailability, setCanViewAvailability] = useState(student.canViewAvailability);
   const [pending, setPending] = useState(false);
-  const changeOpen = (next: boolean) => { setOpen(next); if (next) { const [first, ...rest] = student.name.split(/\s+/); setName(first ?? ""); setSurname(rest.join(" ")); setEmail(student.email ?? ""); } };
+  const changeOpen = (next: boolean) => { setOpen(next); if (next) { const [first, ...rest] = student.name.split(/\s+/); setName(first ?? ""); setSurname(rest.join(" ")); setEmail(student.email ?? ""); setCanViewAvailability(student.canViewAvailability); } };
   const submit = async () => {
     setPending(true);
-    const saved = await onUpdate({ id: student.id, name: [name.trim(), surname.trim()].filter(Boolean).join(" "), email: email.trim() || undefined });
+    const saved = await onUpdate({ id: student.id, name: [name.trim(), surname.trim()].filter(Boolean).join(" "), email: email.trim() || undefined, canViewAvailability });
     setPending(false);
     if (saved) setOpen(false);
   };
-  return <Dialog open={open} onOpenChange={changeOpen}><DialogTrigger asChild><Button variant="outline" className="h-11 rounded-xl"><Pencil />Изменить данные</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>Данные ученика</DialogTitle><DialogDescription>Имя обязательно. Email нужен только для личного кабинета ученика.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Имя *"><Input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} /></Field><Field label="Фамилия"><Input value={surname} onChange={(event) => setSurname(event.target.value)} maxLength={80} /></Field></div><Field label="Email"><Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Необязательно" readOnly={student.accountStatus === "active"} /></Field>{student.accountStatus === "active" && <p className="text-sm text-slate-500">Email уже связан со входом ученика и здесь не изменяется.</p>}<DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button className="bg-indigo-600" disabled={pending || !name.trim()} onClick={() => void submit()}>{pending ? "Сохраняю…" : "Сохранить"}</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={changeOpen}><DialogTrigger asChild><Button variant="outline" className="h-11 rounded-xl"><Pencil />Изменить данные</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>Данные ученика</DialogTitle><DialogDescription>Имя обязательно. Email нужен только для личного кабинета ученика.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Имя *"><Input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} /></Field><Field label="Фамилия"><Input value={surname} onChange={(event) => setSurname(event.target.value)} maxLength={80} /></Field></div><Field label="Email"><Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Необязательно" readOnly={student.accountStatus === "active"} /></Field>{student.accountStatus === "active" && <p className="text-sm text-slate-500">Email уже связан со входом ученика и здесь не изменяется.</p>}<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4"><Checkbox checked={canViewAvailability} onCheckedChange={(checked) => setCanViewAvailability(checked === true)} /><span><strong className="block">Показывать свободные слоты</strong><span className="mt-1 block text-sm text-slate-500">Ученик сможет видеть рабочие свободные часы и отправлять запрос на выбранное время.</span></span></label><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button className="bg-indigo-600" disabled={pending || !name.trim()} onClick={() => void submit()}>{pending ? "Сохраняю…" : "Сохранить"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function InviteStudentDialog({ student, onCreateInvite }: { student: Student; onCreateInvite: (id: string) => Promise<string> }) {
@@ -464,16 +479,26 @@ function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onR
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function SettingsView({ profile, onSave }: { profile: { name: string; email: string }; onSave: (name: string) => Promise<void> }) {
+function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability }: { profile: { name: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void> }) {
   const [name, setName] = useState(profile.name);
   const [pending, setPending] = useState(false);
+  const [availabilityPending, setAvailabilityPending] = useState(false);
+  const [windows, setWindows] = useState<Array<{ id: string; weekday: number; start: string; end: string }>>(() => availabilityWindows.map((window) => ({ id: window.id, weekday: window.weekday, start: minutesToInputTime(window.startMinutes), end: minutesToInputTime(window.endMinutes) })));
+  const weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
   const save = async () => {
     setPending(true);
     try { await onSave(name.trim()); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить настройки"); }
     finally { setPending(false); }
   };
-  return <Shell title="Настройки" eyebrow="Профиль преподавателя"><section className="card max-w-2xl p-6 md:p-8"><h2 className="text-xl font-bold">Основные данные</h2><p className="mt-1 text-sm text-slate-500">Это имя видно в меню и в кабинете ваших учеников.</p><div className="mt-6 space-y-5"><Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field><Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field><p className="text-sm text-slate-500">Email управляется в Supabase и здесь не изменяется.</p><Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button></div></section></Shell>;
+  const saveAvailability = async () => {
+    setAvailabilityPending(true);
+    try { await onSaveAvailability(windows.map(({ weekday, start, end }) => ({ weekday, start, end }))); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить рабочие часы"); }
+    finally { setAvailabilityPending(false); }
+  };
+  const changeWindow = (id: string, patch: Partial<{ weekday: number; start: string; end: string }>) => setWindows((current) => current.map((window) => window.id === id ? { ...window, ...patch } : window));
+  return <Shell title="Настройки" eyebrow="Профиль преподавателя"><div className="space-y-6"><section className="card max-w-2xl p-6 md:p-8"><h2 className="text-xl font-bold">Основные данные</h2><p className="mt-1 text-sm text-slate-500">Это имя видно в меню и в кабинете ваших учеников.</p><div className="mt-6 space-y-5"><Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field><Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field><p className="text-sm text-slate-500">Email управляется в Supabase и здесь не изменяется.</p><Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button></div></section><section className="card max-w-3xl p-6 md:p-8"><h2 className="text-xl font-bold">Рабочие часы</h2><p className="mt-1 text-sm text-slate-500">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.</p><div className="mt-6 space-y-3">{windows.map((window) => <div key={window.id} className="grid gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_130px_130px_auto] sm:items-end"><Field label="День"><Select value={String(window.weekday)} onValueChange={(value) => changeWindow(window.id, { weekday: Number(value) })}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{weekdays.map((day, index) => <SelectItem key={day} value={String(index + 1)}>{day}</SelectItem>)}</SelectContent></Select></Field><Field label="Начало"><Input type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></Field><Field label="Конец"><Input type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></Field><Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /></Button>{window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-4">Интервал заканчивается на следующий день.</p>}</div>)}{!windows.length && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Рабочие часы пока не заданы. Ученики не увидят свободных слотов.</p>}</div><div className="mt-5 flex flex-wrap gap-3"><Button type="button" variant="outline" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday: 1, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button><Button type="button" className="bg-indigo-600" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button></div></section></div></Shell>;
 }
 
 function RequestsView({ requests, onResolved }: { requests: LessonRequest[]; onResolved: () => Promise<void> }) {
@@ -503,7 +528,7 @@ function NotificationsView({ notifications, onRead, onOpenRequests }: { notifica
   })}{!notifications.length && <div className="card"><Empty text="Новых уведомлений нет" /></div>}</div></Shell>;
 }
 
-function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, onReadNotifications, onRequest, onBack }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; historyEvents: HistoryEvent[]; requests: LessonRequest[]; notifications: AppNotification[]; onReadNotifications: () => Promise<void>; onRequest: (body: StudentRequestDraft) => Promise<boolean>; onBack: () => void }) {
+function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onBack }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; historyEvents: HistoryEvent[]; requests: LessonRequest[]; notifications: AppNotification[]; availableSlots: AvailableSlot[]; onReadNotifications: () => Promise<void>; onRequest: (body: StudentRequestDraft) => Promise<boolean>; onBack: () => void }) {
   const futureLessons = lessons.filter((lesson) => lesson.date >= today()).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   const nextLesson = futureLessons[0];
   const paymentEntries = entries.filter((entry) => entry.kind === "payment" || entry.kind === "refund");
@@ -514,19 +539,22 @@ function StudentPortal({ student, teacherName, lessons, entries, historyEvents, 
     {nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">{teacherName}</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}
     {futureLessons.length > 1 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Дальнейшие занятия</h2><div className="card divide-y">{futureLessons.slice(1).map((lesson) => <article key={lesson.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><strong className="capitalize">{dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" })}</strong><p className="mt-1 text-sm text-slate-500">{lesson.time}–{lesson.end}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[lesson.status]}`}>{lesson.label}</span></div><div className="mt-3 grid grid-cols-2 gap-2"><StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} /></div></article>)}</div></section>}
     <section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>
-    {student.floating && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} onRequest={onRequest} fullWidth /></div>}
+    {(student.floating || student.canViewAvailability) && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div>}
     {requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}
     <section className="mt-5"><h2 className="mb-3 text-lg font-bold">История</h2><HistoryTimeline events={historyEvents} showStudent={false} /></section>
     <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Оплаты</h2><BalanceHistory entries={paymentEntries} /></section>
   </div><Toaster position="top-center" richColors /></main>;
 }
 
-function StudentRequestDialog({ type, lesson, student, onRequest, fullWidth = false }: { type: "cancel" | "reschedule" | "new_lesson"; lesson?: Lesson; student: Student; onRequest: (body: StudentRequestDraft) => Promise<boolean>; fullWidth?: boolean }) {
-  const [open, setOpen] = useState(false); const [date, setDate] = useState(lesson?.date ?? shiftDate(today(), 1)); const [time, setTime] = useState(lesson?.time ?? "17:00"); const [lessonCount, setLessonCount] = useState<1 | 2>(1); const [message, setMessage] = useState(""); const [pending, setPending] = useState(false);
+function StudentRequestDialog({ type, lesson, student, availableSlots, onRequest, fullWidth = false }: { type: "cancel" | "reschedule" | "new_lesson"; lesson?: Lesson; student: Student; availableSlots?: AvailableSlot[]; onRequest: (body: StudentRequestDraft) => Promise<boolean>; fullWidth?: boolean }) {
+  const [open, setOpen] = useState(false); const [date, setDate] = useState(lesson?.date ?? shiftDate(today(), 1)); const [time, setTime] = useState(lesson?.time ?? "17:00"); const [lessonCount, setLessonCount] = useState<1 | 2>(1); const [selectedSlot, setSelectedSlot] = useState<number | null>(null); const [message, setMessage] = useState(""); const [pending, setPending] = useState(false);
   const cancellationExpired = type === "cancel" && Boolean(lesson && lesson.date <= today());
   const label = cancellationExpired ? "Срок отмены истёк" : type === "cancel" ? "Запросить отмену" : type === "reschedule" ? "Запросить перенос" : "Предложить время урока";
+  const slotOnly = type === "new_lesson" && Boolean(availableSlots) && !student.floating;
+  const visibleSlots = availableSlots?.filter((slot) => slot.maxUnits >= lessonCount) ?? [];
+  const chooseSlot = (slot: AvailableSlot) => { setSelectedSlot(slot.startsAt); setDate(moscowDate(slot.startsAt)); setTime(moscowTime(slot.startsAt)); };
   const submit = async () => { setPending(true); const saved = await onRequest({ requestType: type, lessonId: lesson?.id, proposedDate: type === "cancel" ? undefined : date, proposedTime: type === "cancel" ? undefined : time, lessonCount: type === "new_lesson" ? lessonCount : undefined, message, studentId: student.id }); setPending(false); if (saved) setOpen(false); };
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="lg" disabled={cancellationExpired} variant={type === "cancel" ? "outline" : "default"} className={`${fullWidth ? "w-full" : ""} h-12 rounded-xl ${type === "cancel" ? "" : "bg-indigo-600"}`}>{label}</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>{type === "cancel" ? "Преподаватель получит запрос. Своевременный запрос не будет списан, даже если останется без ответа." : "Предложите удобные дату и время. Урок появится в расписании после подтверждения преподавателем."}</DialogDescription></DialogHeader>{type !== "cancel" && <div className="grid gap-4 sm:grid-cols-2"><Field label="Дата"><Input type="date" value={date} min={today()} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Время"><Input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></Field></div>}{type === "new_lesson" && <><Field label="Продолжительность"><Select value={String(lessonCount)} onValueChange={(value) => setLessonCount(value === "2" ? 2 : 1)}><SelectTrigger aria-label="Продолжительность урока" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Обычный урок · 1 час</SelectItem><SelectItem value="2">Двойной урок · 2 часа</SelectItem></SelectContent></Select></Field>{lessonCount === 2 && <p className="rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">После подтверждения появится один двойной урок на два часа, а после проведения спишутся два занятия.</p>}</>}<Field label="Комментарий"><Input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Необязательно" /></Field><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button className="bg-indigo-600" disabled={pending || (type !== "cancel" && (!date || !time))} onClick={() => void submit()}>{pending ? "Отправляю…" : "Отправить запрос"}</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (next) setSelectedSlot(null); }}><DialogTrigger asChild><Button size="lg" disabled={cancellationExpired} variant={type === "cancel" ? "outline" : "default"} className={`${fullWidth ? "w-full" : ""} h-12 rounded-xl ${type === "cancel" ? "" : "bg-indigo-600"}`}>{availableSlots ? "Выбрать свободное время" : label}</Button></DialogTrigger><DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>{type === "cancel" ? "Преподаватель получит запрос. Своевременный запрос не будет списан, даже если останется без ответа." : availableSlots ? "Выберите свободное время. Оно появится в расписании только после подтверждения преподавателем." : "Предложите удобные дату и время. Урок появится в расписании после подтверждения преподавателем."}</DialogDescription></DialogHeader>{type === "new_lesson" && <><Field label="Продолжительность"><Select value={String(lessonCount)} onValueChange={(value) => { setLessonCount(value === "2" ? 2 : 1); setSelectedSlot(null); }}><SelectTrigger aria-label="Продолжительность урока" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Обычный урок · 1 час</SelectItem><SelectItem value="2">Двойной урок · 2 часа</SelectItem></SelectContent></Select></Field>{lessonCount === 2 && <p className="rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">После подтверждения появится один двойной урок на два часа, а после проведения спишутся два занятия.</p>}{availableSlots && <Field label="Свободные слоты"><div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">{visibleSlots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => chooseSlot(slot)} className={`rounded-xl border p-3 text-left text-sm transition ${selectedSlot === slot.startsAt ? "border-indigo-600 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-600" : "border-slate-200 hover:border-indigo-300"}`}><strong className="block capitalize">{dateTitle(moscowDate(slot.startsAt), { weekday: "short", day: "numeric", month: "short" })}</strong><span>{moscowTime(slot.startsAt)}–{moscowTime(slot.startsAt + lessonCount * 60 * 60_000)}</span></button>)}{!visibleSlots.length && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 sm:col-span-2">Подходящих свободных слотов пока нет.</p>}</div></Field>}</>}{type !== "cancel" && !slotOnly && <div className="grid gap-4 sm:grid-cols-2"><Field label={availableSlots ? "Или другая дата" : "Дата"}><Input type="date" value={date} min={today()} onChange={(event) => { setDate(event.target.value); setSelectedSlot(null); }} /></Field><Field label="Время"><Input type="time" value={time} onChange={(event) => { setTime(event.target.value); setSelectedSlot(null); }} /></Field></div>}<Field label="Комментарий"><Input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Необязательно" /></Field><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button className="bg-indigo-600" disabled={pending || (type !== "cancel" && (!date || !time)) || (slotOnly && selectedSlot === null)} onClick={() => void submit()}>{pending ? "Отправляю…" : "Отправить запрос"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function AddLessonDialog({ students, defaultDate, onAdd, compact = false }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => Promise<boolean>; compact?: boolean }) {

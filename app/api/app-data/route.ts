@@ -1,4 +1,5 @@
 import { getD1 } from "@/db/d1";
+import { buildAvailableSlots, normalizeAvailabilityWindow } from "@/lib/availability";
 import { assertSameOrigin, getAuthConfig, getAuthMember, randomToken, sha256 } from "@/lib/auth";
 import { isLocalDemoRequest } from "@/lib/demo-mode";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
@@ -22,13 +23,14 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("deleteLesson"), lessonId: id }).strict(),
   z.object({ action: z.literal("stopLessonSeries"), seriesId: id }).strict(),
   z.object({ action: z.literal("createStudent"), name: z.string().trim().min(1).max(80), email, floating: z.boolean(), weekday: z.number().int().min(1).max(7).optional(), time: time.optional(), durationMinutes: duration }).strict(),
-  z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email }).strict(),
+  z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email, canViewAvailability: z.boolean() }).strict(),
   z.object({ action: z.literal("createStudentInvite"), studentId: id }).strict(),
   z.object({ action: z.literal("addPayment"), studentId: id, count: z.number().int().min(1).max(100), paymentDate: date.optional() }).strict(),
   z.object({ action: z.literal("reversePayment"), paymentId: id }).strict(),
   z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
   z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), lessonCount, message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
   z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80) }).strict(),
+  z.object({ action: z.literal("replaceAvailability"), windows: z.array(z.object({ weekday: z.number().int().min(1).max(7), start: time, end: time }).strict()).max(50) }).strict(),
   z.object({ action: z.literal("markNotificationsRead") }).strict(),
 ]);
 type ActionBody = z.infer<typeof actionBodySchema>;
@@ -67,11 +69,13 @@ export async function GET(request: Request) {
     }
     const ownStudentId = auth.role === "student" ? auth.memberId : null;
     const needs = (...values: IncrementalDataSection[]) => values.some((value) => sections.has(value));
+    const availabilityAccess = auth.role !== "student" || !needs("availability") ? auth.role !== "student" : Boolean(await db.prepare("SELECT can_view_availability FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status = 'active'").bind(auth.memberId, auth.workspaceId).first<{ can_view_availability: number }>()?.then((row) => row?.can_view_availability));
+    const availabilityHorizon = Date.now() + 16 * 24 * 60 * 60_000;
     const loadRows = (enabled: boolean, load: () => Promise<unknown>) => enabled
       ? load().then((result) => result as { results: Array<Record<string, unknown>> })
       : Promise.resolve({ results: [] as Array<Record<string, unknown>> });
-    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows] = await Promise.all([
-      loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type,
+    const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows, availabilityRows, availabilityBusyRows] = await Promise.all([
+      loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type, m.can_view_availability,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
         FROM members m
@@ -143,6 +147,8 @@ export async function GET(request: Request) {
         LEFT JOIN members actor ON actor.id = b.recorded_by_id
         WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?)
         ORDER BY b.occurred_at DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
+      loadRows(needs("availability") && availabilityAccess, () => db.prepare("SELECT id, weekday, start_minutes, end_minutes FROM availability_windows WHERE workspace_id = ? ORDER BY weekday, start_minutes").bind(auth.workspaceId).all()),
+      loadRows(needs("availability") && auth.role === "student" && availabilityAccess, () => db.prepare("SELECT starts_at, ends_at FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND ends_at > ? AND starts_at < ? ORDER BY starts_at").bind(auth.workspaceId, Date.now(), availabilityHorizon).all()),
     ]);
 
     const seriesByStudent = new Map<string, Array<{ weekday: number; start: number }>>();
@@ -163,7 +169,7 @@ export async function GET(request: Request) {
       return {
         id: String(row.id), name: String(row.display_name), email: row.email ? String(row.email) : undefined, initials: initials(String(row.display_name)),
         schedule, next: row.next_lesson ? `${dateLabel.format(new Date(Number(row.next_lesson)))}, ${timeLabel.format(new Date(Number(row.next_lesson)))}` : "Не назначен",
-        balance: Number(row.balance), floating, accountStatus: row.status === "active" ? "active" : "invited",
+        balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), accountStatus: row.status === "active" ? "active" : "invited",
       };
     });
     const remainingByStudent = new Map<string, number>();
@@ -224,6 +230,10 @@ export async function GET(request: Request) {
       return { id: `balance:${row.id}`, sourceId: String(row.id), studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: `${title}${reversed ? " · отменена" : ""}`, detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, canReverse: kind === "payment" && !reversed, occurredAt: Number(row.occurred_at) };
     });
     const historyEvents = [...lessonHistory, ...requestHistory, ...balanceHistory].sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 500);
+    const availabilityWindows = (availabilityRows.results as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), weekday: Number(row.weekday), startMinutes: Number(row.start_minutes), endMinutes: Number(row.end_minutes) }));
+    const availableSlots = auth.role === "student" && availabilityAccess
+      ? buildAvailableSlots(availabilityWindows, (availabilityBusyRows.results as Array<Record<string, unknown>>).map((row) => ({ start: Number(row.starts_at), end: Number(row.ends_at) })), Date.now())
+      : [];
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at),
       studentName: row.student_name ? String(row.student_name) : undefined,
@@ -243,6 +253,10 @@ export async function GET(request: Request) {
     if (needs("balanceEntries")) payload.balanceEntries = balanceEntries;
     if (needs("historyEvents")) payload.historyEvents = historyEvents;
     if (needs("notifications")) payload.notifications = notifications;
+    if (needs("availability")) {
+      if (auth.role === "student") payload.availableSlots = availableSlots;
+      else payload.availabilityWindows = availabilityWindows;
+    }
     if (needs("profile")) {
       payload.currentStudentId = ownStudentId;
       payload.teacherName = teacherRow?.display_name ?? "Преподаватель";
@@ -281,6 +295,12 @@ export async function POST(request: Request) {
         db.prepare("UPDATE users SET full_name = ?, updated_at = ? WHERE id = (SELECT user_id FROM members WHERE id = ?)").bind(name, Date.now(), auth.memberId),
       ];
       if (auth.role === "owner") statements.push(db.prepare("UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?").bind(`Кабинет: ${name}`, Date.now(), auth.workspaceId));
+      await db.batch(statements);
+    } else if (body.action === "replaceAvailability") {
+      const windows = body.windows.map((window) => normalizeAvailabilityWindow(window.weekday, window.start, window.end));
+      if (windows.some((window) => !window)) return invalid();
+      const statements = [db.prepare("DELETE FROM availability_windows WHERE workspace_id = ?").bind(auth.workspaceId)];
+      for (const window of windows) statements.push(db.prepare("INSERT INTO availability_windows (id, workspace_id, weekday, start_minutes, end_minutes) VALUES (?, ?, ?, ?, ?)").bind(crypto.randomUUID(), auth.workspaceId, window!.weekday, window!.startMinutes, window!.endMinutes));
       await db.batch(statements);
     } else if (body.action === "createLesson") {
       const count = body.lessonCount ?? 1;
@@ -408,8 +428,8 @@ export async function POST(request: Request) {
       const student = await db.prepare("SELECT id, status, email FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; status: string; email: string | null }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
       if (student.status === "active" && (student.email ?? "").toLowerCase() !== (email ?? "").toLowerCase()) return Response.json({ error: "Email подключённого аккаунта меняется через поддержку" }, { status: 409 });
-      await db.prepare("UPDATE members SET display_name = ?, email = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
-        .bind(name, email, Date.now(), student.id, auth.workspaceId).run();
+      await db.prepare("UPDATE members SET display_name = ?, email = ?, can_view_availability = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
+        .bind(name, email, body.canViewAvailability ? 1 : 0, Date.now(), student.id, auth.workspaceId).run();
     } else if (body.action === "createStudentInvite") {
       if (!body.studentId) return invalid();
       const student = await db.prepare("SELECT id, email, status FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string }>();
@@ -504,7 +524,7 @@ export async function POST(request: Request) {
       if (!(["cancel", "reschedule", "new_lesson"] as const).includes(body.requestType)) return invalid();
       const studentId = auth.role === "student" ? auth.memberId : (!getAuthConfig() ? body.studentId : null);
       if (!studentId) return Response.json({ error: "Запрос может создать только ученик" }, { status: 403 });
-      const student = await db.prepare("SELECT id, schedule_type FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(studentId, auth.workspaceId).first<{ id: string; schedule_type: string }>();
+      const student = await db.prepare("SELECT id, schedule_type, can_view_availability FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(studentId, auth.workspaceId).first<{ id: string; schedule_type: string; can_view_availability: number }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
       let lesson: { id: string; starts_at: number; ends_at: number } | null = null;
       if (body.requestType !== "new_lesson") {
@@ -512,10 +532,19 @@ export async function POST(request: Request) {
         const lessonGroup = await getScheduledLessonGroup(db, auth.workspaceId, body.lessonId);
         if (!lessonGroup.length || lessonGroup[0].student_id !== studentId || lessonGroup[0].starts_at <= Date.now()) return Response.json({ error: "Можно изменить только будущий урок" }, { status: 409 });
         lesson = { id: lessonGroup[0].id, starts_at: lessonGroup[0].starts_at, ends_at: lessonGroup.at(-1)?.ends_at ?? lessonGroup[0].ends_at };
-      } else if (student.schedule_type !== "floating") return Response.json({ error: "Предлагать новый урок можно только при плавающем расписании" }, { status: 409 });
+      } else if (student.schedule_type !== "floating" && !student.can_view_availability) return Response.json({ error: "Для выбора нового времени нужен доступ преподавателя" }, { status: 409 });
       const proposal = body.requestType === "cancel" ? null : lessonRange(body.proposedDate ?? "", body.proposedTime ?? "", lesson ? Math.round((lesson.ends_at - lesson.starts_at) / 60_000) : body.lessonCount === 2 ? 120 : 60);
       if (body.requestType !== "cancel" && (!proposal || proposal.start <= Date.now())) return invalid();
       if (body.requestType === "new_lesson" && body.lessonCount === 2 && proposal && toMoscowDate(new Date(proposal.end - 1)) !== body.proposedDate) return Response.json({ error: "Двойной урок должен завершиться в тот же день" }, { status: 400 });
+      if (body.requestType === "new_lesson" && student.schedule_type !== "floating" && proposal) {
+        const [windowRows, busyRows] = await Promise.all([
+          db.prepare("SELECT weekday, start_minutes, end_minutes FROM availability_windows WHERE workspace_id = ?").bind(auth.workspaceId).all<Record<string, unknown>>(),
+          db.prepare("SELECT starts_at, ends_at FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND ends_at > ? AND starts_at < ?").bind(auth.workspaceId, Date.now(), Date.now() + 16 * 24 * 60 * 60_000).all<Record<string, unknown>>(),
+        ]);
+        const allowedSlots = buildAvailableSlots(windowRows.results.map((row) => ({ weekday: Number(row.weekday), startMinutes: Number(row.start_minutes), endMinutes: Number(row.end_minutes) })), busyRows.results.map((row) => ({ start: Number(row.starts_at), end: Number(row.ends_at) })), Date.now());
+        const selected = allowedSlots.find((slot) => slot.startsAt === proposal.start && slot.maxUnits >= (body.lessonCount === 2 ? 2 : 1));
+        if (!selected) return Response.json({ error: "Этот свободный слот уже недоступен" }, { status: 409 });
+      }
       let deadline: number | null = null;
       if (body.requestType === "cancel" && lesson) {
         const lessonDate = toMoscowDate(new Date(lesson.starts_at));

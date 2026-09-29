@@ -1,4 +1,4 @@
-export const incrementalDataSections = ["students", "lessons", "requests", "balanceEntries", "notifications", "historyEvents", "profile"] as const;
+export const incrementalDataSections = ["students", "lessons", "requests", "balanceEntries", "notifications", "historyEvents", "profile", "availability"] as const;
 
 export type IncrementalDataSection = typeof incrementalDataSections[number];
 
