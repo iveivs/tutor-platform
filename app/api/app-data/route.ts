@@ -26,6 +26,7 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email, canViewAvailability: z.boolean() }).strict(),
   z.object({ action: z.literal("createStudentInvite"), studentId: id }).strict(),
   z.object({ action: z.literal("addPayment"), studentId: id, count: z.number().int().min(1).max(100), paymentDate: date.optional() }).strict(),
+  z.object({ action: z.literal("adjustBalance"), studentId: id, units: z.number().int().min(-100).max(100).refine((value) => value !== 0), note: z.string().trim().min(3).max(200) }).strict(),
   z.object({ action: z.literal("reversePayment"), paymentId: id }).strict(),
   z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
   z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), lessonCount, message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
@@ -453,6 +454,16 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, occurredAt, auth.memberId),
         db.prepare("INSERT INTO notifications (id, member_id, student_id, balance_entry_id, type, title, body) VALUES (?, ?, ?, ?, 'payment_recorded', 'Оплата учтена', ?)")
           .bind(crypto.randomUUID(), body.studentId, body.studentId, id, `Баланс пополнен на ${body.count} занятий.`),
+      ]);
+    } else if (body.action === "adjustBalance") {
+      const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first();
+      if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+      const occurredAt = Date.now();
+      await db.batch([
+        db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
+          VALUES (?, ?, ?, 'adjustment', ?, ?, ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.units, body.note.trim(), occurredAt, auth.memberId),
+        db.prepare("INSERT INTO notifications (id, member_id, student_id, balance_entry_id, type, title, body) VALUES (?, ?, ?, ?, 'balance_adjusted', 'Баланс скорректирован', ?)")
+          .bind(crypto.randomUUID(), body.studentId, body.studentId, id, `Изменение баланса: ${body.units > 0 ? "+" : ""}${body.units} занятий. ${body.note.trim()}`),
       ]);
     } else if (body.action === "reversePayment") {
       const payment = await db.prepare(`SELECT b.id, b.student_id, b.lesson_units
