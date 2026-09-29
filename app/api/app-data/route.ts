@@ -479,11 +479,26 @@ export async function POST(request: Request) {
         WHERE r.id = ? AND r.workspace_id = ? AND r.status = 'pending'`).bind(body.requestId, auth.workspaceId).first<Record<string, unknown>>();
       if (!row) return Response.json({ error: "Запрос уже обработан" }, { status: 409 });
       const lessonGroup = row.lesson_id ? await getScheduledLessonGroup(db, auth.workspaceId, String(row.lesson_id)) : [];
+      if (body.decision === "approved" && row.lesson_id && !lessonGroup.length) {
+        const resolvedAt = Date.now();
+        await db.batch([
+          db.prepare("UPDATE lesson_requests SET status = 'expired', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'").bind(auth.memberId, resolvedAt, resolvedAt, body.requestId),
+          db.prepare("INSERT INTO notifications (id, member_id, student_id, request_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'request_resolved', 'Запрос больше не актуален', 'Исходный урок уже был изменён или отменён.')").bind(crypto.randomUUID(), row.student_id, row.student_id, body.requestId, row.lesson_id),
+        ]);
+        return Response.json({ ok: true, id, expired: true });
+      }
       if (body.decision === "approved" && row.proposed_starts_at && Number(row.proposed_starts_at) <= Date.now()) return Response.json({ error: "Предложенное время уже прошло" }, { status: 409 });
-      if (body.decision === "approved" && row.lesson_id && !lessonGroup.length) return Response.json({ error: "Урок уже изменён" }, { status: 409 });
       if (body.decision === "approved" && row.proposed_starts_at && row.proposed_ends_at && await hasConflict(db, auth.workspaceId, Number(row.proposed_starts_at), Number(row.proposed_ends_at), lessonGroup.map((lesson) => lesson.id))) return conflict();
       const resolvedAt = Date.now();
       const statements = [db.prepare("UPDATE lesson_requests SET status = ?, resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ?").bind(body.decision, auth.memberId, resolvedAt, resolvedAt, body.requestId), db.prepare("INSERT INTO notifications (id, member_id, student_id, request_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'request_resolved', ?, ?)").bind(crypto.randomUUID(), row.student_id, row.student_id, body.requestId, row.lesson_id ?? null, body.decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён", body.decision === "approved" ? "Изменение появилось в расписании" : "Расписание осталось без изменений")];
+      if (body.decision === "approved" && lessonGroup.length) {
+        const lessonIds = lessonGroup.map((lesson) => lesson.id);
+        const siblingRequests = await db.prepare(`SELECT id FROM lesson_requests WHERE workspace_id = ? AND student_id = ? AND status = 'pending' AND id != ? AND lesson_id IN (${lessonIds.map(() => "?").join(", ")})`).bind(auth.workspaceId, row.student_id, body.requestId, ...lessonIds).all<{ id: string }>();
+        for (const sibling of siblingRequests.results) {
+          statements.push(db.prepare("UPDATE lesson_requests SET status = 'expired', resolved_by_id = ?, resolved_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'").bind(auth.memberId, resolvedAt, resolvedAt, sibling.id));
+          statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, request_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, ?, 'request_resolved', 'Другой запрос по уроку закрыт', 'Расписание уже изменено по другому подтверждённому запросу.')").bind(crypto.randomUUID(), row.student_id, row.student_id, sibling.id, row.lesson_id));
+        }
+      }
       if (body.decision === "approved" && row.lesson_id && row.type === "cancel") {
         const ids = lessonGroup.map((lesson) => lesson.id);
         statements.push(db.prepare(`UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id IN (${ids.map(() => "?").join(", ")})`).bind(resolvedAt, resolvedAt, ...ids));
@@ -551,8 +566,12 @@ export async function POST(request: Request) {
         deadline = new Date(`${lessonDate}T00:00:00${MOSCOW_OFFSET}`).getTime() - 1;
         if (Date.now() > deadline) return Response.json({ error: "Отмену можно запросить только до 23:59 предыдущего дня" }, { status: 409 });
       }
-      const duplicate = await db.prepare(`SELECT id FROM lesson_requests WHERE student_id = ? AND status = 'pending' AND type = ? AND COALESCE(lesson_id, '') = COALESCE(?, '') LIMIT 1`).bind(studentId, body.requestType, lesson?.id ?? null).first();
-      if (duplicate) return Response.json({ error: "Такой запрос уже ожидает решения" }, { status: 409 });
+      const duplicate = lesson
+        ? await db.prepare(`SELECT request.id FROM lesson_requests request LEFT JOIN lessons requested_lesson ON requested_lesson.id = request.lesson_id
+          WHERE request.student_id = ? AND request.status = 'pending' AND request.lesson_id IS NOT NULL
+          AND (request.lesson_id = ? OR (requested_lesson.group_id IS NOT NULL AND requested_lesson.group_id = (SELECT group_id FROM lessons WHERE id = ?))) LIMIT 1`).bind(studentId, lesson.id, lesson.id).first()
+        : await db.prepare("SELECT id FROM lesson_requests WHERE student_id = ? AND status = 'pending' AND type = 'new_lesson' AND lesson_id IS NULL LIMIT 1").bind(studentId).first();
+      if (duplicate) return Response.json({ error: lesson ? "По этому уроку уже есть запрос, ожидающий решения" : "Запрос на новый урок уже ожидает решения" }, { status: 409 });
       const owner = await db.prepare("SELECT id FROM members WHERE workspace_id = ? AND role = 'owner' AND status = 'active' LIMIT 1").bind(auth.workspaceId).first<{ id: string }>();
       if (!owner) return Response.json({ error: "Преподаватель не найден" }, { status: 409 });
       await db.batch([db.prepare(`INSERT INTO lesson_requests (id, workspace_id, student_id, lesson_id, type, proposed_starts_at, proposed_ends_at, message, cancellation_deadline_at)
