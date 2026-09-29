@@ -27,7 +27,7 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("addPayment"), studentId: id, count: z.number().int().min(1).max(100), paymentDate: date.optional() }).strict(),
   z.object({ action: z.literal("reversePayment"), paymentId: id }).strict(),
   z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
-  z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
+  z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), lessonCount, message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
   z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80) }).strict(),
   z.object({ action: z.literal("markNotificationsRead") }).strict(),
 ]);
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
             OR (? = 1 AND l.status = 'completed'))
           AND (? IS NULL OR l.student_id = ?)
         ORDER BY l.starts_at`).bind(auth.workspaceId, Date.now(), Date.now(), includePastLessons ? 1 : 0, ownStudentId, ownStudentId).all()),
-      loadRows(needs("requests"), () => db.prepare(`SELECT r.id, r.type, r.message, r.proposed_starts_at, l.starts_at,
+      loadRows(needs("requests"), () => db.prepare(`SELECT r.id, r.type, r.message, r.proposed_starts_at, r.proposed_ends_at, l.starts_at,
         m.display_name FROM lesson_requests r
         JOIN members m ON m.id = r.student_id
         LEFT JOIN lessons l ON l.id = r.lesson_id
@@ -186,9 +186,10 @@ export async function GET(request: Request) {
       const sourceDate = row.starts_at ? new Date(Number(row.starts_at)) : null;
       const proposedDate = row.proposed_starts_at ? new Date(Number(row.proposed_starts_at)) : null;
       const title = kind === "cancel" ? "Отмена · требует решения" : kind === "reschedule" ? "Перенос" : "Новое занятие";
+      const doubleLesson = kind === "new_lesson" && row.proposed_starts_at && row.proposed_ends_at && Number(row.proposed_ends_at) - Number(row.proposed_starts_at) === 120 * 60_000;
       const detail = kind === "reschedule" && sourceDate && proposedDate
         ? `${dateLabel.format(sourceDate)}, ${timeLabel.format(sourceDate)} → ${dateLabel.format(proposedDate)}, ${timeLabel.format(proposedDate)}`
-        : proposedDate ? `${dateLabel.format(proposedDate)} · ${timeLabel.format(proposedDate)}` : sourceDate ? `${dateLabel.format(sourceDate)}, ${timeLabel.format(sourceDate)}` : "Время не выбрано";
+        : proposedDate ? `${dateLabel.format(proposedDate)} · ${timeLabel.format(proposedDate)}${doubleLesson ? " · двойной урок, 2 часа" : ""}` : sourceDate ? `${dateLabel.format(sourceDate)}, ${timeLabel.format(sourceDate)}` : "Время не выбрано";
       return { id: String(row.id), type: title, kind, name: String(row.display_name), detail, note: String(row.message ?? "Без комментария") };
     });
     const balanceEntries = (balanceRows.results as Array<Record<string, unknown>>).map((row) => ({
@@ -486,8 +487,17 @@ export async function POST(request: Request) {
         }
       }
       if (body.decision === "approved" && row.type === "new_lesson" && row.student_id && row.proposed_starts_at && row.proposed_ends_at) {
-        statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?)").bind(id, auth.workspaceId, row.student_id, row.proposed_starts_at, row.proposed_ends_at, auth.memberId));
-        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId: id, actorMemberId: auth.memberId, sourceKey: `lesson-created:${id}`, eventType: "scheduled", startsAt: Number(row.proposed_starts_at), endsAt: Number(row.proposed_ends_at), occurredAt: resolvedAt }));
+        const requestedDuration = Number(row.proposed_ends_at) - Number(row.proposed_starts_at);
+        if (![60, 120].includes(requestedDuration / 60_000)) return invalid();
+        const requestedUnits = requestedDuration === 120 * 60_000 ? 2 : 1;
+        const groupId = requestedUnits === 2 ? crypto.randomUUID() : null;
+        for (let index = 0; index < requestedUnits; index += 1) {
+          const lessonId = index === 0 ? id : crypto.randomUUID();
+          const startsAt = Number(row.proposed_starts_at) + index * 60 * 60_000;
+          const endsAt = startsAt + 60 * 60_000;
+          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(lessonId, auth.workspaceId, row.student_id, groupId, startsAt, endsAt, auth.memberId));
+          statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: String(row.student_id), lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-created:${lessonId}`, eventType: "scheduled", startsAt, endsAt, occurredAt: resolvedAt, note: requestedUnits === 2 ? `Двойной урок · часть ${index + 1} из 2` : null }));
+        }
       }
       await db.batch(statements);
     } else if (body.action === "submitStudentRequest") {
@@ -503,8 +513,9 @@ export async function POST(request: Request) {
         if (!lessonGroup.length || lessonGroup[0].student_id !== studentId || lessonGroup[0].starts_at <= Date.now()) return Response.json({ error: "Можно изменить только будущий урок" }, { status: 409 });
         lesson = { id: lessonGroup[0].id, starts_at: lessonGroup[0].starts_at, ends_at: lessonGroup.at(-1)?.ends_at ?? lessonGroup[0].ends_at };
       } else if (student.schedule_type !== "floating") return Response.json({ error: "Предлагать новый урок можно только при плавающем расписании" }, { status: 409 });
-      const proposal = body.requestType === "cancel" ? null : lessonRange(body.proposedDate ?? "", body.proposedTime ?? "", lesson ? Math.round((lesson.ends_at - lesson.starts_at) / 60_000) : 60);
+      const proposal = body.requestType === "cancel" ? null : lessonRange(body.proposedDate ?? "", body.proposedTime ?? "", lesson ? Math.round((lesson.ends_at - lesson.starts_at) / 60_000) : body.lessonCount === 2 ? 120 : 60);
       if (body.requestType !== "cancel" && (!proposal || proposal.start <= Date.now())) return invalid();
+      if (body.requestType === "new_lesson" && body.lessonCount === 2 && proposal && toMoscowDate(new Date(proposal.end - 1)) !== body.proposedDate) return Response.json({ error: "Двойной урок должен завершиться в тот же день" }, { status: 400 });
       let deadline: number | null = null;
       if (body.requestType === "cancel" && lesson) {
         const lessonDate = toMoscowDate(new Date(lesson.starts_at));
