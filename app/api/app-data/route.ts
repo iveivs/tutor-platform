@@ -3,6 +3,7 @@ import { assertSameOrigin, getAuthConfig, getAuthMember, randomToken, sha256 } f
 import { isLocalDemoRequest } from "@/lib/demo-mode";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
 import { collectChangedSections, incrementalDataSections, type IncrementalDataSection } from "@/lib/incremental-sync";
+import { groupDoubleLessonCharges, groupDoubleLessonEvents } from "@/lib/double-lesson-history";
 import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
@@ -118,9 +119,10 @@ export async function GET(request: Request) {
       needs("profile") ? db.prepare(`SELECT m.display_name, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
         WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; email: string }>() : Promise.resolve(null),
       loadRows(needs("historyEvents"), () => db.prepare(`SELECT e.id, e.student_id, e.event_type, e.previous_starts_at, e.starts_at, e.ends_at, e.note, e.occurred_at,
-        student.display_name, actor.display_name AS actor_name
+        lesson.group_id AS lesson_group_id, student.display_name, actor.display_name AS actor_name
         FROM lesson_events e
         JOIN members student ON student.id = e.student_id
+        LEFT JOIN lessons lesson ON lesson.id = e.lesson_id
         LEFT JOIN members actor ON actor.id = e.actor_member_id
         WHERE e.workspace_id = ? AND (? IS NULL OR e.student_id = ?)
         ORDER BY e.occurred_at DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
@@ -134,9 +136,10 @@ export async function GET(request: Request) {
         ORDER BY COALESCE(r.resolved_at, r.created_at) DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("historyEvents"), () => db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at, b.reverses_entry_id,
         EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed,
-        student.display_name, actor.display_name AS actor_name
+        lesson.group_id AS lesson_group_id, student.display_name, actor.display_name AS actor_name
         FROM balance_entries b
         JOIN members student ON student.id = b.student_id
+        LEFT JOIN lessons lesson ON lesson.id = b.lesson_id
         LEFT JOIN members actor ON actor.id = b.recorded_by_id
         WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?)
         ORDER BY b.occurred_at DESC LIMIT 500`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
@@ -192,13 +195,15 @@ export async function GET(request: Request) {
       id: String(row.id), studentId: String(row.student_id), kind: String(row.kind), units: Number(row.lesson_units),
       note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))), reversed: Boolean(row.reversed),
     }));
-    const lessonHistory = (lessonEventRows.results as Array<Record<string, unknown>>).map((row) => {
+    const lessonHistory = groupDoubleLessonEvents(lessonEventRows.results as Array<Record<string, unknown>>).map((row) => {
       const eventType = String(row.event_type);
       const titles: Record<string, string> = { scheduled: "Урок назначен", rescheduled: "Урок перенесён", cancelled: "Урок отменён", completed: "Урок проведён", series_stopped: "Постоянное расписание остановлено" };
+      const doubleLesson = Number(row.lesson_units) === 2;
       const current = row.starts_at ? formatHistoryLesson(Number(row.starts_at), row.ends_at ? Number(row.ends_at) : null) : "";
       const previous = row.previous_starts_at ? historyMomentLabel.format(new Date(Number(row.previous_starts_at))) : "";
       const detail = eventType === "rescheduled" && previous ? `${previous} → ${current}` : [current, row.note ? String(row.note) : ""].filter(Boolean).join(" · ");
-      return { id: `lesson:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "lesson", type: eventType, title: titles[eventType] ?? "Изменение урока", detail, actor: row.actor_name ? String(row.actor_name) : eventType === "completed" ? "Автоматически" : undefined, occurredAt: Number(row.occurred_at) };
+      const title = titles[eventType] ?? "Изменение урока";
+      return { id: `lesson:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "lesson", type: eventType, title: doubleLesson ? `Двойной ${title.toLocaleLowerCase("ru-RU")}` : title, detail, actor: row.actor_name ? String(row.actor_name) : eventType === "completed" ? "Автоматически" : undefined, occurredAt: Number(row.occurred_at) };
     });
     const requestTypeNames: Record<string, string> = { cancel: "отмену", reschedule: "перенос", new_lesson: "новый урок" };
     const requestStatusNames: Record<string, string> = { pending: "ожидает решения", approved: "подтверждён", declined: "отклонён", expired: "истёк" };
@@ -209,12 +214,13 @@ export async function GET(request: Request) {
       const detail = [target ? historyMomentLabel.format(new Date(Number(target))) : "", row.message ? String(row.message) : ""].filter(Boolean).join(" · ");
       return { id: `request:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "request", type: status, title: `Запрос на ${requestTypeNames[requestType] ?? "изменение"} ${requestStatusNames[status] ?? status}`, detail, actor: status === "pending" ? String(row.display_name) : row.actor_name ? String(row.actor_name) : undefined, occurredAt: Number(row.resolved_at ?? row.created_at) };
     });
-    const balanceHistory = (historyBalanceRows.results as Array<Record<string, unknown>>).map((row) => {
+    const balanceHistory = groupDoubleLessonCharges(historyBalanceRows.results as Array<Record<string, unknown>>).map((row) => {
       const kind = String(row.kind);
       const units = Number(row.lesson_units);
       const titles: Record<string, string> = { payment: "Оплата учтена", lesson_charge: "Списание за урок", adjustment: "Корректировка баланса", refund: "Отмена оплаты" };
       const reversed = Boolean(row.reversed);
-      return { id: `balance:${row.id}`, sourceId: String(row.id), studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: `${titles[kind] ?? "Операция баланса"}${reversed ? " · отменена" : ""}`, detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, canReverse: kind === "payment" && !reversed, occurredAt: Number(row.occurred_at) };
+      const title = row.double_lesson ? "Списание за двойной урок" : titles[kind] ?? "Операция баланса";
+      return { id: `balance:${row.id}`, sourceId: String(row.id), studentId: String(row.student_id), studentName: String(row.display_name), category: "payment", type: kind, title: `${title}${reversed ? " · отменена" : ""}`, detail: [units > 0 ? `+${units} занятий` : `${units} занятий`, row.note ? String(row.note) : ""].filter(Boolean).join(" · "), actor: kind === "lesson_charge" ? "Автоматически" : row.actor_name ? String(row.actor_name) : undefined, units, canReverse: kind === "payment" && !reversed, occurredAt: Number(row.occurred_at) };
     });
     const historyEvents = [...lessonHistory, ...requestHistory, ...balanceHistory].sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 500);
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({
