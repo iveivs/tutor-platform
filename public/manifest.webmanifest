@@ -1,0 +1,23 @@
+{
+  "name": "Репетитор — расписание занятий",
+  "short_name": "Репетитор",
+  "description": "Расписание, ученики и оплаты частного преподавателя.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#172d3e",
+  "icons": [
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

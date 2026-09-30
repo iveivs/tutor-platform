@@ -71,6 +71,13 @@
       "when": 1790667381917,
       "tag": "0009_clumsy_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790774897279,
+      "tag": "0010_loud_unus",
+      "breakpoints": true
     }
   ]
 }

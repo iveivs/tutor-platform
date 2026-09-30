@@ -37,6 +37,7 @@ export const members = sqliteTable("members", {
   role: text("role").notNull(),
   status: text("status").notNull().default("active"),
   displayName: text("display_name").notNull(),
+  professionalTitle: text("professional_title").notNull().default("Репетитор"),
   email: text("email"),
   scheduleType: text("schedule_type").notNull().default("floating"),
   canViewAvailability: integer("can_view_availability", { mode: "boolean" }).notNull().default(false),

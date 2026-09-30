@@ -1,0 +1,1 @@
+ALTER TABLE `members` ADD `professional_title` text DEFAULT 'Репетитор' NOT NULL;

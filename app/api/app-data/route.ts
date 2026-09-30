@@ -30,7 +30,7 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reversePayment"), paymentId: id }).strict(),
   z.object({ action: z.literal("resolveRequest"), requestId: id, decision: z.enum(["approved", "declined"]) }).strict(),
   z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), lessonCount, message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
-  z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80) }).strict(),
+  z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80), professionalTitle: z.string().trim().max(50) }).strict(),
   z.object({ action: z.literal("replaceAvailability"), windows: z.array(z.object({ weekday: z.number().int().min(1).max(7), start: time, end: time }).strict()).max(50) }).strict(),
   z.object({ action: z.literal("markNotificationsRead") }).strict(),
 ]);
@@ -119,10 +119,10 @@ export async function GET(request: Request) {
         LEFT JOIN balance_entries balance ON balance.id = n.balance_entry_id
         LEFT JOIN members student ON student.id = COALESCE(n.student_id, request.student_id, lesson.student_id, balance.student_id)
         WHERE n.member_id = ? ORDER BY n.created_at DESC LIMIT 30`).bind(auth.memberId).all()),
-      needs("profile") ? db.prepare(`SELECT display_name FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
-        ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(auth.workspaceId).first<{ display_name: string }>() : Promise.resolve(null),
-      needs("profile") ? db.prepare(`SELECT m.display_name, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
-        WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; email: string }>() : Promise.resolve(null),
+      needs("profile") ? db.prepare(`SELECT display_name, professional_title FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
+        ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(auth.workspaceId).first<{ display_name: string; professional_title: string }>() : Promise.resolve(null),
+      needs("profile") ? db.prepare(`SELECT m.display_name, m.professional_title, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
+        WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; professional_title: string; email: string }>() : Promise.resolve(null),
       loadRows(needs("historyEvents"), () => db.prepare(`SELECT e.id, e.student_id, e.event_type, e.previous_starts_at, e.starts_at, e.ends_at, e.note, e.occurred_at,
         lesson.group_id AS lesson_group_id, student.display_name, actor.display_name AS actor_name
         FROM lesson_events e
@@ -261,7 +261,8 @@ export async function GET(request: Request) {
     if (needs("profile")) {
       payload.currentStudentId = ownStudentId;
       payload.teacherName = teacherRow?.display_name ?? "Преподаватель";
-      payload.profile = viewerRow ? { name: viewerRow.display_name, email: viewerRow.email } : undefined;
+      payload.teacherTitle = teacherRow?.professional_title ?? "Репетитор";
+      payload.profile = viewerRow ? { name: viewerRow.display_name, professionalTitle: viewerRow.professional_title, email: viewerRow.email } : undefined;
     }
     return Response.json(payload);
   } catch (error) {
@@ -290,9 +291,10 @@ export async function POST(request: Request) {
 
     if (body.action === "updateProfile") {
       const name = body.name?.trim();
+      const professionalTitle = body.professionalTitle.trim();
       if (!name || name.length < 2 || name.length > 80) return invalid();
       const statements = [
-        db.prepare("UPDATE members SET display_name = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(name, Date.now(), auth.memberId, auth.workspaceId),
+        db.prepare("UPDATE members SET display_name = ?, professional_title = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(name, professionalTitle, Date.now(), auth.memberId, auth.workspaceId),
         db.prepare("UPDATE users SET full_name = ?, updated_at = ? WHERE id = (SELECT user_id FROM members WHERE id = ?)").bind(name, Date.now(), auth.memberId),
       ];
       if (auth.role === "owner") statements.push(db.prepare("UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?").bind(`Кабинет: ${name}`, Date.now(), auth.workspaceId));

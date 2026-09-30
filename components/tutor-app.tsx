@@ -6,6 +6,7 @@ import {
   History as HistoryIcon, Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -38,7 +39,7 @@ type AppNotification = {
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
-type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; profile?: { name: string; email: string }; syncCursor?: number };
+type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: { name: string; professionalTitle: string; email: string }; syncCursor?: number };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -96,7 +97,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
-  const [profile, setProfile] = useState({ name: user?.name ?? "Преподаватель", email: user?.email ?? "" });
+  const [profile, setProfile] = useState({ name: user?.name ?? "Преподаватель", professionalTitle: "Репетитор", email: user?.email ?? "" });
   const [teacherName, setTeacherName] = useState(user?.name ?? "Преподаватель");
   const [selectedStudent, setSelectedStudent] = useState("101");
   const [loading, setLoading] = useState(true);
@@ -241,11 +242,11 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     try { await saveAppData({ action: "markNotificationsRead" }); await reload(); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось обновить уведомления"); }
   };
-  const updateProfile = async (name: string) => {
-    await saveAppData({ action: "updateProfile", name });
-    setProfile((current) => ({ ...current, name }));
+  const updateProfile = async (name: string, professionalTitle: string) => {
+    await saveAppData({ action: "updateProfile", name, professionalTitle });
+    setProfile((current) => ({ ...current, name, professionalTitle }));
     setTeacherName(name);
-    toast.success("Имя сохранено");
+    toast.success("Профиль сохранён");
   };
   const updateAvailability = async (windows: Array<{ weekday: number; start: string; end: string }>) => {
     await saveAppData({ action: "replaceAvailability", windows });
@@ -291,7 +292,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     return () => lifecycle.abort();
   }, [lessons, reload, students]);
 
-  if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><CalendarDays className="mx-auto mb-3 size-8 animate-pulse text-indigo-600" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
+  if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><BrandIcon className="mx-auto mb-3 size-12 animate-pulse" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-slate-500">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-indigo-600" onClick={() => { setLoading(true); void reload().catch(() => { setLoadError(true); setLoading(false); }); }}>Повторить</Button></div></main>;
   const activeLessons = lessons.filter((lesson) => !lesson.past);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
@@ -301,9 +302,9 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <Sidebar view={view} setView={setView} name={profile.name} onLogout={onLogout} requestCount={requests.length} notificationCount={notifications.filter((item) => !item.read).length} />
+      <Sidebar view={view} setView={setView} name={profile.name} professionalTitle={profile.professionalTitle} onLogout={onLogout} requestCount={requests.length} notificationCount={notifications.filter((item) => !item.read).length} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
-        <MobileHeader name={profile.name} notificationCount={notifications.filter((item) => !item.read).length} onNotifications={() => setView("notifications")} />
+        <MobileHeader name={profile.name} professionalTitle={profile.professionalTitle} notificationCount={notifications.filter((item) => !item.read).length} onNotifications={() => setView("notifications")} />
         {view === "today" && <TodayView lessons={activeLessons} students={students} requests={requests} onAdd={addLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "calendar" && <CalendarView lessons={lessons} students={students} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
@@ -319,7 +320,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   );
 }
 
-function Sidebar({ view, setView, name, onLogout, requestCount, notificationCount }: { view: View; setView: (view: View) => void; name: string; onLogout?: () => void; requestCount: number; notificationCount: number }) {
+function Sidebar({ view, setView, name, professionalTitle, onLogout, requestCount, notificationCount }: { view: View; setView: (view: View) => void; name: string; professionalTitle: string; onLogout?: () => void; requestCount: number; notificationCount: number }) {
   const items = [
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
@@ -330,14 +331,14 @@ function Sidebar({ view, setView, name, onLogout, requestCount, notificationCoun
     { id: "settings" as View, label: "Настройки", icon: Settings },
   ];
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-slate-200 bg-white lg:flex">
-    <div className="border-b border-slate-200 px-7 py-7"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200"><CalendarDays className="size-6" /></span><div className="min-w-0"><p className="text-xl font-bold tracking-tight">Репетитор</p><p className="mt-0.5 truncate text-sm text-slate-500">{name}</p></div></div></div>
+    <div className="border-b border-slate-200 px-7 py-7"><div className="flex items-center gap-3"><BrandIcon className="size-11 shadow-lg" /><div className="min-w-0">{professionalTitle && <p className="truncate text-sm font-medium text-slate-500">{professionalTitle}</p>}<p className="truncate text-xl font-bold tracking-tight">{name}</p></div></div></div>
     <nav className="flex-1 space-y-2 p-5" aria-label="Основная навигация">{items.map(({ id, label, icon: Icon, count }) => <button key={label} onClick={() => setView(id)} className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-base font-medium transition ${view === id || (id === "students" && view === "student") ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}><Icon className="size-5" /><span>{label}</span>{count ? <span className="ml-auto rounded-full bg-indigo-600 px-2 py-0.5 text-xs text-white">{count}</span> : null}</button>)}</nav>
     <div className="border-t border-slate-200 p-5"><ThemeToggle /><button onClick={onLogout} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 text-sm text-slate-600 hover:bg-slate-50"><LogOut className="size-5" />Выйти</button></div>
   </aside>;
 }
 
-function MobileHeader({ name, notificationCount, onNotifications }: { name: string; notificationCount: number; onNotifications: () => void }) {
-  return <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:hidden"><div className="min-w-0"><p className="font-bold">Репетитор</p><p className="truncate text-xs text-slate-500">{name}</p></div><div className="flex items-center gap-2"><ThemeToggle compact /><button onClick={onNotifications} aria-label="Уведомления" className="relative grid size-10 place-items-center rounded-xl border border-slate-200"><Bell className="size-5" />{notificationCount > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-rose-500" />}</button></div></header>;
+function MobileHeader({ name, professionalTitle, notificationCount, onNotifications }: { name: string; professionalTitle: string; notificationCount: number; onNotifications: () => void }) {
+  return <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:hidden"><div className="flex min-w-0 items-center gap-2.5"><BrandIcon className="size-9" /><div className="min-w-0">{professionalTitle && <p className="truncate text-[11px] text-slate-500">{professionalTitle}</p>}<p className="truncate font-bold">{name}</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><button onClick={onNotifications} aria-label="Уведомления" className="relative grid size-10 place-items-center rounded-xl border border-slate-200"><Bell className="size-5" />{notificationCount > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-rose-500" />}</button></div></header>;
 }
 
 function MobileNav({ view, setView }: { view: View; setView: (view: View) => void }) {
@@ -483,15 +484,16 @@ function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onR
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability }: { profile: { name: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void> }) {
+function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void> }) {
   const [name, setName] = useState(profile.name);
+  const [professionalTitle, setProfessionalTitle] = useState(profile.professionalTitle);
   const [pending, setPending] = useState(false);
   const [availabilityPending, setAvailabilityPending] = useState(false);
   const [windows, setWindows] = useState<Array<{ id: string; weekday: number; start: string; end: string }>>(() => availabilityWindows.map((window) => ({ id: window.id, weekday: window.weekday, start: minutesToInputTime(window.startMinutes), end: minutesToInputTime(window.endMinutes) })));
   const weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
   const save = async () => {
     setPending(true);
-    try { await onSave(name.trim()); }
+    try { await onSave(name.trim(), professionalTitle.trim()); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить настройки"); }
     finally { setPending(false); }
   };
@@ -502,7 +504,7 @@ function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability
     finally { setAvailabilityPending(false); }
   };
   const changeWindow = (id: string, patch: Partial<{ weekday: number; start: string; end: string }>) => setWindows((current) => current.map((window) => window.id === id ? { ...window, ...patch } : window));
-  return <Shell title="Настройки" eyebrow="Профиль преподавателя"><div className="space-y-6"><section className="card max-w-2xl p-6 md:p-8"><h2 className="text-xl font-bold">Основные данные</h2><p className="mt-1 text-sm text-slate-500">Это имя видно в меню и в кабинете ваших учеников.</p><div className="mt-6 space-y-5"><Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field><Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field><p className="text-sm text-slate-500">Email управляется в Supabase и здесь не изменяется.</p><Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button></div></section><section className="card max-w-3xl p-6 md:p-8"><h2 className="text-xl font-bold">Рабочие часы</h2><p className="mt-1 text-sm text-slate-500">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.</p><div className="mt-6 space-y-3">{windows.map((window) => <div key={window.id} className="grid gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_130px_130px_auto] sm:items-end"><Field label="День"><Select value={String(window.weekday)} onValueChange={(value) => changeWindow(window.id, { weekday: Number(value) })}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{weekdays.map((day, index) => <SelectItem key={day} value={String(index + 1)}>{day}</SelectItem>)}</SelectContent></Select></Field><Field label="Начало"><Input type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></Field><Field label="Конец"><Input type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></Field><Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /></Button>{window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-4">Интервал заканчивается на следующий день.</p>}</div>)}{!windows.length && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Рабочие часы пока не заданы. Ученики не увидят свободных слотов.</p>}</div><div className="mt-5 flex flex-wrap gap-3"><Button type="button" variant="outline" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday: 1, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button><Button type="button" className="bg-indigo-600" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button></div></section></div></Shell>;
+  return <Shell title="Настройки" eyebrow="Профиль преподавателя"><div className="space-y-6"><section className="card max-w-2xl p-6 md:p-8"><h2 className="text-xl font-bold">Основные данные</h2><p className="mt-1 text-sm text-slate-500">Это имя видно в меню и в кабинете ваших учеников.</p><div className="mt-6 space-y-5"><Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field><Field label="Название или роль"><Input value={professionalTitle} onChange={(event) => setProfessionalTitle(event.target.value)} maxLength={50} placeholder="Например: Репетитор или Тренер" className="h-11 rounded-xl" /><p className="text-xs text-slate-500">Необязательно. Оставьте пустым, если подпись над именем не нужна.</p></Field><Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field><p className="text-sm text-slate-500">Email управляется в Supabase и здесь не изменяется.</p><Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name && professionalTitle.trim() === profile.professionalTitle} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button></div></section><section className="card max-w-3xl p-6 md:p-8"><h2 className="text-xl font-bold">Рабочие часы</h2><p className="mt-1 text-sm text-slate-500">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.</p><div className="mt-6 space-y-3">{windows.map((window) => <div key={window.id} className="grid gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_130px_130px_auto] sm:items-end"><Field label="День"><Select value={String(window.weekday)} onValueChange={(value) => changeWindow(window.id, { weekday: Number(value) })}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{weekdays.map((day, index) => <SelectItem key={day} value={String(index + 1)}>{day}</SelectItem>)}</SelectContent></Select></Field><Field label="Начало"><Input type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></Field><Field label="Конец"><Input type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></Field><Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /></Button>{window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-4">Интервал заканчивается на следующий день.</p>}</div>)}{!windows.length && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Рабочие часы пока не заданы. Ученики не увидят свободных слотов.</p>}</div><div className="mt-5 flex flex-wrap gap-3"><Button type="button" variant="outline" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday: 1, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button><Button type="button" className="bg-indigo-600" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button></div></section></div></Shell>;
 }
 
 function RequestsView({ requests, onResolved }: { requests: LessonRequest[]; onResolved: () => Promise<void> }) {
