@@ -6,6 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "vars": {
+    "PUBLIC_APP_URL": "https://tutor-platform.veiv.workers.dev"
+  },
   "triggers": {
     "crons": ["*/15 * * * *"]
   },

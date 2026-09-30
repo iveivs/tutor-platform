@@ -17,7 +17,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Введите корректный email" }, { status: 400 });
 
   try {
-    await requestPasswordRecovery(config, parsed.data.email.toLowerCase(), new URL("/", request.url).toString());
+    const redirectTo = new URL("/", process.env.PUBLIC_APP_URL ?? request.url).toString();
+    await requestPasswordRecovery(config, parsed.data.email.toLowerCase(), redirectTo);
   } catch {
     return Response.json({ error: "Сервис восстановления временно недоступен" }, { status: 502 });
   }
