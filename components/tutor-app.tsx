@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy,
-  History as HistoryIcon, Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound, WalletCards,
+  History as HistoryIcon, Home, LogOut, Minus, Pencil, Plus, Search, Send, Settings, ShieldCheck, Trash2, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BrandIcon } from "@/components/brand-icon";
@@ -22,7 +22,7 @@ import { minutesToInputTime } from "@/lib/availability";
 import { syncDelayForMoscowHour } from "@/lib/incremental-sync";
 
 type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
-type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student" };
+type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request"; label: string; units: number; past?: boolean };
 type LessonDraft = { date: string; time: string; studentId: string; repeat: "once" | "weekly"; lessonCount: 1 | 2 };
 type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
@@ -318,7 +318,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "history" && <HistoryView events={historyEvents} students={students} onReversePayment={reversePayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} onOpenRequests={() => setView("requests")} />}
-        {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} />}
+        {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
       </section>
       <MobileNav view={view} setView={setView} />
       <Toaster position="top-right" richColors />
@@ -501,7 +501,7 @@ function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onR
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability, onLogout }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void>; onLogout?: () => void }) {
+function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability, onLogout, isPlatformAdmin }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void>; onLogout?: () => void; isPlatformAdmin: boolean }) {
   const [name, setName] = useState(profile.name);
   const [professionalTitle, setProfessionalTitle] = useState(profile.professionalTitle);
   const [pending, setPending] = useState(false);
@@ -548,6 +548,7 @@ function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability
         <Button type="button" className="w-full bg-indigo-600 sm:w-auto" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button>
       </div>
     </section>
+    {isPlatformAdmin && <section className="card max-w-3xl p-5 md:p-8"><h2 className="text-xl font-bold">Управление платформой</h2><p className="mt-1 text-sm text-slate-500">Список кабинетов преподавателей и управление доступом.</p><Button asChild variant="outline" className="mt-4"><a href="/admin"><ShieldCheck />Открыть админку</a></Button></section>}
     {onLogout && <section className="card max-w-3xl p-5 lg:hidden">
       <h2 className="text-xl font-bold">Сеанс</h2>
       <p className="mt-1 text-sm text-slate-500">Завершить работу в кабинете на этом устройстве.</p>

@@ -78,6 +78,20 @@
       "when": 1790774897279,
       "tag": "0010_loud_unus",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790856531646,
+      "tag": "0011_short_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790856848333,
+      "tag": "0012_sharp_warhawk",
+      "breakpoints": true
     }
   ]
 }

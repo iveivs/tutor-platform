@@ -12,9 +12,12 @@ export const workspaces = sqliteTable("workspaces", {
   name: text("name").notNull(),
   timezone: text("timezone").notNull().default("Europe/Moscow"),
   subscriptionStatus: text("subscription_status").notNull().default("trial"),
+  accessStatus: text("access_status").notNull().default("active"),
+  lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }),
   ...timestamps,
 }, (table) => [
   check("workspaces_subscription_status_check", sql`${table.subscriptionStatus} in ('trial', 'active', 'past_due', 'cancelled')`),
+  check("workspaces_access_status_check", sql`${table.accessStatus} in ('active', 'blocked')`),
 ]);
 
 /** Authentication identity. Passwords are never stored in the application database. */
@@ -23,10 +26,45 @@ export const users = sqliteTable("users", {
   authSubject: text("auth_subject").notNull(),
   email: text("email").notNull(),
   fullName: text("full_name").notNull(),
+  isPlatformAdmin: integer("is_platform_admin", { mode: "boolean" }).notNull().default(false),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_auth_subject_unique").on(table.authSubject),
   uniqueIndex("users_email_unique").on(table.email),
+]);
+
+/** Immutable platform-level actions. It deliberately stores no workspace business data. */
+export const platformAuditEvents = sqliteTable("platform_audit_events", {
+  id: text("id").primaryKey(),
+  actorUserId: text("actor_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  previousValue: text("previous_value"),
+  newValue: text("new_value"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
+}, (table) => [
+  check("platform_audit_events_action_check", sql`${table.action} in ('workspace_blocked', 'workspace_unblocked')`),
+  index("idx_platform_audit_workspace_created").on(table.workspaceId, table.createdAt),
+  index("idx_platform_audit_actor_created").on(table.actorUserId, table.createdAt),
+]);
+
+/** A confirmed teacher signup is claimed exactly once on its first successful login. */
+export const teacherRegistrations = sqliteTable("teacher_registrations", {
+  id: text("id").primaryKey(),
+  authSubject: text("auth_subject").notNull(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  professionalTitle: text("professional_title").notNull().default("Репетитор"),
+  status: text("status").notNull().default("pending"),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+  ...timestamps,
+}, (table) => [
+  check("teacher_registrations_status_check", sql`${table.status} in ('pending', 'claimed')`),
+  uniqueIndex("teacher_registrations_auth_subject_unique").on(table.authSubject),
+  uniqueIndex("teacher_registrations_email_unique").on(table.email),
+  index("idx_teacher_registrations_status_expires").on(table.status, table.expiresAt),
 ]);
 
 /** A student may exist before accepting an invitation, hence nullable userId. */
