@@ -45,6 +45,11 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
 .student-table-row:hover { background-color: #eef2ff; }
 .dark .student-table-row:nth-child(even) { background-color: #272729; }
 .dark .student-table-row:hover { background-color: #302e45; }
+.mobile-time-input { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
+@supports (-webkit-touch-callout: none) {
+  .mobile-time-input { inline-size: -webkit-fill-available; }
+  .mobile-time-input::-webkit-date-and-time-value { text-align: left; }
+}
 
 /* Dark counterparts for the remaining palette utilities in the prototype. */
 .dark [class~="bg-[#f6f8fc]"] { background-color: var(--background); }
