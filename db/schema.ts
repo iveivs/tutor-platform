@@ -128,6 +128,7 @@ export const lessons = sqliteTable("lessons", {
   studentId: text("student_id").notNull().references(() => members.id, { onDelete: "restrict" }),
   seriesId: text("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
   groupId: text("group_id"),
+  lessonType: text("lesson_type").notNull().default("regular"),
   startsAt: integer("starts_at", { mode: "timestamp_ms" }).notNull(),
   endsAt: integer("ends_at", { mode: "timestamp_ms" }).notNull(),
   status: text("status").notNull().default("scheduled"),
@@ -138,6 +139,7 @@ export const lessons = sqliteTable("lessons", {
   ...timestamps,
 }, (table) => [
   check("lessons_status_check", sql`${table.status} in ('scheduled', 'completed', 'cancelled')`),
+  check("lessons_type_check", sql`${table.lessonType} in ('regular', 'trial')`),
   check("lessons_charge_status_check", sql`${table.chargeStatus} in ('pending', 'charged', 'waived')`),
   check("lessons_time_check", sql`${table.endsAt} > ${table.startsAt}`),
   index("idx_lessons_workspace_starts_at").on(table.workspaceId, table.startsAt),

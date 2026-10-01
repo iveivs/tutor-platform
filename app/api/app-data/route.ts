@@ -18,7 +18,7 @@ const duration = z.number().int().min(15).max(240).optional();
 const lessonCount = z.union([z.literal(1), z.literal(2)]).optional();
 const email = z.union([z.literal(""), z.string().email().max(254)]).optional();
 const actionBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("createLesson"), studentId: id, date, time, durationMinutes: duration, lessonCount, repeat: z.enum(["once", "weekly"]).optional() }).strict(),
+  z.object({ action: z.literal("createLesson"), studentId: id, date, time, durationMinutes: duration, lessonCount, lessonType: z.enum(["regular", "trial"]).optional(), repeat: z.enum(["once", "weekly"]).optional() }).strict(),
   z.object({ action: z.literal("updateLesson"), lessonId: id, date, time, durationMinutes: duration }).strict(),
   z.object({ action: z.literal("deleteLesson"), lessonId: id }).strict(),
   z.object({ action: z.literal("stopLessonSeries"), seriesId: id }).strict(),
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
         ORDER BY m.display_name`).bind(Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("students", "lessons"), () => db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
-      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name,
+      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
         (SELECT r.type FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
           WHERE r.status = 'pending' AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id))
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
       needs("profile") ? db.prepare(`SELECT m.display_name, m.professional_title, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
         WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; professional_title: string; email: string }>() : Promise.resolve(null),
       loadRows(needs("historyEvents"), () => db.prepare(`SELECT e.id, e.student_id, e.event_type, e.previous_starts_at, e.starts_at, e.ends_at, e.note, e.occurred_at,
-        lesson.group_id AS lesson_group_id, student.display_name, actor.display_name AS actor_name
+        lesson.group_id AS lesson_group_id, lesson.lesson_type, student.display_name, actor.display_name AS actor_name
         FROM lesson_events e
         JOIN members student ON student.id = e.student_id
         LEFT JOIN lessons lesson ON lesson.id = e.lesson_id
@@ -180,12 +180,13 @@ export async function GET(request: Request) {
       const remaining = remainingByStudent.get(studentId) ?? Math.max(0, balance);
       const requestType = row.request_type ? String(row.request_type) : null;
       const past = row.lesson_status === "completed";
-      const covered = remaining > 0;
-      if (!past && requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
-      const status = past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
-      const label = past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
+      const trial = row.lesson_type === "trial";
+      const covered = trial || remaining > 0;
+      if (!past && !trial && requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
+      const status = trial ? "trial" : past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
+      const label = trial ? (past ? "Пробное · проведено" : "Пробное · бесплатно") : past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, past, startsAt: Number(row.starts_at), units: 1 };
+      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", past, startsAt: Number(row.starts_at), units: 1 };
     });
     const lessons = groupLessonParts(lessonParts);
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {
@@ -210,7 +211,7 @@ export async function GET(request: Request) {
       const current = row.starts_at ? formatHistoryLesson(Number(row.starts_at), row.ends_at ? Number(row.ends_at) : null) : "";
       const previous = row.previous_starts_at ? historyMomentLabel.format(new Date(Number(row.previous_starts_at))) : "";
       const detail = eventType === "rescheduled" && previous ? `${previous} → ${current}` : [current, row.note ? String(row.note) : ""].filter(Boolean).join(" · ");
-      const title = titles[eventType] ?? "Изменение урока";
+      const title = row.lesson_type === "trial" ? `Пробное занятие ${eventType === "completed" ? "проведено" : eventType === "cancelled" ? "отменено" : eventType === "rescheduled" ? "перенесено" : "назначено"}` : titles[eventType] ?? "Изменение урока";
       return { id: `lesson:${row.id}`, studentId: String(row.student_id), studentName: String(row.display_name), category: "lesson", type: eventType, title: doubleLesson ? `Двойной ${title.toLocaleLowerCase("ru-RU")}` : title, detail, actor: row.actor_name ? String(row.actor_name) : eventType === "completed" ? "Автоматически" : undefined, occurredAt: Number(row.occurred_at) };
     });
     const requestTypeNames: Record<string, string> = { cancel: "отмену", reschedule: "перенос", new_lesson: "новый урок" };
@@ -307,7 +308,9 @@ export async function POST(request: Request) {
       await db.batch(statements);
     } else if (body.action === "createLesson") {
       const count = body.lessonCount ?? 1;
-      const range = lessonRange(body.date, body.time, count === 2 ? 120 : body.durationMinutes);
+      const lessonType = body.lessonType ?? "regular";
+      if (lessonType === "trial" && (count !== 1 || body.repeat === "weekly")) return Response.json({ error: "Пробное занятие может быть только разовым и длиться один час" }, { status: 400 });
+      const range = lessonRange(body.date, body.time, lessonType === "trial" ? 60 : count === 2 ? 120 : body.durationMinutes);
       if (!body.studentId || !range || range.start <= Date.now() || ![undefined, "once", "weekly"].includes(body.repeat)) return invalid();
       if (count === 2 && toMoscowDate(new Date(range.end - 1)) !== body.date) return Response.json({ error: "Двойной урок должен завершиться в тот же день" }, { status: 400 });
       const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string }>();
@@ -329,12 +332,12 @@ export async function POST(request: Request) {
       }
       lessonRanges.forEach((lessonRange, index) => {
         const lessonId = lessonIds[index];
-        statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, group_id, starts_at, ends_at, created_by_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(lessonId, auth.workspaceId, student.id, seriesId, groupId, lessonRange.start, lessonRange.end, auth.memberId));
-        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-created:${lessonId}`, eventType: "scheduled", startsAt: lessonRange.start, endsAt: lessonRange.end, note: count === 2 ? `Двойной урок · часть ${index + 1} из 2` : body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
+        statements.push(db.prepare(`INSERT INTO lessons (id, workspace_id, student_id, series_id, group_id, lesson_type, starts_at, ends_at, created_by_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(lessonId, auth.workspaceId, student.id, seriesId, groupId, lessonType, lessonRange.start, lessonRange.end, auth.memberId));
+        statements.push(lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId: student.id, lessonId, actorMemberId: auth.memberId, sourceKey: `lesson-created:${lessonId}`, eventType: "scheduled", startsAt: lessonRange.start, endsAt: lessonRange.end, note: lessonType === "trial" ? "Пробное занятие · бесплатно" : count === 2 ? `Двойной урок · часть ${index + 1} из 2` : body.repeat === "weekly" ? "Создано постоянное расписание" : null }));
       });
-      statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_created', 'Назначен урок', ?)")
-        .bind(crypto.randomUUID(), student.id, student.id, id, `${count === 2 ? "Двойной урок" : "Урок"} назначен на ${body.date} в ${body.time}.`));
+      statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_created', ?, ?)")
+        .bind(crypto.randomUUID(), student.id, student.id, id, lessonType === "trial" ? "Назначено пробное занятие" : "Назначен урок", lessonType === "trial" ? `Пробное занятие назначено на ${body.date} в ${body.time}. Оно бесплатное.` : `${count === 2 ? "Двойной урок" : "Урок"} назначен на ${body.date} в ${body.time}.`));
       await db.batch(statements);
     } else if (body.action === "updateLesson") {
       if (!body.lessonId) return invalid();
@@ -357,7 +360,7 @@ export async function POST(request: Request) {
         movedIds.push(movedLessonId);
         if (lesson.series_id) {
           statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(now, now, lesson.id, auth.workspaceId));
-          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, lesson.group_id, movedStart, movedEnd, auth.memberId));
+          statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, lesson_type, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, lesson.student_id, lesson.group_id, lesson.lesson_type, movedStart, movedEnd, auth.memberId));
         } else {
           statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").bind(movedStart, movedEnd, now, lesson.id, auth.workspaceId));
         }
@@ -526,7 +529,7 @@ export async function POST(request: Request) {
           const movedLessonId = lesson.series_id ? crypto.randomUUID() : lesson.id;
           if (lesson.series_id) {
             statements.push(db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ?").bind(resolvedAt, resolvedAt, lesson.id));
-            statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, row.student_id, lesson.group_id, movedStart, movedEnd, auth.memberId));
+            statements.push(db.prepare("INSERT INTO lessons (id, workspace_id, student_id, group_id, lesson_type, starts_at, ends_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(movedLessonId, auth.workspaceId, row.student_id, lesson.group_id, lesson.lesson_type, movedStart, movedEnd, auth.memberId));
           } else {
             statements.push(db.prepare("UPDATE lessons SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(movedStart, movedEnd, resolvedAt, lesson.id));
           }
@@ -654,7 +657,7 @@ function lessonRange(date: string, time: string, durationMinutes = 60) {
 }
 type LessonPart = {
   id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string;
-  status: "paid" | "low" | "debt" | "request"; label: string; past: boolean; startsAt: number; units: number;
+  status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType: "regular" | "trial"; past: boolean; startsAt: number; units: number;
 };
 function groupLessonParts(parts: LessonPart[]) {
   const grouped = new Map<string, LessonPart[]>();
@@ -671,7 +674,8 @@ function groupLessonParts(parts: LessonPart[]) {
     const past = members.every((member) => member.past);
     const status = members.some((member) => member.status === "request") ? "request"
       : members.some((member) => member.status === "debt") ? "debt"
-        : members.some((member) => member.status === "low") ? "low" : "paid";
+        : members.some((member) => member.status === "low") ? "low"
+          : members.some((member) => member.status === "trial") ? "trial" : "paid";
     const label = units === 1 ? first.label : past ? "Проведён · списано 2"
       : status === "request" ? "Двойной · ожидает ответа"
         : status === "debt" ? `Двойной · ${first.label}`
@@ -681,13 +685,13 @@ function groupLessonParts(parts: LessonPart[]) {
     return { ...lesson, id: actionable.id, end: last.end, status, label, past, units };
   }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
-type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; starts_at: number; ends_at: number };
+type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; lesson_type: "regular" | "trial"; starts_at: number; ends_at: number };
 async function getScheduledLessonGroup(db: ReturnType<typeof getD1>, workspaceId: string, lessonId: string) {
-  const lesson = await db.prepare("SELECT id, student_id, series_id, group_id, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'")
+  const lesson = await db.prepare("SELECT id, student_id, series_id, group_id, lesson_type, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'")
     .bind(lessonId, workspaceId).first<ScheduledLessonRow>();
   if (!lesson) return [];
   if (!lesson.group_id) return [lesson];
-  const rows = await db.prepare("SELECT id, student_id, series_id, group_id, starts_at, ends_at FROM lessons WHERE group_id = ? AND workspace_id = ? AND status = 'scheduled' ORDER BY starts_at")
+  const rows = await db.prepare("SELECT id, student_id, series_id, group_id, lesson_type, starts_at, ends_at FROM lessons WHERE group_id = ? AND workspace_id = ? AND status = 'scheduled' ORDER BY starts_at")
     .bind(lesson.group_id, workspaceId).all<ScheduledLessonRow>();
   return rows.results;
 }
