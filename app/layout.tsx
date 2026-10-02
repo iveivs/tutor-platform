@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LanguageProvider } from "@/components/language-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className="antialiased"><ThemeProvider>{children}</ThemeProvider></body>
+      <body className="antialiased"><ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider></body>
     </html>
   );
 }

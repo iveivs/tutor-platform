@@ -8,6 +8,7 @@ import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Workspace = {
   id: string; name: string; ownerName: string; ownerEmail: string; timezone: string; subscriptionStatus: string;
@@ -69,6 +70,7 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
     finally { setPendingId(null); }
   };
   return <main className="min-h-screen bg-background px-4 py-6 text-foreground md:px-8 md:py-10">
+    <div className="fixed bottom-4 right-4 z-50"><ThemeToggle compact /></div>
     <div className="mx-auto max-w-6xl">
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><BrandIcon className="size-12" /><div><p className="flex items-center gap-2 text-sm font-semibold text-indigo-600"><ShieldCheck className="size-4" />Администрирование</p><h1 className="text-3xl font-bold">Кабинеты преподавателей</h1></div></div>{standalone ? <Button variant="outline" onClick={onLogout}><LogOut />Выйти</Button> : <Button asChild variant="outline"><Link href="/"><ArrowLeft />Вернуться в кабинет</Link></Button>}</header>
       <div className="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><div className="relative"><Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени или email" className="h-12 rounded-xl pl-11" /></div><Button variant="outline" onClick={() => { setLoading(true); void load(); }}><RefreshCw />Обновить</Button></div>

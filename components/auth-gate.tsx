@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { PasswordReset, readRecoverySession, type RecoverySession } from "@/components/password-reset";
 import { BrandIcon } from "@/components/brand-icon";
 import { AdminDashboard } from "@/components/admin-dashboard";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useLanguage } from "@/components/language-provider";
 
 type User = { name: string; email: string; role: "owner" | "teacher" | "student" | "platform_admin"; isPlatformAdmin?: boolean };
 
@@ -51,11 +53,13 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
   };
   if (!enabled) return <TutorApp />;
   if (!ready) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><BrandIcon className="size-12 animate-pulse" /></main>;
-  if (recoverySession) return <PasswordReset session={recoverySession} onBack={() => setRecoverySession(null)} />;
-  if (!user) return <LoginScreen onSuccess={setUser} />;
+  if (recoverySession) return <><PreferencesOverlay /><PasswordReset session={recoverySession} onBack={() => setRecoverySession(null)} /></>;
+  if (!user) return <><PreferencesOverlay /><LoginScreen onSuccess={setUser} /></>;
   if (user.role === "platform_admin") return <AdminDashboard standalone onLogout={logout} />;
   return <TutorApp role={user.role} user={user} onLogout={logout} />;
 }
+
+function PreferencesOverlay() { return <div className="fixed right-4 top-4 z-50"><ThemeToggle compact /></div>; }
 
 function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [email, setEmail] = useState("");
@@ -126,8 +130,9 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
 }
 
 function RegisterScreen({ onBack }: { onBack: () => void }) {
+  const { language } = useLanguage();
   const [name, setName] = useState("");
-  const [professionalTitle, setProfessionalTitle] = useState("Репетитор");
+  const [professionalTitle, setProfessionalTitle] = useState(() => language === "en" ? "Tutor" : "Репетитор");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");

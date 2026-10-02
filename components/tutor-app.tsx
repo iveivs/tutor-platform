@@ -695,7 +695,11 @@ function BalanceAdjustmentDialog({ student, onAdjust }: { student: Student; onAd
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="lg" variant="outline" className="h-11 rounded-xl"><Minus />Корректировать баланс</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">Корректировка баланса</DialogTitle><DialogDescription>{student.name}. Используйте отрицательное число для долга и положительное — для добавления занятий без оплаты.</DialogDescription></DialogHeader><div className={`rounded-2xl p-4 font-semibold ${student.balance < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"}`}>Текущий баланс: {student.balance} занятия</div><Field label="Изменение"><Input aria-label="Изменение баланса" type="number" min="-100" max="100" value={units} onChange={(event) => setUnits(Number(event.target.value))} className="h-11 rounded-xl" /></Field><Field label="Причина"><Input value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} placeholder="Например: долг до начала работы в приложении" /></Field><div className={`rounded-2xl p-4 ${student.balance + units < 0 ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>После корректировки баланс составит <strong>{student.balance + units} занятий</strong></div><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button disabled={pending || !Number.isInteger(units) || units === 0 || units < -100 || units > 100 || note.trim().length < 3} onClick={() => void submit()} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить корректировку"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="min-w-0 space-y-2"><Label>{label}</Label>{children}</div>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const required = label.endsWith(" *");
+  const visibleLabel = required ? label.slice(0, -2) : label;
+  return <div className="min-w-0 space-y-2"><Label className={required ? "font-semibold text-primary" : undefined}>{visibleLabel}{required && <span aria-hidden="true"> *</span>}</Label>{children}</div>;
+}
 function TimeField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const shift = (hours: number) => {
     const [rawHours, rawMinutes] = value.split(":").map(Number);
