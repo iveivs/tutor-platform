@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, KeyRound, LogIn, Mail, UserPlus } from "lucide-react";
+import { ArrowLeft, KeyRound, LogIn, Mail } from "lucide-react";
 import { toast } from "sonner";
 import TutorApp from "@/components/tutor-app";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { PasswordReset, readRecoverySession, type RecoverySession } from "@/comp
 import { BrandIcon } from "@/components/brand-icon";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useLanguage } from "@/components/language-provider";
 
 type User = { name: string; email: string; role: "owner" | "teacher" | "student" | "platform_admin"; isPlatformAdmin?: boolean };
 
@@ -68,7 +67,6 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [pending, setPending] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoverySent, setRecoverySent] = useState(false);
-  const [registering, setRegistering] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(""); setPending(true);
     try {
@@ -89,7 +87,6 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось отправить письмо"); }
     finally { setPending(false); }
   };
-  if (registering) return <RegisterScreen onBack={() => setRegistering(false)} />;
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground">
       <section className="card w-full max-w-md p-7 sm:p-9">
@@ -119,51 +116,10 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
               <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-indigo-600 text-base"><LogIn />{pending ? "Входим…" : "Войти"}</Button>
             </form>
             <button type="button" onClick={() => { setRecovering(true); setError(""); }} className="mt-4 w-full text-center text-sm font-medium text-indigo-600 hover:text-indigo-700">Забыли пароль?</button>
-            <div className="my-5 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />или<span className="h-px flex-1 bg-slate-200" /></div>
-            <Button type="button" variant="outline" onClick={() => setRegistering(true)} className="h-12 w-full rounded-xl"><UserPlus />Создать кабинет преподавателя</Button>
-            <p className="mt-6 text-center text-sm text-slate-500">Если вас пригласили как ученика, откройте персональную ссылку преподавателя.</p>
+            <p className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">Новые кабинеты преподавателей создаются только по персональному приглашению администратора.</p>
           </>
         )}
       </section>
     </main>
   );
-}
-
-function RegisterScreen({ onBack }: { onBack: () => void }) {
-  const { language } = useLanguage();
-  const [name, setName] = useState("");
-  const [professionalTitle, setProfessionalTitle] = useState(() => language === "en" ? "Tutor" : "Репетитор");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [website, setWebsite] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-  const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError("");
-    if (password !== passwordConfirmation) { setError("Пароли не совпадают"); return; }
-    setPending(true);
-    try {
-      const response = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, professionalTitle, email, password, website }) });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Не удалось создать кабинет");
-      setDone(true);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось создать кабинет"); }
-    finally { setPending(false); }
-  };
-  return <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground"><section className="card w-full max-w-md p-7 sm:p-9">
-    <div className="mb-7 text-center"><BrandIcon className="mx-auto size-14 shadow-lg" /><h1 className="mt-5 text-3xl font-bold tracking-tight">Новый кабинет</h1><p className="mt-2 text-slate-500">Для преподавателя, тренера или наставника</p></div>
-    {done ? <div className="space-y-5"><p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">Проверьте почту и подтвердите email. Отдельный кабинет будет создан автоматически при первом входе.</p><Button type="button" variant="outline" onClick={onBack} className="h-12 w-full rounded-xl"><ArrowLeft />Перейти ко входу</Button></div> : <form className="space-y-4" onSubmit={submit}>
-      <div className="space-y-2"><Label htmlFor="register-name">Имя</Label><Input id="register-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required className="h-12 rounded-xl" /></div>
-      <div className="space-y-2"><Label htmlFor="register-title">Название или роль</Label><Input id="register-title" value={professionalTitle} onChange={(event) => setProfessionalTitle(event.target.value)} maxLength={50} placeholder="Репетитор, тренер…" className="h-12 rounded-xl" /></div>
-      <div className="space-y-2"><Label htmlFor="register-email">Email</Label><Input id="register-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="h-12 rounded-xl" /></div>
-      <div className="space-y-2"><Label htmlFor="register-password">Пароль</Label><Input id="register-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} required className="h-12 rounded-xl" /></div>
-      <div className="space-y-2"><Label htmlFor="register-password-confirmation">Повторите пароль</Label><Input id="register-password-confirmation" type="password" autoComplete="new-password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} minLength={8} maxLength={128} required className="h-12 rounded-xl" /></div>
-      <div className="absolute -left-[9999px]" aria-hidden="true"><Label htmlFor="register-website">Сайт</Label><Input id="register-website" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></div>
-      {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-      <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-indigo-600 text-base"><UserPlus />{pending ? "Создаём…" : "Создать кабинет"}</Button>
-      <Button type="button" variant="ghost" onClick={onBack} className="h-11 w-full rounded-xl"><ArrowLeft />Вернуться ко входу</Button>
-    </form>}
-  </section></main>;
 }

@@ -13,11 +13,14 @@ export const workspaces = sqliteTable("workspaces", {
   timezone: text("timezone").notNull().default("Europe/Moscow"),
   subscriptionStatus: text("subscription_status").notNull().default("trial"),
   accessStatus: text("access_status").notNull().default("active"),
+  accessGrant: text("access_grant").notNull().default("legacy"),
+  accessExpiresAt: integer("access_expires_at", { mode: "timestamp_ms" }),
   lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }),
   ...timestamps,
 }, (table) => [
   check("workspaces_subscription_status_check", sql`${table.subscriptionStatus} in ('trial', 'active', 'past_due', 'cancelled')`),
   check("workspaces_access_status_check", sql`${table.accessStatus} in ('active', 'blocked')`),
+  check("workspaces_access_grant_check", sql`${table.accessGrant} in ('legacy', 'complimentary', 'trial', 'paid')`),
 ]);
 
 /** Authentication identity. Passwords are never stored in the application database. */
@@ -65,6 +68,28 @@ export const teacherRegistrations = sqliteTable("teacher_registrations", {
   uniqueIndex("teacher_registrations_auth_subject_unique").on(table.authSubject),
   uniqueIndex("teacher_registrations_email_unique").on(table.email),
   index("idx_teacher_registrations_status_expires").on(table.status, table.expiresAt),
+]);
+
+/** Admin-issued invitation for a new independent teacher workspace. */
+export const teacherInvitations = sqliteTable("teacher_invitations", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  professionalTitle: text("professional_title").notNull().default("Репетитор"),
+  accessGrant: text("access_grant").notNull().default("complimentary"),
+  status: text("status").notNull().default("pending"),
+  createdByUserId: text("created_by_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  acceptedAt: integer("accepted_at", { mode: "timestamp_ms" }),
+  ...timestamps,
+}, (table) => [
+  check("teacher_invitations_status_check", sql`${table.status} in ('pending', 'accepted', 'revoked')`),
+  check("teacher_invitations_access_grant_check", sql`${table.accessGrant} in ('complimentary', 'trial', 'paid')`),
+  uniqueIndex("teacher_invitations_token_hash_unique").on(table.tokenHash),
+  uniqueIndex("teacher_invitations_pending_email_unique").on(table.email).where(sql`${table.status} = 'pending'`),
+  index("idx_teacher_invitations_status_expires").on(table.status, table.expiresAt),
 ]);
 
 /** A student may exist before accepting an invitation, hence nullable userId. */

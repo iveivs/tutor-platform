@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 export type Language = "ru" | "en";
 
@@ -11,6 +11,20 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue>({ language: "ru", setLanguage: () => undefined });
 const STORAGE_KEY = "tutor-platform-language";
+const LANGUAGE_EVENT = "tutor-platform-language-change";
+
+const subscribeToLanguage = (onStoreChange: () => void) => {
+  const onStorage = (event: StorageEvent) => { if (event.key === STORAGE_KEY) onStoreChange(); };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(LANGUAGE_EVENT, onStoreChange);
+  return () => { window.removeEventListener("storage", onStorage); window.removeEventListener(LANGUAGE_EVENT, onStoreChange); };
+};
+const readLanguage = (): Language => window.localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "ru";
+const readServerLanguage = (): Language => "ru";
+const storeLanguage = (language: Language) => {
+  window.localStorage.setItem(STORAGE_KEY, language);
+  window.dispatchEvent(new Event(LANGUAGE_EVENT));
+};
 
 const translations: Record<string, string> = {
   "Включить светлую тему": "Switch to light theme", "Включить тёмную тему": "Switch to dark theme", "Светлая тема": "Light theme", "Тёмная тема": "Dark theme",
@@ -68,6 +82,9 @@ const translations: Record<string, string> = {
   "Ссылка недействительна": "This link is invalid", "Не удалось открыть приглашение": "Could not open the invitation", "Не удалось создать аккаунт": "Could not create the account", "Не удалось изменить пароль": "Could not update the password", "Не удалось загрузить кабинеты": "Could not load accounts", "Не удалось изменить доступ": "Could not change access", "Доступ к кабинету восстановлен": "Account access restored", "Доступ к кабинету приостановлен": "Account access suspended", "заблокировал": "blocked", "разблокировал": "unblocked",
   "Администрирование": "Administration", "Кабинеты преподавателей": "Tutor accounts", "Вернуться в кабинет": "Back to account", "Поиск по имени или email": "Search by name or email", "Обновить": "Refresh", "Загружаю кабинеты…": "Loading accounts…", "Кабинеты не найдены": "No accounts found", "Ваш кабинет": "Your account", "Приостановить доступ": "Suspend access", "Восстановить доступ": "Restore access", "Журнал административных действий": "Administrative activity log", "Последние 100 блокировок и разблокировок": "Last 100 blocks and unblocks", "Действий пока нет": "No activity yet", "Ещё не входили": "No sign-in yet",
   "Учеников: ": "Students: ", "Создан: ": "Created: ", "Активность: ": "Activity: ", "урок": "lesson", "урока": "lessons", "уроков": "lessons", "занятие": "lesson", "занятия": "lessons", "занятий": "lessons", "ученик": "student", "ученика": "students", "учеников": "students", "запрос": "request", "запроса": "requests", "запросов": "requests", "ожидают решения": "pending", " · двойной": " · double",
+  "Новые кабинеты преподавателей создаются только по персональному приглашению администратора.": "New tutor accounts are created by personal administrator invitation only.", "Добавить преподавателя": "Add tutor", "Пригласить преподавателя": "Invite tutor", "Создайте персональную ссылку. Преподаватель задаст пароль и получит отдельный кабинет.": "Create a personal link. The tutor will set a password and receive a separate account.", "Бессрочный бесплатный доступ": "Free lifetime access", "Ссылка действует 14 дней и показывается только сейчас.": "The link is valid for 14 days and is shown only now.", "Копировать": "Copy", "Создать ссылку": "Create link", "Доступ: бесплатно и бессрочно": "Access: free with no expiration", "Позже здесь можно будет подключить пробный период и платные тарифы.": "Trial periods and paid plans can be added here later.",
+  "Ожидают активации": "Awaiting activation", "Ссылка показывается при создании. Если она потеряна, отзовите приглашение и создайте новое.": "The link is shown when created. If it is lost, revoke the invitation and create a new one.", "Отозвать": "Revoke", "Активных приглашений нет.": "No active invitations.", "Бесплатно · бессрочно": "Free · lifetime", "Пробный период": "Trial period", "Оплачен": "Paid", "Ранее создан": "Legacy account", "Удалить": "Delete", "Удалить кабинет безвозвратно?": "Permanently delete this account?", "Будут удалены аккаунт преподавателя, ученики, уроки, оплаты и вся история. Восстановить данные будет невозможно. Для подтверждения введите email преподавателя.": "The tutor account, students, lessons, payments, and all history will be permanently deleted. This cannot be undone. Enter the tutor’s email to confirm.", "Кабинет и связанные данные удалены": "Account and related data deleted",
+  "Приглашение преподавателя": "Tutor invitation", "Кабинет готов": "Your account is ready", "После активации вы получите отдельный кабинет преподавателя с бессрочным бесплатным доступом.": "After activation, you will receive a separate tutor account with free lifetime access.", "Создаём кабинет…": "Creating account…", "Активировать кабинет": "Activate account", "Регистрация преподавателей доступна только по персональному приглашению администратора": "Tutor registration is available by personal administrator invitation only",
 };
 
 const months: Record<string, string> = { января: "January", февраля: "February", марта: "March", апреля: "April", мая: "May", июня: "June", июля: "July", августа: "August", сентября: "September", октября: "October", ноября: "November", декабря: "December" };
@@ -134,22 +151,14 @@ function localizeNode(root: Node, language: Language, originals: WeakMap<Node, s
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("ru");
-  const [preferenceLoaded, setPreferenceLoaded] = useState(false);
+  const language = useSyncExternalStore(subscribeToLanguage, readLanguage, readServerLanguage);
   const originals = useRef(new WeakMap<Node, string>());
   const attributeOriginals = useRef(new WeakMap<Element, Map<string, string>>());
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "en" || saved === "ru") setLanguageState(saved);
-    setPreferenceLoaded(true);
-  }, []);
-  useEffect(() => {
-    if (!preferenceLoaded) return;
     document.documentElement.lang = language;
     document.title = language === "en" ? "Tutor Platform — lesson scheduling" : "Репетитор — расписание занятий";
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     if (description) description.content = language === "en" ? "Scheduling, students, and payments for private tutors." : "Расписание, ученики и оплаты частного преподавателя.";
-    window.localStorage.setItem(STORAGE_KEY, language);
     const apply = (node: Node) => localizeNode(node, language, originals.current, attributeOriginals.current);
     apply(document.body);
     const observer = new MutationObserver((mutations) => {
@@ -160,8 +169,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     });
     observer.observe(document.body, { childList: true, characterData: true, subtree: true });
     return () => observer.disconnect();
-  }, [language, preferenceLoaded]);
-  const value = useMemo(() => ({ language, setLanguage: setLanguageState }), [language]);
+  }, [language]);
+  const value = useMemo(() => ({ language, setLanguage: storeLanguage }), [language]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
