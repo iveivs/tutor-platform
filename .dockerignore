@@ -1,0 +1,9 @@
+.git
+.next
+dist
+node_modules
+.env*
+!.env.vps.example
+.wrangler
+npm-debug.log*
+

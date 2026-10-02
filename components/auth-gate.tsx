@@ -12,7 +12,9 @@ import { BrandIcon } from "@/components/brand-icon";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type User = { name: string; email: string; role: "owner" | "teacher" | "student" | "platform_admin"; isPlatformAdmin?: boolean };
+type AppUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
+type PlatformAdminUser = { name: string; email: string; role: "platform_admin"; isPlatformAdmin?: true };
+type User = AppUser | PlatformAdminUser;
 
 async function loadSession() {
   let response = await fetch("/api/auth/session", { cache: "no-store" });

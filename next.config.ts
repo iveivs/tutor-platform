@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 import { CONTENT_SECURITY_POLICY } from "./lib/security-headers";
 
+const cloudflareWorkersStub = path.resolve(process.cwd(), "lib/cloudflare-workers-stub.ts");
+
 const nextConfig: NextConfig = {
+  output: "standalone",
+  turbopack: {
+    resolveAlias: {
+      "cloudflare:workers": "./lib/cloudflare-workers-stub.ts",
+    },
+  },
+  webpack(config) {
+    config.resolve.alias["cloudflare:workers"] = cloudflareWorkersStub;
+    return config;
+  },
   async headers() {
     return [
       {

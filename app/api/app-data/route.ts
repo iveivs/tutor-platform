@@ -180,7 +180,7 @@ export async function GET(request: Request) {
       };
     });
     const remainingByStudent = new Map<string, number>();
-    const lessonParts = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
+    const lessonParts: LessonPart[] = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
       const studentId = String(row.student_id);
       const balance = Number(row.balance);
       const remaining = remainingByStudent.get(studentId) ?? Math.max(0, balance);
@@ -189,7 +189,7 @@ export async function GET(request: Request) {
       const trial = row.lesson_type === "trial";
       const covered = trial || remaining > 0;
       if (!past && !trial && requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
-      const status = trial ? "trial" : past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
+      const status: LessonPart["status"] = trial ? "trial" : past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
       const label = trial ? (past ? "Пробное · проведено" : "Пробное · бесплатно") : past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
       return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", trialContact: Boolean(row.is_trial_contact), past, startsAt: Number(row.starts_at), units: 1 };
