@@ -1,6 +1,8 @@
 import { getD1 } from "@/db/d1";
 import { assertSameOrigin, getAuthConfig, getAuthIdentity, getAuthMember, getPlatformAdmin, randomToken, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
+import { sendTeacherInvitation } from "@/lib/account-email";
+import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { z } from "zod";
 
 const adminActionSchema = z.discriminatedUnion("action", [
@@ -55,6 +57,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+  const nodeLimited = await enforceNodeRateLimit(request, "api_write:/api/admin/workspaces", 60);
+  if (nodeLimited) return nodeLimited;
   const auth = await requirePlatformAdmin(request);
   if (auth instanceof Response) return auth;
   const json = await readLimitedJson<unknown>(request);
@@ -80,7 +84,9 @@ export async function POST(request: Request) {
       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`)
       .bind(invitationId, await sha256(token), email, parsed.data.name, parsed.data.professionalTitle || "Репетитор", parsed.data.accessGrant, auth.admin.userId, expiresAt, now, now).run();
     const baseUrl = process.env.PUBLIC_APP_URL ?? new URL(request.url).origin;
-    return Response.json({ invitation: { id: invitationId, name: parsed.data.name, email, expiresAt, url: new URL(`/teacher-invite/${token}`, baseUrl).toString() } });
+    const url = new URL(`/teacher-invite/${token}`, baseUrl).toString();
+    const emailSent = await sendTeacherInvitation(email, parsed.data.name, url);
+    return Response.json({ invitation: { id: invitationId, name: parsed.data.name, email, expiresAt, url }, emailSent });
   }
 
   if (parsed.data.action === "revokeTeacherInvite") {

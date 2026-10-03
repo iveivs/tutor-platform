@@ -12,6 +12,7 @@ import {
   rotateCurrentSession,
   sessionCookies,
 } from "./node-auth";
+import { enforceNodeRateLimit } from "./postgres-rate-limit";
 
 const loginSchema = z.object({ email: z.string().trim().email().max(254), password: z.string().min(1).max(256) }).strict();
 
@@ -29,6 +30,8 @@ export async function handleNodeLogin(request: Request): Promise<Response> {
   const configError = configurationError();
   if (configError) return configError;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+  const limited = await enforceNodeRateLimit(request, "public_auth:/api/auth/login", 10);
+  if (limited) return limited;
   const json = await readLimitedJson<unknown>(request);
   if (!json.ok) return json.response;
   const parsed = loginSchema.safeParse(json.value);
@@ -54,6 +57,8 @@ export async function handleNodeRefresh(request: Request): Promise<Response> {
   const configError = configurationError();
   if (configError) return configError;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+  const limited = await enforceNodeRateLimit(request, "session_refresh", 60);
+  if (limited) return limited;
   const token = await rotateCurrentSession(request);
   if (!token) return jsonWithCookies({ error: "Сессия истекла" }, clearAuthCookies(request), 401);
   return jsonWithCookies({ ok: true }, sessionCookies(token, request));

@@ -2,12 +2,15 @@ import { assertSameOrigin, getAuthConfig } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { requestPasswordRecovery } from "@/lib/supabase-password";
 import { z } from "zod";
+import { handleNodeRecover } from "@/lib/node-account-endpoints";
 
 const recoverySchema = z.object({
   email: z.string().trim().email().max(254),
 }).strict();
 
 export async function POST(request: Request) {
+  const nodeResponse = await handleNodeRecover(request);
+  if (nodeResponse) return nodeResponse;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   if (!config) return Response.json({ error: "Авторизация ещё не настроена" }, { status: 503 });

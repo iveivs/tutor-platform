@@ -7,6 +7,8 @@ import { collectChangedSections, incrementalDataSections, type IncrementalDataSe
 import { groupDoubleLessonCharges, groupDoubleLessonEvents } from "@/lib/double-lesson-history";
 import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
 import { env } from "cloudflare:workers";
+import { sendStudentInvitation } from "@/lib/account-email";
+import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { z } from "zod";
 
 const MOSCOW_OFFSET = "+03:00";
@@ -281,6 +283,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+    const nodeLimited = await enforceNodeRateLimit(request, "api_write:/api/app-data", 60);
+    if (nodeLimited) return nodeLimited;
     const json = await readLimitedJson<unknown>(request);
     if (!json.ok) return json.response;
     const parsed = actionBodySchema.safeParse(json.value);
@@ -289,6 +293,8 @@ export async function POST(request: Request) {
     const auth = await requireMember(request);
     if (auth instanceof Response) return auth;
     if (auth.role === "student" && body.action === "submitStudentRequest") {
+      const nodeStudentLimited = await enforceNodeRateLimit(request, "student_request", 10, `${auth.workspaceId}:${auth.memberId}`);
+      if (nodeStudentLimited) return nodeStudentLimited;
       const limited = await enforceRateLimit(env.STUDENT_REQUEST_RATE_LIMITER, `${auth.workspaceId}:${auth.memberId}`, "student_request");
       if (limited) return limited;
     }
@@ -441,10 +447,11 @@ export async function POST(request: Request) {
         const inviteToken = randomToken();
         statements.push(db.prepare(`INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at)
           VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), auth.workspaceId, id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14));
-        inviteUrl = new URL(`/invite/${inviteToken}`, request.url).toString();
+        inviteUrl = new URL(`/invite/${inviteToken}`, process.env.PUBLIC_APP_URL ?? request.url).toString();
       }
       await db.batch(statements);
-      return Response.json({ ok: true, id, inviteUrl });
+      const emailSent = email && inviteUrl ? await sendStudentInvitation(email, body.name.trim(), inviteUrl) : false;
+      return Response.json({ ok: true, id, inviteUrl, emailSent });
     } else if (body.action === "updateStudent") {
       const name = body.name?.trim();
       const email = body.email?.trim() || null;
@@ -488,7 +495,7 @@ export async function POST(request: Request) {
       ]);
     } else if (body.action === "createStudentInvite") {
       if (!body.studentId) return invalid();
-      const student = await db.prepare("SELECT id, email, status FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string }>();
+      const student = await db.prepare("SELECT id, email, status, display_name FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string; display_name: string }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
       if (student.status === "active") return Response.json({ error: "Ученик уже подключил аккаунт" }, { status: 409 });
       if (!student.email) return Response.json({ error: "Сначала укажите email ученика" }, { status: 409 });
@@ -497,7 +504,10 @@ export async function POST(request: Request) {
         db.prepare("UPDATE invitations SET expires_at = ? WHERE member_id = ? AND accepted_at IS NULL").bind(Date.now() - 1, student.id),
         db.prepare("INSERT INTO invitations (id, workspace_id, member_id, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)").bind(id, auth.workspaceId, student.id, await sha256(inviteToken), Date.now() + 1000 * 60 * 60 * 24 * 14),
       ]);
-      return Response.json({ ok: true, inviteUrl: new URL(`/invite/${inviteToken}`, request.url).toString() });
+      const baseUrl = process.env.PUBLIC_APP_URL ?? request.url;
+      const inviteUrl = new URL(`/invite/${inviteToken}`, baseUrl).toString();
+      const emailSent = await sendStudentInvitation(student.email, student.display_name, inviteUrl);
+      return Response.json({ ok: true, inviteUrl, emailSent });
     } else if (body.action === "addPayment") {
       if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0 || body.count > 100 || (body.paymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate))) return invalid();
       const occurredAt = body.paymentDate ? new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime() : Date.now();

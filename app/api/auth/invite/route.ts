@@ -3,6 +3,7 @@ import { assertSameOrigin, getAuthConfig, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { createIdentity, signInExistingIdentity } from "@/lib/supabase-identity";
 import { z } from "zod";
+import { handleNodeStudentInviteGet, handleNodeStudentInvitePost } from "@/lib/node-account-endpoints";
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 const acceptInviteSchema = z.object({
@@ -11,6 +12,8 @@ const acceptInviteSchema = z.object({
 }).strict();
 
 export async function GET(request: Request) {
+  const nodeResponse = await handleNodeStudentInviteGet(request);
+  if (nodeResponse) return nodeResponse;
   const token = new URL(request.url).searchParams.get("token");
   if (!token || !tokenPattern.test(token)) return Response.json({ error: "Ссылка недействительна" }, { status: 400 });
   const invite = await getD1().prepare(`SELECT m.display_name, m.email FROM invitations i JOIN members m ON m.id = i.member_id
@@ -20,6 +23,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const nodeResponse = await handleNodeStudentInvitePost(request);
+  if (nodeResponse) return nodeResponse;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   if (!config?.secretKey) return Response.json({ error: "Приглашения ещё не настроены" }, { status: 503 });

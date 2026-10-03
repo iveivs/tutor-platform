@@ -2,6 +2,7 @@ import { assertSameOrigin, getAuthConfig } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { updatePassword } from "@/lib/supabase-password";
 import { z } from "zod";
+import { handleNodeResetPassword } from "@/lib/node-account-endpoints";
 
 const resetSchema = z.object({
   accessToken: z.string().min(1).max(4096),
@@ -9,6 +10,8 @@ const resetSchema = z.object({
 }).strict();
 
 export async function POST(request: Request) {
+  const nodeResponse = await handleNodeResetPassword(request);
+  if (nodeResponse) return nodeResponse;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   if (!config) return Response.json({ error: "Авторизация ещё не настроена" }, { status: 503 });
