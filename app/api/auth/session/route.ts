@@ -1,6 +1,9 @@
 import { getAuthIdentity, getAuthMember, getPlatformAdmin } from "@/lib/auth";
+import { handleNodeSession } from "@/lib/node-auth-endpoints";
 
 export async function GET(request: Request) {
+  const nodeResponse = await handleNodeSession(request);
+  if (nodeResponse) return nodeResponse;
   const identity = await getAuthIdentity(request);
   if (!identity) return Response.json({ user: null }, { status: 401 });
   const member = await getAuthMember(request, identity);

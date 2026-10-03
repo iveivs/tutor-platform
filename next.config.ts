@@ -4,17 +4,23 @@ import { CONTENT_SECURITY_POLICY } from "./lib/security-headers";
 
 const cloudflareWorkersStub = path.resolve(process.cwd(), "lib/cloudflare-workers-stub.ts");
 const postgresD1Adapter = path.resolve(process.cwd(), "db/postgres-d1.ts");
+const postgresAuth = path.resolve(process.cwd(), "lib/node-auth.ts");
+const postgresAuthEndpoints = path.resolve(process.cwd(), "lib/postgres-auth-endpoints.ts");
 
 const nodeCompatibility: NextConfig = process.env.TUTOR_RUNTIME_TARGET === "node" ? {
   turbopack: {
     resolveAlias: {
       "cloudflare:workers": "./lib/cloudflare-workers-stub.ts",
       "@/db/d1": "./db/postgres-d1.ts",
+      "@/lib/auth": "./lib/node-auth.ts",
+      "@/lib/node-auth-endpoints": "./lib/postgres-auth-endpoints.ts",
     },
   },
   webpack(config) {
     config.resolve.alias["cloudflare:workers"] = cloudflareWorkersStub;
     config.resolve.alias["@/db/d1"] = postgresD1Adapter;
+    config.resolve.alias["@/lib/auth"] = postgresAuth;
+    config.resolve.alias["@/lib/node-auth-endpoints"] = postgresAuthEndpoints;
     return config;
   },
 } : {};

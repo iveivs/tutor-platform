@@ -1,6 +1,9 @@
 import { assertSameOrigin, authCookies, getAuthConfig, readCookie, REFRESH_COOKIE } from "@/lib/auth";
+import { handleNodeRefresh } from "@/lib/node-auth-endpoints";
 
 export async function POST(request: Request) {
+  const nodeResponse = await handleNodeRefresh(request);
+  if (nodeResponse) return nodeResponse;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   const refreshToken = readCookie(request, REFRESH_COOKIE);

@@ -2,6 +2,7 @@ import { getD1 } from "@/db/d1";
 import { assertSameOrigin, authCookies, getAuthConfig, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { z } from "zod";
+import { handleNodeLogin } from "@/lib/node-auth-endpoints";
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(254),
@@ -9,6 +10,8 @@ const loginSchema = z.object({
 }).strict();
 
 export async function POST(request: Request) {
+  const nodeResponse = await handleNodeLogin(request);
+  if (nodeResponse) return nodeResponse;
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
   const config = getAuthConfig();
   if (!config) return Response.json({ error: "Авторизация ещё не настроена" }, { status: 503 });
