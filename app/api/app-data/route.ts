@@ -648,11 +648,18 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true, id });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("UNIQUE constraint failed: lesson_requests.")) return Response.json({ error: "Такой запрос уже ожидает решения" }, { status: 409 });
-    if (error instanceof Error && error.message.includes("UNIQUE constraint failed: balance_entries.reverses_entry_id")) return Response.json({ error: "Эта оплата уже отменена" }, { status: 409 });
+    const constraint = databaseConstraintName(error);
+    if ((error instanceof Error && error.message.includes("UNIQUE constraint failed: lesson_requests.")) || constraint?.startsWith("lesson_requests_pending_")) return Response.json({ error: "Такой запрос уже ожидает решения" }, { status: 409 });
+    if ((error instanceof Error && error.message.includes("UNIQUE constraint failed: balance_entries.reverses_entry_id")) || constraint === "balance_entries_reversal_unique") return Response.json({ error: "Эта оплата уже отменена" }, { status: 409 });
+    if (constraint === "lessons_workspace_time_exclusion") return conflict();
     console.error("Failed to update app data", error);
     return Response.json({ error: "Не удалось сохранить изменения" }, { status: 500 });
   }
+}
+
+function databaseConstraintName(error: unknown) {
+  if (!error || typeof error !== "object" || !("constraint" in error)) return null;
+  return typeof error.constraint === "string" ? error.constraint : null;
 }
 
 async function requireMember(request?: Request) {

@@ -25,6 +25,7 @@ services:
     init: true
     environment:
       NODE_ENV: production
+      TUTOR_DATA_BACKEND: postgres
       PUBLIC_APP_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
       DATABASE_URL: postgresql://tutor:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/tutor_platform
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
@@ -65,4 +66,3 @@ volumes:
   caddy_data:
   caddy_config:
   postgres_data:
-
