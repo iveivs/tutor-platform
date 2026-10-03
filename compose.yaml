@@ -23,6 +23,14 @@ services:
       context: .
     restart: unless-stopped
     init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=1001,gid=1001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       NODE_ENV: production
       TUTOR_DATA_BACKEND: postgres
@@ -43,6 +51,18 @@ services:
       retries: 5
       start_period: 20s
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    restart: "no"
+    command: ["npm", "run", "db:migrate:postgres"]
+    environment:
+      DATABASE_URL: postgresql://tutor:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/tutor_platform
+    depends_on:
       postgres:
         condition: service_healthy
 
@@ -51,11 +71,58 @@ services:
       context: .
     restart: unless-stopped
     init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: ["node", "scripts/run-maintenance.mjs"]
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://tutor:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/tutor_platform
       JOB_INTERVAL_MS: 900000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  backup:
+    profiles: ["operations"]
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: tutor
+      PGPASSWORD: ${POSTGRES_PASSWORD:-}
+      PGDATABASE: tutor_platform
+      RESTIC_REPOSITORY: s3:${S3_ENDPOINT:-https://s3.example.com}/${S3_BUCKET:-replace-me}/${S3_PREFIX:-tutor-platform}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${S3_REGION:-auto}
+      BACKUP_HOST_TAG: ${APP_DOMAIN:-tutor-platform}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-6}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/tutor-last-backup && test $$(($$(date +%s) - $$(stat -c %Y /tmp/tutor-last-backup))) -lt 93600"]
+      interval: 15m
+      timeout: 10s
+      retries: 2
+      start_period: 10m
     depends_on:
       postgres:
         condition: service_healthy
