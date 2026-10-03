@@ -7,15 +7,18 @@
   },
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "TUTOR_RUNTIME_TARGET=node next dev",
+    "build": "TUTOR_RUNTIME_TARGET=node next build",
+    "start": "TUTOR_RUNTIME_TARGET=node next start",
     "dev:cloudflare": "node scripts/run-framework.mjs dev",
     "build:cloudflare": "node scripts/run-framework.mjs build",
     "start:cloudflare": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "test": "vitest run --config vitest.config.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
+    "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
+    "db:import:d1": "node scripts/import-d1-sqlite-to-postgres.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

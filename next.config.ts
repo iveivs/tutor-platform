@@ -4,8 +4,7 @@ import { CONTENT_SECURITY_POLICY } from "./lib/security-headers";
 
 const cloudflareWorkersStub = path.resolve(process.cwd(), "lib/cloudflare-workers-stub.ts");
 
-const nextConfig: NextConfig = {
-  output: "standalone",
+const nodeCompatibility: NextConfig = process.env.TUTOR_RUNTIME_TARGET === "node" ? {
   turbopack: {
     resolveAlias: {
       "cloudflare:workers": "./lib/cloudflare-workers-stub.ts",
@@ -15,6 +14,11 @@ const nextConfig: NextConfig = {
     config.resolve.alias["cloudflare:workers"] = cloudflareWorkersStub;
     return config;
   },
+} : {};
+
+const nextConfig: NextConfig = {
+  ...nodeCompatibility,
+  output: "standalone",
   async headers() {
     return [
       {

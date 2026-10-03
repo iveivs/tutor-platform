@@ -1,3 +1,6 @@
+// Generated only by the Cloudflare build; the standard Node build intentionally has no dist/server artifact.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore -- Vinext supplies this module before bundling worker-entry.ts.
 import application from "./dist/server/index.js";
 import { settleAllWorkspaces } from "./lib/lesson-maintenance";
 import { anonymousRequestKey, enforceRateLimit, sessionRequestKey } from "./lib/request-security";
