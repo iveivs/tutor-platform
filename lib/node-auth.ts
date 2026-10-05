@@ -31,7 +31,12 @@ export function readCookie(request: Request, name: string) {
 
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  const requestOrigin = new URL(request.url).origin;
+  const publicOrigin = process.env.PUBLIC_APP_URL
+    ? new URL(process.env.PUBLIC_APP_URL).origin
+    : requestOrigin;
+  return origin === requestOrigin || origin === publicOrigin;
 }
 
 export async function sha256(value: string) {

@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { clearAuthCookies, getAuthConfig, hashPassword, randomToken, sessionCookies, verifyPassword } from "./node-auth";
+import { assertSameOrigin, clearAuthCookies, getAuthConfig, hashPassword, randomToken, sessionCookies, verifyPassword } from "./node-auth";
 
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalAuthSecret = process.env.AUTH_SECRET;
+const originalPublicAppUrl = process.env.PUBLIC_APP_URL;
 
 afterEach(() => {
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
   else process.env.DATABASE_URL = originalDatabaseUrl;
   if (originalAuthSecret === undefined) delete process.env.AUTH_SECRET;
   else process.env.AUTH_SECRET = originalAuthSecret;
+  if (originalPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL;
+  else process.env.PUBLIC_APP_URL = originalPublicAppUrl;
 });
 
 describe("Node authentication primitives", () => {
@@ -42,5 +45,21 @@ describe("Node authentication primitives", () => {
     expect(getAuthConfig()).toBeNull();
     process.env.AUTH_SECRET = "a".repeat(32);
     expect(getAuthConfig()).not.toBeNull();
+  });
+
+  it("accepts the configured public origin behind a reverse proxy", () => {
+    process.env.PUBLIC_APP_URL = "https://app.example.com";
+    const request = new Request("http://app:3000/api/auth/reset-password", {
+      headers: { origin: "https://app.example.com" },
+    });
+    expect(assertSameOrigin(request)).toBe(true);
+  });
+
+  it("rejects an origin that matches neither the request nor the public app", () => {
+    process.env.PUBLIC_APP_URL = "https://app.example.com";
+    const request = new Request("http://app:3000/api/auth/reset-password", {
+      headers: { origin: "https://attacker.example" },
+    });
+    expect(assertSameOrigin(request)).toBe(false);
   });
 });
