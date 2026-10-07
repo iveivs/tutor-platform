@@ -2,11 +2,10 @@ import { getD1 } from "@/db/d1";
 import { assertSameOrigin, getAuthConfig, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { createIdentity, signInExistingIdentity } from "@/lib/supabase-identity";
-import { z } from "zod";
 import { handleNodeTeacherInviteGet, handleNodeTeacherInvitePost } from "@/lib/node-account-endpoints";
+import { baseAcceptanceTypes, LEGAL_DOCUMENT_VERSION, teacherInviteAcceptanceSchema } from "@/lib/legal-consent";
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
-const acceptInviteSchema = z.object({ token: z.string().regex(tokenPattern), password: z.string().min(8).max(128) }).strict();
 
 export async function GET(request: Request) {
   const nodeResponse = await handleNodeTeacherInviteGet(request);
@@ -31,8 +30,8 @@ export async function POST(request: Request) {
   if (!config?.secretKey) return Response.json({ error: "Приглашения ещё не настроены" }, { status: 503 });
   const json = await readLimitedJson<unknown>(request);
   if (!json.ok) return json.response;
-  const parsed = acceptInviteSchema.safeParse(json.value);
-  if (!parsed.success) return Response.json({ error: "Проверьте ссылку и пароль от 8 до 128 символов" }, { status: 400 });
+  const parsed = teacherInviteAcceptanceSchema.safeParse(json.value);
+  if (!parsed.success) return Response.json({ error: "Проверьте пароль и подтвердите обязательные согласия" }, { status: 400 });
   const db = getD1();
   const invitation = await db.prepare(`SELECT id, display_name, email, professional_title, access_grant
     FROM teacher_invitations WHERE token_hash = ? AND status = 'pending' AND expires_at > ? LIMIT 1`)
@@ -74,6 +73,9 @@ export async function POST(request: Request) {
       .bind(memberId, workspaceId, userId, invitation.display_name, invitation.professional_title, email),
     db.prepare(`UPDATE teacher_invitations SET status = 'accepted', workspace_id = ?, accepted_at = ?, updated_at = ?
       WHERE id = ? AND status = 'pending'`).bind(workspaceId, now, now, invitation.id),
+    ...baseAcceptanceTypes.map((documentType) => db.prepare(`INSERT INTO legal_acceptances
+      (id, user_id, workspace_id, member_id, document_type, document_version, source, user_agent, accepted_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'teacher_invite', ?, ?)`).bind(crypto.randomUUID(), userId, workspaceId, memberId, documentType, LEGAL_DOCUMENT_VERSION, request.headers.get("user-agent")?.slice(0, 512) ?? null, now)),
   ]);
   return Response.json({ ok: true, email, reusedAccount });
 }

@@ -9,6 +9,15 @@
   --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
   --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
 }
+
+.legal-document { @apply mt-8 rounded-2xl border border-border bg-card p-5 leading-7 shadow-sm sm:p-8; }
+.legal-document h1 { @apply mb-6 text-2xl font-bold tracking-tight sm:text-3xl; }
+.legal-document h2 { @apply mb-3 mt-8 text-xl font-bold; }
+.legal-document h3 { @apply mb-2 mt-6 text-lg font-semibold; }
+.legal-document p { @apply my-3; }
+.legal-document ul { @apply my-3 list-disc space-y-1 pl-6; }
+.legal-document blockquote { @apply my-4 border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 italic text-slate-700; }
+.legal-document code { @apply rounded bg-slate-100 px-1 py-0.5 text-sm; }
 .dark {
   color-scheme: dark;
   --background: #1c1c1e; --foreground: #f2f2f7; --card: #202022; --card-foreground: #f2f2f7;

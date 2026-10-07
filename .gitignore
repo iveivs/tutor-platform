@@ -46,3 +46,6 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Filled legal originals contain owner details and stay outside Git.
+/private/legal-documents/

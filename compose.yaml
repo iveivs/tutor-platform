@@ -44,6 +44,9 @@ services:
       SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is required}
       SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      LEGAL_DOCUMENTS_DIR: /legal-documents
+    volumes:
+      - ./private/legal-documents:/legal-documents:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 15s

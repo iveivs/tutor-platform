@@ -27,6 +27,11 @@ const storeLanguage = (language: Language) => {
 };
 
 const translations: Record<string, string> = {
+  "Тьюттори": "Tyuttori", "Юридические документы": "Legal documents", "Соглашение": "Terms", "Конфиденциальность": "Privacy", "Согласие на обработку данных": "Personal data consent", "Правила контента": "Content rules", "Понятно": "Got it",
+  "Сайт использует только технически необходимые cookie для входа и безопасности. Подробнее — в ": "This site only uses cookies required for sign-in and security. Learn more in the ", "политике": "policy", ".": ".",
+  "Я принимаю ": "I accept the ", "Пользовательское соглашение": "Terms of Use", " и ": " and ", "Правила размещения контента": "Content Rules", "Я даю отдельное ": "I separately consent to the ", "согласие на обработку персональных данных": "processing of personal data", " и ознакомился(-ась) с ": " and have read the ", "Политикой": "Privacy Policy",
+  "Кто принимает приглашение": "Who accepts the invitation", "Мне исполнилось 18 лет": "I am at least 18 years old", "Я законный представитель несовершеннолетнего ученика": "I am the legal representative of a minor student", "Если ученику нет 18 лет, форму заполняет его законный представитель.": "If the student is under 18, their legal representative must complete this form.", "Я подтверждаю полномочия законного представителя и принимаю ": "I confirm my authority as legal representative and accept the ", "согласие в отношении несовершеннолетнего": "consent concerning the minor",
+  "Все документы": "All documents", "Политика обработки персональных данных": "Personal Data Processing Policy", "Согласие на обработку персональных данных": "Consent to Personal Data Processing", "Правила размещения контента и фотографий": "User Content and Photo Rules", "Согласие законного представителя": "Legal Representative Consent",
   "Включить светлую тему": "Switch to light theme", "Включить тёмную тему": "Switch to dark theme", "Светлая тема": "Light theme", "Тёмная тема": "Dark theme",
   "Платформа репетитора": "Tutor Platform", "Войдите в свой кабинет": "Sign in to your account", "Войти": "Sign in", "Входим…": "Signing in…", "Пароль": "Password",
   "Забыли пароль?": "Forgot your password?", "или": "or", "Создать кабинет преподавателя": "Create a tutor account", "Если вас пригласили как ученика, откройте персональную ссылку преподавателя.": "If you were invited as a student, open the personal link sent by your tutor.",
@@ -156,9 +161,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const attributeOriginals = useRef(new WeakMap<Element, Map<string, string>>());
   useEffect(() => {
     document.documentElement.lang = language;
-    document.title = language === "en" ? "Tutor Platform — lesson scheduling" : "Репетитор — расписание занятий";
+    document.title = language === "en" ? "Tyuttori — tutor platform" : "Тьюттори — платформа репетитора";
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-    if (description) description.content = language === "en" ? "Scheduling, students, and payments for private tutors." : "Расписание, ученики и оплаты частного преподавателя.";
+    if (description) description.content = language === "en" ? "Scheduling, students, and payments for private tutors." : "Расписание, ученики и оплаты частного преподавателя в Тьюттори.";
     const apply = (node: Node) => localizeNode(node, language, originals.current, attributeOriginals.current);
     apply(document.body);
     const observer = new MutationObserver((mutations) => {

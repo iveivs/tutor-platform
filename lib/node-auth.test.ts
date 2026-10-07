@@ -4,14 +4,15 @@ import { assertSameOrigin, clearAuthCookies, getAuthConfig, hashPassword, random
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalAuthSecret = process.env.AUTH_SECRET;
 const originalPublicAppUrl = process.env.PUBLIC_APP_URL;
+const setEnvironment = (key: string, value: string | undefined) => {
+  if (value === undefined) Reflect.deleteProperty(process.env, key);
+  else process.env[key] = value;
+};
 
 afterEach(() => {
-  if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
-  else process.env.DATABASE_URL = originalDatabaseUrl;
-  if (originalAuthSecret === undefined) delete process.env.AUTH_SECRET;
-  else process.env.AUTH_SECRET = originalAuthSecret;
-  if (originalPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL;
-  else process.env.PUBLIC_APP_URL = originalPublicAppUrl;
+  setEnvironment("DATABASE_URL", originalDatabaseUrl);
+  setEnvironment("AUTH_SECRET", originalAuthSecret);
+  setEnvironment("PUBLIC_APP_URL", originalPublicAppUrl);
 });
 
 describe("Node authentication primitives", () => {
@@ -48,7 +49,7 @@ describe("Node authentication primitives", () => {
   });
 
   it("accepts the configured public origin behind a reverse proxy", () => {
-    process.env.PUBLIC_APP_URL = "https://app.example.com";
+    setEnvironment("PUBLIC_APP_URL", "https://app.example.com");
     const request = new Request("http://app:3000/api/auth/reset-password", {
       headers: { origin: "https://app.example.com" },
     });
@@ -56,7 +57,7 @@ describe("Node authentication primitives", () => {
   });
 
   it("rejects an origin that matches neither the request nor the public app", () => {
-    process.env.PUBLIC_APP_URL = "https://app.example.com";
+    setEnvironment("PUBLIC_APP_URL", "https://app.example.com");
     const request = new Request("http://app:3000/api/auth/reset-password", {
       headers: { origin: "https://attacker.example" },
     });

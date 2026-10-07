@@ -125,6 +125,26 @@ export const members = pgTable("members", {
   uniqueIndex("members_workspace_user_unique").on(table.workspaceId, table.userId),
 ]);
 
+/** Immutable proof that a user accepted a specific legal document version. */
+export const legalAcceptances = pgTable("legal_acceptances", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+  memberId: text("member_id").references(() => members.id, { onDelete: "cascade" }),
+  documentType: text("document_type").notNull(),
+  documentVersion: text("document_version").notNull(),
+  source: text("source").notNull(),
+  subjectContext: text("subject_context"),
+  userAgent: text("user_agent"),
+  acceptedAt: instant("accepted_at").notNull().defaultNow(),
+}, (table) => [
+  check("legal_acceptances_document_type_check", sql`${table.documentType} in ('terms', 'personal_data_consent', 'content_rules', 'parental_consent')`),
+  check("legal_acceptances_source_check", sql`${table.source} in ('teacher_invite', 'student_invite')`),
+  check("legal_acceptances_subject_context_check", sql`${table.subjectContext} is null or ${table.subjectContext} in ('adult', 'legal_representative')`),
+  index("idx_legal_acceptances_user_accepted").on(table.userId, table.acceptedAt),
+  index("idx_legal_acceptances_member_accepted").on(table.memberId, table.acceptedAt),
+]);
+
 export const availabilityWindows = pgTable("availability_windows", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

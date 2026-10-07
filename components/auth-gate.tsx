@@ -11,6 +11,7 @@ import { PasswordReset, readRecoverySession, type RecoverySession } from "@/comp
 import { BrandIcon } from "@/components/brand-icon";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LegalLinks } from "@/components/legal-links";
 
 type AppUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type PlatformAdminUser = { name: string; email: string; role: "platform_admin"; isPlatformAdmin?: true };
@@ -94,7 +95,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
       <section className="card w-full max-w-md p-7 sm:p-9">
         <div className="mb-7 text-center">
           {recovering ? <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200"><KeyRound className="size-7" /></span> : <BrandIcon className="mx-auto size-14 shadow-lg" />}
-          <h1 className="mt-5 text-3xl font-bold tracking-tight">{recovering ? "Восстановление пароля" : "Платформа репетитора"}</h1>
+          <h1 className="mt-5 text-3xl font-bold tracking-tight">{recovering ? "Восстановление пароля" : "Тьюттори"}</h1>
           <p className="mt-2 text-slate-500">{recovering ? "Пришлём ссылку для создания нового пароля" : "Войдите в свой кабинет"}</p>
         </div>
         {recovering ? recoverySent ? (
@@ -121,6 +122,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
             <p className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">Новые кабинеты преподавателей создаются только по персональному приглашению администратора.</p>
           </>
         )}
+        <LegalLinks className="mt-7" />
       </section>
     </main>
   );
