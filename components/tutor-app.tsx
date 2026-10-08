@@ -555,7 +555,7 @@ function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability
         <Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field>
         <Field label="Название или роль"><Input value={professionalTitle} onChange={(event) => setProfessionalTitle(event.target.value)} maxLength={50} placeholder="Например: Репетитор или Тренер" className="h-11 rounded-xl" /><p className="text-xs text-slate-500">Необязательно. Оставьте пустым, если подпись над именем не нужна.</p></Field>
         <Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field>
-        <p className="text-sm text-slate-500">Email управляется в Supabase и здесь не изменяется.</p>
+        <p className="text-sm text-slate-500">Email хранится в вашей учётной записи и сейчас не изменяется через настройки.</p>
         <Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name && professionalTitle.trim() === profile.professionalTitle} className="w-full bg-indigo-600 sm:w-auto">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button>
       </div>
     </section>

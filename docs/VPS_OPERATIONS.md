@@ -1,6 +1,6 @@
 # Эксплуатация Tutor Platform на VPS
 
-Этот регламент относится к будущему Node/PostgreSQL-контуру. До отдельного решения владельца действующим production остаётся Cloudflare/D1/Supabase.
+Этот регламент относится к действующему production-контуру Node/PostgreSQL на VPS Selectel. Cloudflare/D1/Supabase сохранены только как архив прежней архитектуры и не получают новые рабочие записи.
 
 ## До первого запуска
 
