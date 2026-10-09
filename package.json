@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
     "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
-    "db:import:d1": "node scripts/import-d1-sqlite-to-postgres.mjs"
+    "db:import:d1": "node scripts/import-d1-sqlite-to-postgres.mjs",
+    "telegram:relay:deploy": "wrangler deploy --config workers/telegram-relay/wrangler.jsonc"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -40,6 +40,7 @@ type AppNotification = {
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
 type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: { name: string; professionalTitle: string; email: string }; syncCursor?: number };
+type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -574,6 +575,7 @@ function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability
         <Button type="button" className="w-full bg-indigo-600 sm:w-auto" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button>
       </div>
     </section>
+    <TelegramNotificationsCard />
     {isPlatformAdmin && <section className="card max-w-3xl p-5 md:p-8"><h2 className="text-xl font-bold">Управление платформой</h2><p className="mt-1 text-sm text-slate-500">Список кабинетов преподавателей и управление доступом.</p><Button asChild variant="outline" className="mt-4"><a href="/admin"><ShieldCheck />Открыть админку</a></Button></section>}
     {onLogout && <section className="card max-w-3xl p-5 lg:hidden">
       <h2 className="text-xl font-bold">Сеанс</h2>
@@ -623,9 +625,59 @@ function StudentPortal({ student, teacherName, lessons, entries, historyEvents, 
     <section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>
     {(student.floating || student.canViewAvailability) && <div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div>}
     {requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}
+    <div className="mt-5"><TelegramNotificationsCard compact /></div>
     <section className="mt-5"><h2 className="mb-3 text-lg font-bold">История</h2><HistoryTimeline events={historyEvents} showStudent={false} /></section>
     <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Оплаты</h2><BalanceHistory entries={paymentEntries} /></section>
   </div><Toaster position="top-center" richColors /></main>;
+}
+
+function TelegramNotificationsCard({ compact = false }: { compact?: boolean }) {
+  const [status, setStatus] = useState<TelegramStatus | null>(null);
+  const [pending, setPending] = useState(false);
+  const load = useCallback(async () => {
+    const response = await appFetch("/api/telegram/link", { cache: "no-store" });
+    if (!response.ok) throw new Error("Не удалось проверить подключение Telegram");
+    setStatus(await response.json() as TelegramStatus);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void appFetch("/api/telegram/link", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<TelegramStatus> : Promise.reject(new Error("Telegram status failed")))
+      .then((nextStatus) => { if (active) setStatus(nextStatus); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  const connect = async () => {
+    setPending(true);
+    try {
+      const response = await appFetch("/api/telegram/link", { method: "POST" });
+      const result = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !result.url) throw new Error(result.error ?? "Не удалось создать ссылку");
+      window.open(result.url, "_blank", "noopener,noreferrer");
+      toast.info("В Telegram нажмите «Запустить», затем вернитесь сюда и проверьте подключение");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось подключить Telegram"); }
+    finally { setPending(false); }
+  };
+  const disconnect = async () => {
+    setPending(true);
+    try {
+      const response = await appFetch("/api/telegram/link", { method: "DELETE" });
+      if (!response.ok) throw new Error("Не удалось отключить Telegram");
+      await load();
+      toast.success("Telegram отключён");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отключить Telegram"); }
+    finally { setPending(false); }
+  };
+  return <section className={`card p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>
+    <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
+      <h2 className="text-xl font-bold">Уведомления в Telegram</h2>
+      <p className="mt-1 text-sm text-slate-500">Только напоминание за 24 часа до урока, изменения расписания и запросы ученика.</p>
+      {!status && <p className="mt-4 text-sm text-slate-500">Проверяем подключение…</p>}
+      {status && !status.configured && <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
+      {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-emerald-700">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
+      {status?.configured && !status.connected && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button type="button" className="bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send />{pending ? "Создаю ссылку…" : "Подключить Telegram"}</Button><Button type="button" variant="outline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>}
+    </div></div>
+  </section>;
 }
 
 function StudentRequestDialog({ type, lesson, student, availableSlots, onRequest, fullWidth = false }: { type: "cancel" | "reschedule" | "new_lesson"; lesson?: Lesson; student: Student; availableSlots?: AvailableSlot[]; onRequest: (body: StudentRequestDraft) => Promise<boolean>; fullWidth?: boolean }) {

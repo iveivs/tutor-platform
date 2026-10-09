@@ -295,6 +295,54 @@ export const notifications = pgTable("notifications", {
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [index("idx_notifications_member_read_created").on(table.memberId, table.readAt, table.createdAt)]);
 
+export const telegramConnections = pgTable("telegram_connections", {
+  memberId: text("member_id").primaryKey().references(() => members.id, { onDelete: "cascade" }),
+  chatId: text("chat_id").notNull(),
+  telegramUserId: text("telegram_user_id").notNull(),
+  username: text("username"),
+  connectedAt: instant("connected_at").notNull().defaultNow(),
+  disabledAt: instant("disabled_at"),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_connections_chat_id_unique").on(table.chatId),
+  index("idx_telegram_connections_active").on(table.disabledAt),
+]);
+
+export const telegramLinkTokens = pgTable("telegram_link_tokens", {
+  id: text("id").primaryKey(),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: instant("expires_at").notNull(),
+  consumedAt: instant("consumed_at"),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_link_tokens_hash_unique").on(table.tokenHash),
+  index("idx_telegram_link_tokens_member_expires").on(table.memberId, table.expiresAt),
+]);
+
+export const telegramDeliveries = pgTable("telegram_deliveries", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  notificationId: text("notification_id").references(() => notifications.id, { onDelete: "set null" }),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: instant("next_attempt_at").notNull().defaultNow(),
+  sentAt: instant("sent_at"),
+  lastError: text("last_error"),
+  ...timestamps(),
+}, (table) => [
+  check("telegram_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request')`),
+  check("telegram_deliveries_status_check", sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'cancelled')`),
+  check("telegram_deliveries_attempts_check", sql`${table.attempts} >= 0`),
+  uniqueIndex("telegram_deliveries_dedupe_key_unique").on(table.dedupeKey),
+  index("idx_telegram_deliveries_due").on(table.status, table.nextAttemptAt),
+  index("idx_telegram_deliveries_member_created").on(table.memberId, table.createdAt),
+]);
+
 export const dataChanges = pgTable("data_changes", {
   id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

@@ -9,6 +9,36 @@
 3. Создать `.env` вне Git на основе `.env.example`, установить права `600` и сгенерировать независимые длинные значения `POSTGRES_PASSWORD`, `AUTH_SECRET` и `RESTIC_PASSWORD`.
 4. Настроить отдельный приватный S3-совместимый bucket. Ключу резервного копирования выдать доступ только к префиксу Tutor Platform, без доступа к другим данным аккаунта.
 5. Сохранить копии production-переменных и `RESTIC_PASSWORD` в отдельном менеджере секретов. Потеря `RESTIC_PASSWORD` делает зашифрованные резервные копии невосстановимыми.
+6. Для почты задать Selectel SMTP через TLS: `SMTP_HOST=smtp.mail.selcloud.ru`, `SMTP_PORT=1127`, `SMTP_SECURE=true`, логин, пароль и адрес отправителя на подтверждённом домене. Пароль не выводить при проверке конфигурации.
+7. Selectel VPS не достигает `api.telegram.org`, поэтому развернуть `workers/telegram-relay/` в Cloudflare. Добавить в Worker secrets `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и независимый `TELEGRAM_RELAY_SECRET`. На VPS задать имя бота без `@`, тот же webhook-secret и relay-secret, а `TELEGRAM_API_BASE_URL` установить в `https://<relay>.workers.dev/bot`. Пустые Telegram-переменные безопасно оставляют модуль выключенным.
+
+## Telegram relay
+
+Шлюз не хранит данные и не ведёт журнал содержимого сообщений. Он принимает от VPS только четыре разрешённых метода Bot API, проверяя `x-telegram-relay-secret`, и передаёт входящие Telegram updates единственному адресу `https://tyuttori.ru/api/telegram/webhook`. Бесплатного лимита Cloudflare Workers с большим запасом достаточно для текущего объёма уведомлений.
+
+Развернуть код и добавить секреты интерактивно, не передавая их аргументами командной строки:
+
+```bash
+npm run telegram:relay:deploy
+npx wrangler secret put TELEGRAM_BOT_TOKEN --config workers/telegram-relay/wrangler.jsonc
+npx wrangler secret put TELEGRAM_WEBHOOK_SECRET --config workers/telegram-relay/wrangler.jsonc
+npx wrangler secret put TELEGRAM_RELAY_SECRET --config workers/telegram-relay/wrangler.jsonc
+```
+
+После заполнения VPS зарегистрировать webhook через relay. Тело запроса игнорируется: шлюз сам подставляет собственный публичный адрес, secret-token и единственный разрешённый тип update `message`.
+
+```bash
+curl --fail --silent --show-error --request POST \
+  --header "x-telegram-relay-secret: $TELEGRAM_RELAY_SECRET" \
+  --header "content-type: application/json" \
+  --data '{}' "$TELEGRAM_API_BASE_URL/setWebhook"
+curl --fail --silent --show-error --request POST \
+  --header "x-telegram-relay-secret: $TELEGRAM_RELAY_SECRET" \
+  --header "content-type: application/json" \
+  --data '{}' "$TELEGRAM_API_BASE_URL/getWebhookInfo"
+```
+
+Не выводить ответы `getMe`, webhook payload, `chat_id` и значения секретов в общие логи. При ротации менять relay-secret в Worker и на VPS согласованно; webhook-secret — в Worker и приложении, затем повторять `setWebhook`.
 
 ## Запуск и обновление
 
@@ -90,6 +120,7 @@ docker compose --profile operations run --rm \
 
 - `/api/health/live` подтверждает, что процесс приложения отвечает; `/api/health/ready` дополнительно проверяет PostgreSQL.
 - Успешный `lesson-maintenance` должен появляться в `job_runs` не реже одного раза в 30 минут.
+- Если Telegram включён, контролировать число `failed` и старых `pending` в `telegram_deliveries`; текст сообщений и идентификаторы чатов в мониторинг не выводить.
 - Контролировать заполнение диска, память, перезапуски контейнеров, срок TLS-сертификата, ответы `5xx`, задержку PostgreSQL и свежесть backup.
 - Не журналировать `.env`, cookies, токены приглашений, пароли, исходные email из auth-аудита и содержимое базы.
 - При компрометации менять соответствующие ключи. Смена `AUTH_SECRET` прекращает корреляцию старых audit-хешей; смена `RESTIC_PASSWORD` выполняется средствами Restic и требует отдельной проверки восстановления.

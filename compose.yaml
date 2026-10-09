@@ -44,6 +44,11 @@ services:
       SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is required}
       SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
+      TELEGRAM_RELAY_SECRET: ${TELEGRAM_RELAY_SECRET:-}
       LEGAL_DOCUMENTS_DIR: /legal-documents
     volumes:
       - ./private/legal-documents:/legal-documents:ro
@@ -86,6 +91,9 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://tutor:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/tutor_platform
       JOB_INTERVAL_MS: 900000
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
+      TELEGRAM_RELAY_SECRET: ${TELEGRAM_RELAY_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
