@@ -16,6 +16,8 @@
 
 Шлюз не хранит данные и не ведёт журнал содержимого сообщений. Он принимает от VPS только четыре разрешённых метода Bot API, проверяя `x-telegram-relay-secret`, и передаёт входящие Telegram updates единственному адресу `https://tyuttori.ru/api/telegram/webhook`. Бесплатного лимита Cloudflare Workers с большим запасом достаточно для текущего объёма уведомлений.
 
+Production использует бота `@tyuttori_bot` и relay `https://tyuttori-telegram-relay.veiv.workers.dev`. Webhook Telegram направлен на `/telegram/webhook` relay, а уже relay пересылает проверенный update в приложение. Не переносить bot token на VPS и не добавлять значения секретов в команды документации, логи или Git.
+
 Развернуть код и добавить секреты интерактивно, не передавая их аргументами командной строки:
 
 ```bash
