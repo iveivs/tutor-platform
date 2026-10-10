@@ -14,6 +14,6 @@ export function collectChangedSections(rows: Array<{ sections: string; id: numbe
   return { sections, cursor: nextCursor };
 }
 
-export function syncDelayForMoscowHour(hour: number) {
-  return hour >= 7 || hour < 1 ? 60_000 : 600_000;
+export function syncDelayForVisibility(isVisible: boolean) {
+  return isVisible ? 30_000 : 300_000;
 }

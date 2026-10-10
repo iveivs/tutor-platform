@@ -3,7 +3,7 @@ import { assertSameOrigin, getAuthConfig, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { createIdentity, signInExistingIdentity } from "@/lib/supabase-identity";
 import { handleNodeTeacherInviteGet, handleNodeTeacherInvitePost } from "@/lib/node-account-endpoints";
-import { baseAcceptanceTypes, LEGAL_DOCUMENT_VERSION, teacherInviteAcceptanceSchema } from "@/lib/legal-consent";
+import { baseAcceptanceDocuments, teacherInviteAcceptanceSchema } from "@/lib/legal-consent";
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 
@@ -73,9 +73,9 @@ export async function POST(request: Request) {
       .bind(memberId, workspaceId, userId, invitation.display_name, invitation.professional_title, email),
     db.prepare(`UPDATE teacher_invitations SET status = 'accepted', workspace_id = ?, accepted_at = ?, updated_at = ?
       WHERE id = ? AND status = 'pending'`).bind(workspaceId, now, now, invitation.id),
-    ...baseAcceptanceTypes.map((documentType) => db.prepare(`INSERT INTO legal_acceptances
+    ...baseAcceptanceDocuments.map((document) => db.prepare(`INSERT INTO legal_acceptances
       (id, user_id, workspace_id, member_id, document_type, document_version, source, user_agent, accepted_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'teacher_invite', ?, ?)`).bind(crypto.randomUUID(), userId, workspaceId, memberId, documentType, LEGAL_DOCUMENT_VERSION, request.headers.get("user-agent")?.slice(0, 512) ?? null, now)),
+      VALUES (?, ?, ?, ?, ?, ?, 'teacher_invite', ?, ?)`).bind(crypto.randomUUID(), userId, workspaceId, memberId, document.type, document.version, request.headers.get("user-agent")?.slice(0, 512) ?? null, now)),
   ]);
   return Response.json({ ok: true, email, reusedAccount });
 }

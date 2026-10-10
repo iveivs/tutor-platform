@@ -49,6 +49,13 @@ services:
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
       TELEGRAM_RELAY_SECRET: ${TELEGRAM_RELAY_SECRET:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ru-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PHOTOS_PREFIX: ${S3_PHOTOS_PREFIX:-tutor-platform/lesson-photos}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
       LEGAL_DOCUMENTS_DIR: /legal-documents
     volumes:
       - ./private/legal-documents:/legal-documents:ro
@@ -94,6 +101,13 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-}
       TELEGRAM_RELAY_SECRET: ${TELEGRAM_RELAY_SECRET:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ru-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PHOTOS_PREFIX: ${S3_PHOTOS_PREFIX:-tutor-platform/lesson-photos}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
     depends_on:
       migrate:
         condition: service_completed_successfully

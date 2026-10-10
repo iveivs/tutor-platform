@@ -7,7 +7,7 @@ import { sendPasswordRecovery } from "./postgres-email";
 import { assertSameOrigin, getAuthConfig, hashPassword, randomToken, sha256, verifyPassword } from "./node-auth";
 import { enforceNodeRateLimit } from "./postgres-rate-limit";
 import { readLimitedJson } from "./request-security";
-import { baseAcceptanceTypes, LEGAL_DOCUMENT_VERSION, studentInviteAcceptanceSchema, teacherInviteAcceptanceSchema } from "./legal-consent";
+import { baseAcceptanceDocuments, LEGAL_DOCUMENT_VERSION, studentInviteAcceptanceSchema, teacherInviteAcceptanceSchema } from "./legal-consent";
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 const recoverySchema = z.object({ email: z.string().trim().email().max(254) }).strict();
@@ -77,9 +77,9 @@ export async function handleNodeTeacherInvitePost(request: Request): Promise<Res
       VALUES ($1, $2, $3, 'owner', 'active', $4, $5, $6, 'fixed')`, [memberId, workspaceId, userId, invitation.display_name, invitation.professional_title, email]);
     await client.query(`UPDATE teacher_invitations SET status = 'accepted', workspace_id = $1, accepted_at = now(), updated_at = now() WHERE id = $2`, [workspaceId, invitation.id]);
     const userAgent = request.headers.get("user-agent")?.slice(0, 512) ?? null;
-    for (const documentType of baseAcceptanceTypes) {
+    for (const document of baseAcceptanceDocuments) {
       await client.query(`INSERT INTO legal_acceptances (id, user_id, workspace_id, member_id, document_type, document_version, source, user_agent)
-        VALUES ($1, $2, $3, $4, $5, $6, 'teacher_invite', $7)`, [randomUUID(), userId, workspaceId, memberId, documentType, LEGAL_DOCUMENT_VERSION, userAgent]);
+        VALUES ($1, $2, $3, $4, $5, $6, 'teacher_invite', $7)`, [randomUUID(), userId, workspaceId, memberId, document.type, document.version, userAgent]);
     }
     await client.query("COMMIT");
     return Response.json({ ok: true, email, reusedAccount: Boolean(existing) });
@@ -136,10 +136,12 @@ export async function handleNodeStudentInvitePost(request: Request): Promise<Res
     await client.query("UPDATE members SET user_id = $1, status = 'active', updated_at = now() WHERE id = $2", [userId, invitation.member_id]);
     await client.query("UPDATE invitations SET accepted_at = now() WHERE id = $1", [invitation.id]);
     const userAgent = request.headers.get("user-agent")?.slice(0, 512) ?? null;
-    const acceptanceTypes = parsed.data.participantStatus === "legal_representative" ? [...baseAcceptanceTypes, "parental_consent"] : baseAcceptanceTypes;
-    for (const documentType of acceptanceTypes) {
+    const acceptanceDocuments = parsed.data.participantStatus === "legal_representative"
+      ? [...baseAcceptanceDocuments, { type: "parental_consent", version: LEGAL_DOCUMENT_VERSION }]
+      : baseAcceptanceDocuments;
+    for (const document of acceptanceDocuments) {
       await client.query(`INSERT INTO legal_acceptances (id, user_id, workspace_id, member_id, document_type, document_version, source, subject_context, user_agent)
-        VALUES ($1, $2, $3, $4, $5, $6, 'student_invite', $7, $8)`, [randomUUID(), userId, invitation.workspace_id, invitation.member_id, documentType, LEGAL_DOCUMENT_VERSION, parsed.data.participantStatus, userAgent]);
+        VALUES ($1, $2, $3, $4, $5, $6, 'student_invite', $7, $8)`, [randomUUID(), userId, invitation.workspace_id, invitation.member_id, document.type, document.version, parsed.data.participantStatus, userAgent]);
     }
     await client.query("COMMIT");
     return Response.json({ ok: true, email, reusedAccount: Boolean(existing) });

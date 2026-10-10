@@ -22,6 +22,7 @@ export function TeacherInviteAccept({ token }: { token: string }) {
   const [pending, setPending] = useState(false);
   const [existingAccount, setExistingAccount] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedContentRules, setAcceptedContentRules] = useState(false);
   const [acceptedPersonalData, setAcceptedPersonalData] = useState(false);
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function TeacherInviteAccept({ token }: { token: string }) {
     setPending(true);
     try {
       const response = await fetch("/api/auth/teacher-invite", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, password, acceptedTerms, acceptedPersonalData }),
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, password, acceptedTerms, acceptedContentRules, acceptedPersonalData }),
       });
       const data = await response.json() as { error?: string; existingAccount?: boolean };
       if (!response.ok) { if (data.existingAccount) setExistingAccount(true); throw new Error(data.error ?? "Не удалось создать кабинет"); }
@@ -56,11 +57,12 @@ export function TeacherInviteAccept({ token }: { token: string }) {
       <div className="space-y-2"><Label>Email</Label><Input value={email} disabled className="h-12 rounded-xl opacity-80" /></div>
       <div className="space-y-2"><Label htmlFor="teacher-password">{existingAccount ? "Введите прежний пароль" : "Придумайте пароль"}</Label><Input id="teacher-password" type="password" autoComplete={existingAccount ? "current-password" : "new-password"} minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required className="h-12 rounded-xl" /></div>
       <div className="space-y-2"><Label htmlFor="teacher-password-confirmation">Повторите пароль</Label><Input id="teacher-password-confirmation" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required className="h-12 rounded-xl" /></div>
-      <label className="flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedTerms} onCheckedChange={(value) => setAcceptedTerms(value === true)} className="mt-0.5" /><span>Я принимаю <Link href="/legal/terms" target="_blank" className="text-indigo-600 underline">Пользовательское соглашение</Link> и <Link href="/legal/content-rules" target="_blank" className="text-indigo-600 underline">Правила размещения контента</Link>.</span></label>
+      <label className="flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedTerms} onCheckedChange={(value) => setAcceptedTerms(value === true)} className="mt-0.5" /><span>Я принимаю <Link href="/legal/terms" target="_blank" className="text-indigo-600 underline">Пользовательское соглашение</Link>.</span></label>
+      <label className="flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedContentRules} onCheckedChange={(value) => setAcceptedContentRules(value === true)} className="mt-0.5" /><span>Я принимаю <Link href="/legal/content-rules" target="_blank" className="text-indigo-600 underline">Правила размещения контента и фотографий</Link>, подтверждаю наличие необходимых прав и согласий и несу ответственность за загружаемые мной тексты и изображения.</span></label>
       <label className="flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedPersonalData} onCheckedChange={(value) => setAcceptedPersonalData(value === true)} className="mt-0.5" /><span>Я даю отдельное <Link href="/legal/personal-data-consent" target="_blank" className="text-indigo-600 underline">согласие на обработку персональных данных</Link> и ознакомился(-ась) с <Link href="/legal/privacy" target="_blank" className="text-indigo-600 underline">Политикой</Link>.</span></label>
       <p className="rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-800">После активации вы получите отдельный кабинет преподавателя с бессрочным бесплатным доступом.</p>
       {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-      <Button type="submit" disabled={pending || !acceptedTerms || !acceptedPersonalData} className="h-12 w-full rounded-xl bg-indigo-600">{pending ? "Создаём кабинет…" : "Активировать кабинет"}</Button>
+      <Button type="submit" disabled={pending || !acceptedTerms || !acceptedContentRules || !acceptedPersonalData} className="h-12 w-full rounded-xl bg-indigo-600">{pending ? "Создаём кабинет…" : "Активировать кабинет"}</Button>
     </form>}
     <LegalLinks className="mt-7" />
   </section></main>;

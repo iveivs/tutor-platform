@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectChangedSections, syncDelayForMoscowHour } from "./incremental-sync";
+import { collectChangedSections, syncDelayForVisibility } from "./incremental-sync";
 
 describe("incremental synchronization", () => {
   it("collects only known changed sections and advances to the newest cursor", () => {
@@ -12,11 +12,8 @@ describe("incremental synchronization", () => {
     expect(result.cursor).toBe(15);
   });
 
-  it("uses the agreed daytime and nighttime schedule", () => {
-    expect(syncDelayForMoscowHour(0)).toBe(60_000);
-    expect(syncDelayForMoscowHour(1)).toBe(600_000);
-    expect(syncDelayForMoscowHour(6)).toBe(600_000);
-    expect(syncDelayForMoscowHour(7)).toBe(60_000);
-    expect(syncDelayForMoscowHour(23)).toBe(60_000);
+  it("polls an active tab every 30 seconds and a hidden tab every 5 minutes", () => {
+    expect(syncDelayForVisibility(true)).toBe(30_000);
+    expect(syncDelayForVisibility(false)).toBe(300_000);
   });
 });

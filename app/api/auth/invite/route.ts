@@ -3,7 +3,7 @@ import { assertSameOrigin, getAuthConfig, sha256 } from "@/lib/auth";
 import { readLimitedJson } from "@/lib/request-security";
 import { createIdentity, signInExistingIdentity } from "@/lib/supabase-identity";
 import { handleNodeStudentInviteGet, handleNodeStudentInvitePost } from "@/lib/node-account-endpoints";
-import { baseAcceptanceTypes, LEGAL_DOCUMENT_VERSION, studentInviteAcceptanceSchema } from "@/lib/legal-consent";
+import { baseAcceptanceDocuments, LEGAL_DOCUMENT_VERSION, studentInviteAcceptanceSchema } from "@/lib/legal-consent";
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}$/;
 
@@ -62,17 +62,19 @@ export async function POST(request: Request) {
   }
 
   const now = Date.now();
-  const acceptanceTypes = parsed.data.participantStatus === "legal_representative" ? [...baseAcceptanceTypes, "parental_consent"] : baseAcceptanceTypes;
+  const acceptanceDocuments = parsed.data.participantStatus === "legal_representative"
+    ? [...baseAcceptanceDocuments, { type: "parental_consent", version: LEGAL_DOCUMENT_VERSION }]
+    : baseAcceptanceDocuments;
   await db.batch([
     db.prepare(`INSERT INTO users (id, auth_subject, email, full_name) VALUES (?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET auth_subject = excluded.auth_subject, email = excluded.email, full_name = excluded.full_name, updated_at = ?`)
       .bind(user.id, identity.id, email, invite.display_name, now),
     db.prepare("UPDATE members SET user_id = ?, status = 'active', updated_at = ? WHERE id = ?").bind(user.id, now, invite.member_id),
     db.prepare("UPDATE invitations SET accepted_at = ? WHERE id = ?").bind(now, invite.id),
-    ...acceptanceTypes.map((documentType) => db.prepare(`INSERT INTO legal_acceptances
+    ...acceptanceDocuments.map((document) => db.prepare(`INSERT INTO legal_acceptances
       (id, user_id, workspace_id, member_id, document_type, document_version, source, subject_context, user_agent, accepted_at)
       VALUES (?, ?, (SELECT workspace_id FROM members WHERE id = ?), ?, ?, ?, 'student_invite', ?, ?, ?)`)
-      .bind(crypto.randomUUID(), user.id, invite.member_id, invite.member_id, documentType, LEGAL_DOCUMENT_VERSION, parsed.data.participantStatus, request.headers.get("user-agent")?.slice(0, 512) ?? null, now)),
+      .bind(crypto.randomUUID(), user.id, invite.member_id, invite.member_id, document.type, document.version, parsed.data.participantStatus, request.headers.get("user-agent")?.slice(0, 512) ?? null, now)),
   ]);
   return Response.json({ ok: true, email, reusedAccount });
 }

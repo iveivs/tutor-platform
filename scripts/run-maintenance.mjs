@@ -1,4 +1,5 @@
 import pg from "pg";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -8,6 +9,45 @@ if (!Number.isFinite(intervalMs) || intervalMs < 10_000) throw new Error("JOB_IN
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 let stopping = false;
 let wakeSleep;
+
+function lessonPhotoStorage() {
+  const endpoint = process.env.S3_ENDPOINT?.trim();
+  const bucket = process.env.S3_BUCKET?.trim();
+  const accessKeyId = process.env.S3_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY?.trim();
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+  const configuredRegion = process.env.S3_REGION?.trim();
+  return {
+    bucket,
+    client: new S3Client({
+      endpoint,
+      region: configuredRegion && configuredRegion !== "auto" ? configuredRegion : "ru-1",
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+      credentials: { accessKeyId, secretAccessKey },
+    }),
+  };
+}
+
+const photoStorage = lessonPhotoStorage();
+
+async function deleteExpiredLessonPhotos(client) {
+  if (!photoStorage) return { deleted: 0, failed: 0 };
+  const due = await client.query(`SELECT id, object_key FROM lesson_attachments
+    WHERE status = 'deleting' OR (status = 'active' AND expires_at <= now())
+    ORDER BY expires_at LIMIT 100`);
+  let deleted = 0;
+  let failed = 0;
+  for (const attachment of due.rows) {
+    try {
+      await photoStorage.client.send(new DeleteObjectCommand({ Bucket: photoStorage.bucket, Key: String(attachment.object_key) }));
+      await client.query("UPDATE lesson_attachments SET status = 'deleted', deleted_at = COALESCE(deleted_at, now()), updated_at = now() WHERE id = $1", [attachment.id]);
+      deleted += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { deleted, failed };
+}
 
 async function enqueueTelegramReminders(client) {
   await client.query(`WITH upcoming AS (
@@ -154,12 +194,13 @@ async function runOnce() {
     for (const workspace of workspaces.rows) await settleWorkspace(client, String(workspace.id), now);
     await enqueueTelegramReminders(client);
     await deliverTelegramMessages(client);
+    const photoCleanup = await deleteExpiredLessonPhotos(client);
     await client.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days' OR revoked_at < now() - interval '7 days'");
     await client.query("DELETE FROM auth_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_link_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_deliveries WHERE status IN ('sent', 'cancelled') AND updated_at < now() - interval '90 days'");
     await client.query("DELETE FROM rate_limit_buckets WHERE expires_at < now() - interval '1 hour'");
-    await client.query("UPDATE job_runs SET status = 'succeeded', finished_at = now(), detail = $1 WHERE id = $2", [`processed ${workspaces.rowCount} workspaces`, runId]);
+    await client.query("UPDATE job_runs SET status = 'succeeded', finished_at = now(), detail = $1 WHERE id = $2", [`processed ${workspaces.rowCount} workspaces; photos deleted ${photoCleanup.deleted}, failed ${photoCleanup.failed}`, runId]);
   } catch (error) {
     if (runId) await client.query("UPDATE job_runs SET status = 'failed', finished_at = now(), detail = $1 WHERE id = $2", [error instanceof Error ? error.message.slice(0, 1000) : "unknown error", runId]).catch(() => undefined);
     console.error(JSON.stringify({ event: "lesson_maintenance_failed", reason: error instanceof Error ? error.name : "unknown" }));

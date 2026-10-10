@@ -139,7 +139,7 @@ export const legalAcceptances = pgTable("legal_acceptances", {
   acceptedAt: instant("accepted_at").notNull().defaultNow(),
 }, (table) => [
   check("legal_acceptances_document_type_check", sql`${table.documentType} in ('terms', 'personal_data_consent', 'content_rules', 'parental_consent')`),
-  check("legal_acceptances_source_check", sql`${table.source} in ('teacher_invite', 'student_invite')`),
+  check("legal_acceptances_source_check", sql`${table.source} in ('teacher_invite', 'student_invite', 'in_app')`),
   check("legal_acceptances_subject_context_check", sql`${table.subjectContext} is null or ${table.subjectContext} in ('adult', 'legal_representative')`),
   index("idx_legal_acceptances_user_accepted").on(table.userId, table.acceptedAt),
   index("idx_legal_acceptances_member_accepted").on(table.memberId, table.acceptedAt),
@@ -202,6 +202,45 @@ export const lessons = pgTable("lessons", {
   index("idx_lessons_group_id").on(table.groupId),
   index("idx_lessons_pending_charge").on(table.chargeStatus, table.startsAt),
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
+]);
+
+export const lessonNotes = pgTable("lesson_notes", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  lessonId: text("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  authorMemberId: text("author_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  visibility: text("visibility").notNull().default("shared"),
+  body: text("body").notNull(),
+  ...timestamps(),
+}, (table) => [
+  check("lesson_notes_visibility_check", sql`${table.visibility} in ('shared', 'teacher_private')`),
+  check("lesson_notes_body_length_check", sql`char_length(${table.body}) between 1 and 4000`),
+  uniqueIndex("lesson_notes_author_visibility_unique").on(table.lessonId, table.authorMemberId, table.visibility),
+  index("idx_lesson_notes_workspace_lesson").on(table.workspaceId, table.lessonId),
+]);
+
+export const lessonAttachments = pgTable("lesson_attachments", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  uploadedByMemberId: text("uploaded_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  objectKey: text("object_key").notNull(),
+  contentType: text("content_type").notNull().default("image/webp"),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: instant("expires_at").notNull(),
+  deletedAt: instant("deleted_at"),
+  ...timestamps(),
+}, (table) => [
+  check("lesson_attachments_status_check", sql`${table.status} in ('active', 'deleting', 'deleted')`),
+  check("lesson_attachments_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 5242880`),
+  check("lesson_attachments_dimensions_check", sql`${table.width} > 0 and ${table.height} > 0`),
+  uniqueIndex("lesson_attachments_object_key_unique").on(table.objectKey),
+  index("idx_lesson_attachments_lesson_active").on(table.lessonId, table.status),
+  index("idx_lesson_attachments_expiry").on(table.status, table.expiresAt),
+  index("idx_lesson_attachments_workspace_created").on(table.workspaceId, table.createdAt),
 ]);
 
 export const lessonEvents = pgTable("lesson_events", {
