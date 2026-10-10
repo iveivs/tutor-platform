@@ -49,6 +49,24 @@ async function deleteExpiredLessonPhotos(client) {
   return { deleted, failed };
 }
 
+async function deleteTeacherMaterials(client) {
+  if (!photoStorage) return { deleted: 0, failed: 0 };
+  const due = await client.query(`SELECT id, object_key FROM teacher_resources
+    WHERE status = 'deleting' ORDER BY updated_at LIMIT 100`);
+  let deleted = 0;
+  let failed = 0;
+  for (const resource of due.rows) {
+    try {
+      await photoStorage.client.send(new DeleteObjectCommand({ Bucket: photoStorage.bucket, Key: String(resource.object_key) }));
+      await client.query("UPDATE teacher_resources SET status = 'deleted', deleted_at = COALESCE(deleted_at, now()), updated_at = now() WHERE id = $1", [resource.id]);
+      deleted += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { deleted, failed };
+}
+
 async function enqueueTelegramReminders(client) {
   await client.query(`WITH upcoming AS (
       SELECT min(l.id) AS lesson_id, COALESCE(l.group_id, l.id) AS lesson_key, l.workspace_id, l.student_id,
@@ -195,12 +213,13 @@ async function runOnce() {
     await enqueueTelegramReminders(client);
     await deliverTelegramMessages(client);
     const photoCleanup = await deleteExpiredLessonPhotos(client);
+    const materialCleanup = await deleteTeacherMaterials(client);
     await client.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days' OR revoked_at < now() - interval '7 days'");
     await client.query("DELETE FROM auth_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_link_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_deliveries WHERE status IN ('sent', 'cancelled') AND updated_at < now() - interval '90 days'");
     await client.query("DELETE FROM rate_limit_buckets WHERE expires_at < now() - interval '1 hour'");
-    await client.query("UPDATE job_runs SET status = 'succeeded', finished_at = now(), detail = $1 WHERE id = $2", [`processed ${workspaces.rowCount} workspaces; photos deleted ${photoCleanup.deleted}, failed ${photoCleanup.failed}`, runId]);
+    await client.query("UPDATE job_runs SET status = 'succeeded', finished_at = now(), detail = $1 WHERE id = $2", [`processed ${workspaces.rowCount} workspaces; photos deleted ${photoCleanup.deleted}, failed ${photoCleanup.failed}; materials deleted ${materialCleanup.deleted}, failed ${materialCleanup.failed}`, runId]);
   } catch (error) {
     if (runId) await client.query("UPDATE job_runs SET status = 'failed', finished_at = now(), detail = $1 WHERE id = $2", [error instanceof Error ? error.message.slice(0, 1000) : "unknown error", runId]).catch(() => undefined);
     console.error(JSON.stringify({ event: "lesson_maintenance_failed", reason: error instanceof Error ? error.name : "unknown" }));

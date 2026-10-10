@@ -37,7 +37,8 @@ function storageConfig() {
     region: configuredRegion && configuredRegion !== "auto" ? configuredRegion : "ru-1",
     accessKeyId: required(process.env.S3_ACCESS_KEY_ID, "S3_ACCESS_KEY_ID"),
     secretAccessKey: required(process.env.S3_SECRET_ACCESS_KEY, "S3_SECRET_ACCESS_KEY"),
-    prefix: (process.env.S3_PHOTOS_PREFIX?.trim() || "tutor-platform/lesson-photos").replace(/^\/+|\/+$/g, ""),
+    photosPrefix: (process.env.S3_PHOTOS_PREFIX?.trim() || "tutor-platform/lesson-photos").replace(/^\/+|\/+$/g, ""),
+    materialsPrefix: (process.env.S3_MATERIALS_PREFIX?.trim() || "tutor-platform/teacher-materials").replace(/^\/+|\/+$/g, ""),
   };
 }
 
@@ -49,12 +50,17 @@ function client() {
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
   });
-  return { client: s3Client, bucket: config.bucket, prefix: config.prefix };
+  return { client: s3Client, bucket: config.bucket, photosPrefix: config.photosPrefix, materialsPrefix: config.materialsPrefix };
 }
 
 export function lessonPhotoObjectKey(workspaceId: string, lessonId: string, attachmentId: string) {
-  const { prefix } = client();
-  return `${prefix}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(lessonId)}/${attachmentId}.webp`;
+  const { photosPrefix } = client();
+  return `${photosPrefix}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(lessonId)}/${attachmentId}.webp`;
+}
+
+export function teacherMaterialObjectKey(workspaceId: string, resourceId: string, extension: string) {
+  const { materialsPrefix } = client();
+  return `${materialsPrefix}/${encodeURIComponent(workspaceId)}/${resourceId}.${extension}`;
 }
 
 export async function putLessonPhoto(objectKey: string, body: Uint8Array) {
@@ -77,6 +83,30 @@ export async function getLessonPhoto(objectKey: string) {
 }
 
 export async function deleteLessonPhoto(objectKey: string) {
+  const storage = client();
+  await storage.client.send(new DeleteObjectCommand({ Bucket: storage.bucket, Key: objectKey }));
+}
+
+export async function putTeacherMaterial(objectKey: string, body: Uint8Array, contentType: string, contentSha256: string) {
+  const storage = client();
+  await storage.client.send(new PutObjectCommand({
+    Bucket: storage.bucket,
+    Key: objectKey,
+    Body: body,
+    ContentType: contentType,
+    CacheControl: "private, no-store",
+    Metadata: { sha256: contentSha256, kind: "teacher-material" },
+  }));
+}
+
+export async function getTeacherMaterial(objectKey: string) {
+  const storage = client();
+  const result = await storage.client.send(new GetObjectCommand({ Bucket: storage.bucket, Key: objectKey }));
+  if (!result.Body) throw new Error("S3 object body is empty");
+  return result.Body.transformToByteArray();
+}
+
+export async function deleteTeacherMaterial(objectKey: string) {
   const storage = client();
   await storage.client.send(new DeleteObjectCommand({ Bucket: storage.bucket, Key: objectKey }));
 }

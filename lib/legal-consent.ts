@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const LEGAL_DOCUMENT_VERSION = "1.0";
-export const CONTENT_RULES_VERSION = "1.1";
+export const CONTENT_RULES_VERSION = "1.2";
 
 export const teacherInviteAcceptanceSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),

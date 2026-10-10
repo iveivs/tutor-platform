@@ -7,7 +7,7 @@ export const legalDocuments = {
   terms: { title: "Пользовательское соглашение", file: "terms.md", pdf: "01-user-agreement.pdf" },
   privacy: { title: "Политика обработки персональных данных", file: "privacy.md", pdf: "02-privacy-policy.pdf" },
   "personal-data-consent": { title: "Согласие на обработку персональных данных", file: "personal-data-consent.md", pdf: "03-personal-data-consent.pdf" },
-  "content-rules": { title: "Правила размещения контента и фотографий", file: "content-rules.md", pdf: "04-user-content-and-photo-rules.pdf" },
+  "content-rules": { title: "Правила размещения пользовательского контента", file: "content-rules.md", pdf: "04-user-content-and-photo-rules.pdf" },
   "parental-consent": { title: "Согласие законного представителя", file: "parental-consent.md", pdf: "05-minor-representative-consent.pdf" },
 } as const;
 

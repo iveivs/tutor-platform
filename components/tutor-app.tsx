@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, Camera, ChevronLeft, ChevronRight, Clock3, Copy,
-  History as HistoryIcon, Home, LogOut, Minus, NotebookPen, Pencil, Plus, Search, Send, Settings, ShieldCheck, Trash2, Upload, UserRound, UsersRound, WalletCards,
+  Download, FileText, FolderOpen, History as HistoryIcon, Home, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, Search, Send, Settings, ShieldCheck, Trash2, Unlink, Upload, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BrandIcon } from "@/components/brand-icon";
@@ -23,7 +23,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { minutesToInputTime } from "@/lib/availability";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 
-type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "settings";
+type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "materials" | "settings";
 type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean };
 type LessonDraft = { date: string; time: string; studentId?: string; repeat: "once" | "weekly"; lessonCount: 1 | 2; lessonType: "regular" | "trial"; trialGuestName?: string; trialGuestEmail?: string; trialGuestPhone?: string; trialGuestNote?: string };
@@ -45,7 +45,9 @@ type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: Recu
 type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };
 type LessonMaterialPhoto = { id: string; authorName: string; mine: boolean; canDelete: boolean; byteSize: number; width: number; height: number; expiresAt: number; createdAt: number; url: string };
-type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[] };
+type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number };
+type TeacherMaterialsData = { contentRulesAccepted: boolean; storageConfigured: boolean; maxFileBytes: number; maxUploadsPerMonth: number; maxStorageBytes: number; uploadsThisMonth: number; storageBytes: number; resources: TeacherMaterial[] };
+type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[] };
 
 async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
   let response = await fetch(input, init);
@@ -84,6 +86,15 @@ async function saveLessonMaterial(body: Record<string, unknown>) {
   const result = await response.json() as { error?: string };
   if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить материалы урока");
 }
+
+async function readTeacherMaterials() {
+  const response = await appFetch("/api/teacher-materials", { cache: "no-store" });
+  const result = await response.json() as TeacherMaterialsData & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить библиотеку");
+  return result;
+}
+
+const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ` : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
 
 const statusStyles = {
   paid: "bg-emerald-50 text-emerald-700 ring-emerald-100",
@@ -345,6 +356,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "history" && <HistoryView events={historyEvents} students={students} onReversePayment={reversePayment} />}
         {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} onOpenRequests={() => setView("requests")} />}
+        {view === "materials" && <TeacherMaterialsView />}
         {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
       </section>
       <MobileNav view={view} setView={setView} />
@@ -362,6 +374,7 @@ function Sidebar({ view, setView, name, professionalTitle, onLogout, requestCoun
     { id: "history" as View, label: "История", icon: HistoryIcon },
     { id: "requests" as View, label: "Запросы", icon: Bell, count: requestCount },
     { id: "notifications" as View, label: "Уведомления", icon: Bell, count: notificationCount },
+    { id: "materials" as View, label: "Материалы", icon: FolderOpen },
     { id: "settings" as View, label: "Настройки", icon: Settings },
   ];
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-slate-200 bg-white lg:flex">
@@ -376,8 +389,8 @@ function MobileHeader({ name, professionalTitle, notificationCount, onNotificati
 }
 
 function MobileNav({ view, setView }: { view: View; setView: (view: View) => void }) {
-  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "history" as View, label: "История", icon: HistoryIcon }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "settings" as View, label: "Настройки", icon: Settings }];
-  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
+  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "history" as View, label: "История", icon: HistoryIcon }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "materials" as View, label: "Материалы", icon: FolderOpen }, { id: "settings" as View, label: "Настройки", icon: Settings }];
+  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-5 sm:size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
 }
 
 function Shell({ eyebrow, title, actions, children }: { eyebrow?: string; title: string; actions?: React.ReactNode; children: React.ReactNode }) {
@@ -550,6 +563,60 @@ function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onR
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+function TeacherMaterialsView() {
+  const [data, setData] = useState<TeacherMaterialsData | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [acceptedRules, setAcceptedRules] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => setData(await readTeacherMaterials()), []);
+  useEffect(() => { let active = true; void readTeacherMaterials().then((next) => active && setData(next)).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Не удалось загрузить библиотеку")); return () => { active = false; }; }, []);
+  const acceptRules = async () => {
+    if (!acceptedRules) return;
+    setPending(true); setError("");
+    try { await saveLessonMaterial({ action: "acceptContentRules", accepted: true }); await load(); toast.success("Правила приняты"); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось сохранить согласие"); }
+    finally { setPending(false); }
+  };
+  const upload = async () => {
+    if (!file || !data) return;
+    if (file.size > data.maxFileBytes) { setError("Документ должен быть не больше 25 МБ"); return; }
+    setPending(true); setError("");
+    try {
+      const form = new FormData(); form.set("file", file); form.set("title", title.trim());
+      const response = await appFetch("/api/teacher-materials", { method: "POST", body: form });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить документ");
+      setFile(null); setTitle(""); await load(); toast.success("Материал добавлен в библиотеку");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить документ"); }
+    finally { setPending(false); }
+  };
+  const remove = async (resource: TeacherMaterial) => {
+    if (!window.confirm(`Удалить «${resource.title}» из библиотеки и всех уроков?`)) return;
+    setPending(true); setError("");
+    try {
+      const response = await appFetch(`/api/teacher-materials?id=${encodeURIComponent(resource.id)}`, { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось удалить материал");
+      await load(); toast.success("Материал удалён");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить материал"); }
+    finally { setPending(false); }
+  };
+  return <Shell title="Материалы" eyebrow="Библиотека преподавателя"><div className="space-y-6">
+    {error && <p className="max-w-4xl rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
+    {!data && !error && <div className="card max-w-4xl p-8 text-center text-slate-500">Загружаю библиотеку…</div>}
+    {data && !data.contentRulesAccepted && <section className="card max-w-3xl border-indigo-200 bg-indigo-50 p-6"><h2 className="text-xl font-bold text-indigo-950">Правила пользовательского контента</h2><p className="mt-2 text-sm leading-6 text-indigo-900">Перед загрузкой документов подтвердите, что у вас есть права на их хранение и передачу ученикам.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента</a> и несу ответственность за загружаемые материалы.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
+    {data?.contentRulesAccepted && <>
+      <section className="card max-w-4xl p-6 md:p-8"><div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="text-xl font-bold">Добавить документ</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">PDF, DOC или DOCX до 25 МБ. Файл хранится один раз и может использоваться в любом количестве уроков.</p></div><div className="text-sm text-slate-500"><p>{data.uploadsThisMonth} из {data.maxUploadsPerMonth} загрузок в этом месяце</p><p>{formatBytes(data.storageBytes)} из {formatBytes(data.maxStorageBytes)}</p></div></div>
+        {!data.storageConfigured && <p className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">S3-хранилище документов пока не настроено.</p>}
+        {data.storageConfigured && <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="Например: Упражнения на координацию" /></Field><Field label="Файл"><Input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending} onChange={(event) => { const next = event.target.files?.[0] ?? null; setFile(next); if (next && !title) setTitle(next.name.replace(/\.(pdf|docx?)$/i, "")); }} /></Field><Button className="bg-indigo-600" disabled={pending || !file || !title.trim() || data.uploadsThisMonth >= data.maxUploadsPerMonth} onClick={() => void upload()}><Upload />{pending ? "Загружаю…" : "Добавить"}</Button></div>}
+      </section>
+      <section className="card max-w-4xl overflow-hidden"><div className="border-b border-slate-200 p-5 md:px-7"><h2 className="text-xl font-bold">Моя библиотека</h2><p className="mt-1 text-sm text-slate-500">Документы не удаляются автоматически. Удаляйте ненужные материалы вручную.</p></div>{data.resources.length ? <div className="divide-y divide-slate-200">{data.resources.map((resource) => <article key={resource.id} className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:px-7"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><FileText className="size-5" /></span><div className="min-w-0 flex-1"><strong className="block truncate">{resource.title}</strong><p className="mt-1 truncate text-sm text-slate-500">{resource.filename} · {formatBytes(resource.byteSize)} · в {plural(resource.lessonCount ?? 0, "уроке", "уроках", "уроках")}</p></div><div className="flex gap-2"><Button asChild size="sm" variant="outline"><a href={resource.url}><Download />Скачать</a></Button><Button size="sm" variant="outline" className="text-rose-600" disabled={pending} onClick={() => void remove(resource)}><Trash2 />Удалить</Button></div></article>)}</div> : <Empty text="В библиотеке пока нет документов" />}</section>
+    </>}
+  </div></Shell>;
+}
+
 function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability, onLogout, isPlatformAdmin }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void>; onLogout?: () => void; isPlatformAdmin: boolean }) {
   const [name, setName] = useState(profile.name);
   const [professionalTitle, setProfessionalTitle] = useState(profile.professionalTitle);
@@ -643,7 +710,7 @@ function StudentPortal({ student, teacherName, lessons, entries, historyEvents, 
     <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><LogOut className="size-4" />Выйти</button>
     <div className="mb-7 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><BrandIcon className="size-12" /><div className="min-w-0"><h1 className="truncate text-3xl font-bold">Привет, {student.name.split(" ")[0]}</h1><p className="mt-1 text-slate-500">Ваше расписание занятий</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><span className="grid size-12 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">{student.initials.slice(0, 1)}</span></div></div>
     {notifications.some((item) => !item.read) && <button onClick={() => void onReadNotifications()} className="mb-4 flex w-full items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-900"><Bell className="mt-0.5 size-5 shrink-0" /><span><strong className="block">{notifications.find((item) => !item.read)?.title}</strong><span className="mt-1 block text-sm">{notifications.find((item) => !item.read)?.body}</span></span></button>}
-    {nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">{teacherName}</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><Button type="button" variant="outline" className="mt-5 w-full" onClick={() => onMaterials(nextLesson)}><NotebookPen />Заметки и фотографии</Button><div className="mt-3 grid gap-3 sm:grid-cols-2"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}
+    {nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">{teacherName}</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><Button type="button" variant="outline" className="mt-5 w-full" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button><div className="mt-3 grid gap-3 sm:grid-cols-2"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}
     {futureLessons.length > 1 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Дальнейшие занятия</h2><div className="card divide-y">{futureLessons.slice(1).map((lesson) => <article key={lesson.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><strong className="capitalize">{dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" })}</strong><p className="mt-1 text-sm text-slate-500">{lesson.time}–{lesson.end}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[lesson.status]}`}>{lesson.label}</span></div><Button type="button" size="sm" variant="outline" className="mt-3 w-full" onClick={() => onMaterials(lesson)}><NotebookPen />Материалы урока</Button><div className="mt-2 grid grid-cols-2 gap-2"><StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} /></div></article>)}</div></section>}
     {recentLessons.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Недавние уроки</h2><div className="card divide-y">{recentLessons.map((lesson) => <button key={lesson.id} type="button" onClick={() => onMaterials(lesson)} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50"><span><strong className="block capitalize">{dateTitle(lesson.date, { day: "numeric", month: "long" })}</strong><span className="mt-1 block text-sm text-slate-500">{lesson.time}–{lesson.end}</span></span><span className="flex items-center gap-2 text-sm font-semibold text-indigo-600"><NotebookPen className="size-4" />Материалы</span></button>)}</div></section>}
     <section className={`mt-4 rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}><div className="flex items-center gap-3"><WalletCards className="size-6" /><div><p className="font-semibold opacity-70">Баланс</p><p className="text-2xl font-bold">{student.balance} занятий</p></div></div>{student.balance < 0 && <p className="mt-3">Необходимо оплатить {Math.abs(student.balance)} занятий</p>}</section>
@@ -659,6 +726,7 @@ function LessonMaterialsDialog({ lesson, role, onOpenChange }: { lesson: Lesson 
   const [data, setData] = useState<LessonMaterialsData | null>(null);
   const [sharedNote, setSharedNote] = useState("");
   const [privateNote, setPrivateNote] = useState("");
+  const [selectedResource, setSelectedResource] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -728,17 +796,33 @@ function LessonMaterialsDialog({ lesson, role, onOpenChange }: { lesson: Lesson 
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить фотографию"); }
     finally { setPending(false); }
   };
+  const changeResourceLink = async (resourceId: string, attach: boolean) => {
+    if (!lesson) return;
+    setPending(true); setError("");
+    try {
+      await saveLessonMaterial({ action: attach ? "attachResource" : "detachResource", lessonId: lesson.id, resourceId });
+      setSelectedResource(""); await load(); toast.success(attach ? "Документ добавлен к уроку" : "Документ откреплён от урока");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось изменить документы урока"); }
+    finally { setPending(false); }
+  };
   const sharedMine = data?.notes.find((note) => note.mine && note.visibility === "shared");
   const privateMine = data?.notes.find((note) => note.mine && note.visibility === "teacher_private");
   const otherNotes = data?.notes.filter((note) => !note.mine && note.visibility === "shared") ?? [];
   const minePhotoCount = data?.attachments.filter((photo) => photo.mine).length ?? 0;
-  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-3xl"><DialogHeader><DialogTitle className="text-2xl">Материалы урока</DialogTitle><DialogDescription>{lesson ? `${lesson.name} · ${dateTitle(lesson.date, { day: "numeric", month: "long", year: "numeric" })}, ${lesson.time}` : "Заметки и фотографии"}</DialogDescription></DialogHeader>
+  const linkedResourceIds = new Set(data?.documents.map((document) => document.id) ?? []);
+  const availableResources = data?.library.filter((resource) => !linkedResourceIds.has(resource.id)) ?? [];
+  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-3xl"><DialogHeader><DialogTitle className="text-2xl">Материалы урока</DialogTitle><DialogDescription>{lesson ? `${lesson.name} · ${dateTitle(lesson.date, { day: "numeric", month: "long", year: "numeric" })}, ${lesson.time}` : "Заметки, документы и фотографии"}</DialogDescription></DialogHeader>
     {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
     {!data && !error && <p className="py-10 text-center text-slate-500">Загружаю материалы…</p>}
-    {data && !data.contentRulesAccepted && <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><h3 className="font-bold text-indigo-950">Правила пользовательского контента</h3><p className="mt-2 text-sm leading-6 text-indigo-900">Перед первой заметкой или фотографией подтвердите права на материалы. Запрещено размещать чужие персональные данные, документы и изображения людей без необходимых согласий.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента и фотографий</a>, подтверждаю наличие необходимых прав и согласий и несу ответственность за загружаемые тексты и изображения.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
+    {data && !data.contentRulesAccepted && <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><h3 className="font-bold text-indigo-950">Правила пользовательского контента</h3><p className="mt-2 text-sm leading-6 text-indigo-900">Перед первой заметкой, фотографией или документом подтвердите права на материалы. Запрещено размещать чужие персональные данные, документы и изображения людей без необходимых согласий.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента</a>, подтверждаю наличие необходимых прав и согласий и несу ответственность за загружаемые тексты, документы и изображения.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
     {data?.contentRulesAccepted && <div className="space-y-6"><section><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="shared-lesson-note" className="font-bold">{role === "student" ? "Моя заметка преподавателю" : "Общая заметка ученику"}</Label><span className="text-xs text-slate-400">{sharedNote.length}/4000</span></div><Textarea id="shared-lesson-note" value={sharedNote} maxLength={4000} rows={5} onChange={(event) => setSharedNote(event.target.value)} placeholder={role === "student" ? "Вопросы, домашнее задание или комментарий к уроку" : "Домашнее задание, рекомендации или комментарий к уроку"} /><div className="mt-3 flex justify-end gap-2">{sharedMine && <Button variant="outline" disabled={pending} onClick={() => void removeNote(sharedMine.id)}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || !sharedNote.trim() || sharedNote.trim() === sharedMine?.body} onClick={() => void saveNote("shared", sharedNote)}>Сохранить заметку</Button></div></section>
       {role !== "student" && <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="private-lesson-note" className="font-bold">Личная заметка преподавателя</Label><span className="text-xs text-slate-400">{privateNote.length}/4000</span></div><p className="mb-3 text-xs text-slate-500">Ученик её не увидит.</p><Textarea id="private-lesson-note" value={privateNote} maxLength={4000} rows={4} onChange={(event) => setPrivateNote(event.target.value)} placeholder="Личные наблюдения по уроку" /><div className="mt-3 flex justify-end gap-2">{privateMine && <Button variant="outline" disabled={pending} onClick={() => void removeNote(privateMine.id)}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || !privateNote.trim() || privateNote.trim() === privateMine?.body} onClick={() => void saveNote("teacher_private", privateNote)}>Сохранить личную заметку</Button></div></section>}
       {otherNotes.length > 0 && <section><h3 className="mb-3 font-bold">{role === "student" ? "Заметка преподавателя" : "Заметка ученика"}</h3><div className="space-y-3">{otherNotes.map((note) => <article key={note.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{note.authorName}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{note.body}</p></div>{note.canDelete && <Button type="button" size="icon" variant="ghost" disabled={pending} aria-label="Удалить заметку" onClick={() => void removeNote(note.id)}><Trash2 className="size-4" /></Button>}</div></article>)}</div></section>}
+      <section><div><h3 className="font-bold">Документы</h3><p className="mt-1 text-sm text-slate-500">PDF и Word, которыми преподаватель поделился для этого урока.</p></div>
+        {role !== "student" && <div className="mt-4 flex flex-col gap-3 sm:flex-row"><Select value={selectedResource} onValueChange={setSelectedResource}><SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder={availableResources.length ? "Выберите документ из библиотеки" : "Нет непривязанных документов"} /></SelectTrigger><SelectContent>{availableResources.map((resource) => <SelectItem key={resource.id} value={resource.id}>{resource.title} · {formatBytes(resource.byteSize)}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" disabled={pending || !selectedResource} onClick={() => void changeResourceLink(selectedResource, true)}><Link2 />Добавить к уроку</Button></div>}
+        {data.documents.length ? <div className="mt-4 divide-y overflow-hidden rounded-2xl border border-slate-200">{data.documents.map((document) => <article key={document.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><FileText className="size-5 shrink-0 text-indigo-600" /><div className="min-w-0 flex-1"><strong className="block truncate">{document.title}</strong><p className="truncate text-xs text-slate-500">{document.filename} · {formatBytes(document.byteSize)}</p></div><div className="flex gap-2"><Button asChild size="sm" variant="outline"><a href={document.url}><Download />Скачать</a></Button>{role !== "student" && <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void changeResourceLink(document.id, false)}><Unlink />Открепить</Button>}</div></article>)}</div> : <div className="mt-4 grid min-h-24 place-items-center rounded-2xl border border-dashed border-slate-200 text-center text-sm text-slate-500"><span><FileText className="mx-auto mb-2 size-6 text-slate-300" />Документов для урока пока нет</span></div>}
+        {role !== "student" && data.library.length === 0 && <p className="mt-3 text-xs text-slate-500">Сначала добавьте PDF или Word в раздел «Материалы» кабинета.</p>}
+      </section>
       <section><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="font-bold">Фотографии</h3><p className="mt-1 text-sm text-slate-500">До 5 фотографий от каждого участника. Файлы автоматически удаляются через 90 дней после урока.</p></div>{data.photoStorageConfigured && minePhotoCount < data.maxPhotosPerParticipant && <label className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white ${pending ? "pointer-events-none opacity-50" : ""}`}><Upload className="size-4" />Добавить<input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={pending} onChange={(event) => { void uploadPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>}</div>
         {!data.photoStorageConfigured && <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Хранилище фотографий пока не настроено. Текстовые заметки работают независимо от него.</p>}
         {data.attachments.length > 0 ? <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{data.attachments.map((photo) => <figure key={photo.id} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={`Фотография к уроку от ${photo.authorName}`} className="aspect-square w-full object-cover" /></a>{photo.canDelete && <Button type="button" size="icon" variant="destructive" disabled={pending} className="absolute right-2 top-2 size-8" aria-label="Удалить фотографию" onClick={() => void removePhoto(photo.id)}><Trash2 className="size-4" /></Button>}<figcaption className="p-2 text-xs text-slate-500"><span className="block truncate">{photo.authorName}</span><span>до {new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(new Date(photo.expiresAt))}</span></figcaption></figure>)}</div> : <div className="mt-4 grid min-h-28 place-items-center rounded-2xl border border-dashed border-slate-200 text-center text-sm text-slate-500"><span><Camera className="mx-auto mb-2 size-6 text-slate-300" />Фотографий пока нет</span></div>}
@@ -834,7 +918,7 @@ function EditLessonDialog({ lesson, onOpenChange, onUpdate, onDelete, onMaterial
   const [pending, setPending] = useState(false);
   const update = async () => { if (!lesson) return; setPending(true); const saved = await onUpdate(lesson.id, date, time); setPending(false); if (saved) onOpenChange(false); };
   const remove = async () => { if (!lesson) return; setPending(true); const saved = await onDelete(lesson.id); setPending(false); if (saved) onOpenChange(false); };
-  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">{lesson?.name}</DialogTitle><DialogDescription>{lesson?.units === 2 ? "Обе части двойного урока будут перенесены или отменены вместе." : "Перенесите урок или отмените его без списания."}</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Новая дата"><Input type="date" min={today()} value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Новое время"><TimeField value={time} onChange={setTime} /></Field></div>{lesson && <Button type="button" variant="outline" onClick={() => { onOpenChange(false); onMaterials(lesson); }}><NotebookPen />Заметки и фотографии</Button>}<DialogFooter className="sm:justify-between"><Button variant="destructive" disabled={pending} onClick={() => void remove()}><Trash2 />{pending ? "Сохраняю…" : lesson?.units === 2 ? "Отменить оба занятия" : "Отменить урок"}</Button><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Закрыть</Button><Button className="bg-indigo-600" disabled={pending || !date || !time} onClick={() => void update()}>{lesson?.units === 2 ? "Перенести оба" : "Перенести"}</Button></div></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">{lesson?.name}</DialogTitle><DialogDescription>{lesson?.units === 2 ? "Обе части двойного урока будут перенесены или отменены вместе." : "Перенесите урок или отмените его без списания."}</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><Field label="Новая дата"><Input type="date" min={today()} value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Новое время"><TimeField value={time} onChange={setTime} /></Field></div>{lesson && <Button type="button" variant="outline" onClick={() => { onOpenChange(false); onMaterials(lesson); }}><NotebookPen />Материалы урока</Button>}<DialogFooter className="sm:justify-between"><Button variant="destructive" disabled={pending} onClick={() => void remove()}><Trash2 />{pending ? "Сохраняю…" : lesson?.units === 2 ? "Отменить оба занятия" : "Отменить урок"}</Button><div className="flex gap-2"><Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Закрыть</Button><Button className="bg-indigo-600" disabled={pending || !date || !time} onClick={() => void update()}>{lesson?.units === 2 ? "Перенести оба" : "Перенести"}</Button></div></DialogFooter></DialogContent></Dialog>;
 }
 
 function AddStudentSheet({ onAdd }: { onAdd: (student: StudentDraft) => Promise<boolean> }) {

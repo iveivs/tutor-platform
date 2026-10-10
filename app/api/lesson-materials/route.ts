@@ -15,6 +15,8 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("upsertNote"), lessonId: lessonIdSchema, visibility: z.enum(["shared", "teacher_private"]), body: z.string().trim().min(1).max(MAX_NOTE_LENGTH) }).strict(),
   z.object({ action: z.literal("deleteNote"), noteId: z.string().uuid() }).strict(),
   z.object({ action: z.literal("deleteAttachment"), attachmentId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal("attachResource"), lessonId: lessonIdSchema, resourceId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal("detachResource"), lessonId: lessonIdSchema, resourceId: z.string().uuid() }).strict(),
 ]);
 
 async function requireAuth(request: Request) {
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
     if (!parsedLessonId.success) return Response.json({ error: "Урок не выбран" }, { status: 400 });
     const lesson = await resolveLessonAccess(auth, parsedLessonId.data);
     if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
-    const [accepted, notesResult, attachmentsResult] = await Promise.all([
+    const [accepted, notesResult, attachmentsResult, resourcesResult, libraryResult] = await Promise.all([
       hasCurrentContentRulesAcceptance(auth),
       getPostgresPool().query(`SELECT note.id, note.author_member_id, note.visibility, note.body, note.created_at, note.updated_at,
           author.display_name AS author_name, author.role AS author_role
@@ -45,6 +47,13 @@ export async function GET(request: Request) {
         WHERE attachment.workspace_id = $1 AND attachment.lesson_id = $2
           AND attachment.status = 'active' AND attachment.expires_at > now()
         ORDER BY attachment.created_at`, [auth.workspaceId, lesson.lessonId]),
+      getPostgresPool().query(`SELECT resource.id, resource.title, resource.original_filename, resource.content_type,
+          resource.byte_size, link.created_at
+        FROM lesson_resource_links link JOIN teacher_resources resource ON resource.id = link.resource_id
+        WHERE link.workspace_id = $1 AND link.lesson_id = $2 AND resource.status = 'active'
+        ORDER BY link.created_at`, [auth.workspaceId, lesson.lessonId]),
+      auth.role === "student" ? Promise.resolve({ rows: [] }) : getPostgresPool().query(`SELECT id, title, original_filename, content_type, byte_size, created_at
+        FROM teacher_resources WHERE workspace_id = $1 AND status = 'active' ORDER BY created_at DESC`, [auth.workspaceId]),
     ]);
     return Response.json({
       contentRulesAccepted: accepted,
@@ -64,6 +73,16 @@ export async function GET(request: Request) {
         byteSize: Number(row.byte_size), width: Number(row.width), height: Number(row.height),
         expiresAt: new Date(row.expires_at).getTime(), createdAt: new Date(row.created_at).getTime(),
         url: `/api/lesson-attachments/${encodeURIComponent(String(row.id))}`,
+      })),
+      documents: resourcesResult.rows.map((row) => ({
+        id: String(row.id), title: String(row.title), filename: String(row.original_filename), contentType: String(row.content_type),
+        byteSize: Number(row.byte_size), createdAt: new Date(row.created_at).getTime(),
+        url: `/api/teacher-materials/${encodeURIComponent(String(row.id))}`,
+      })),
+      library: libraryResult.rows.map((row) => ({
+        id: String(row.id), title: String(row.title), filename: String(row.original_filename), contentType: String(row.content_type),
+        byteSize: Number(row.byte_size), createdAt: new Date(row.created_at).getTime(),
+        url: `/api/teacher-materials/${encodeURIComponent(String(row.id))}`,
       })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -114,6 +133,28 @@ export async function POST(request: Request) {
           AND ($4 <> 'student' OR lesson.student_id = $3)
         RETURNING note.id`, [body.noteId, auth.workspaceId, auth.memberId, auth.role]);
       if (!result.rowCount) return Response.json({ error: "Заметка не найдена или недоступна" }, { status: 404 });
+      return Response.json({ ok: true });
+    }
+    if (body.action === "attachResource" || body.action === "detachResource") {
+      if (auth.role === "student") return Response.json({ error: "Только преподаватель может прикреплять документы" }, { status: 403 });
+      if (!await hasCurrentContentRulesAcceptance(auth)) return Response.json({ error: "Сначала примите правила размещения контента" }, { status: 409 });
+      const lesson = await resolveLessonAccess(auth, body.lessonId);
+      if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
+      if (body.action === "attachResource") {
+        const result = await getPostgresPool().query(`INSERT INTO lesson_resource_links
+            (id, workspace_id, lesson_id, resource_id, shared_by_member_id)
+          SELECT $1, $2, $3, resource.id, $5 FROM teacher_resources resource
+          WHERE resource.id = $4 AND resource.workspace_id = $2 AND resource.status = 'active'
+          ON CONFLICT (lesson_id, resource_id) DO NOTHING RETURNING id`,
+        [randomUUID(), auth.workspaceId, lesson.lessonId, body.resourceId, auth.memberId]);
+        if (!result.rowCount) {
+          const exists = await getPostgresPool().query("SELECT 1 FROM teacher_resources WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [body.resourceId, auth.workspaceId]);
+          if (!exists.rowCount) return Response.json({ error: "Материал не найден" }, { status: 404 });
+        }
+      } else {
+        await getPostgresPool().query(`DELETE FROM lesson_resource_links
+          WHERE workspace_id = $1 AND lesson_id = $2 AND resource_id = $3`, [auth.workspaceId, lesson.lessonId, body.resourceId]);
+      }
       return Response.json({ ok: true });
     }
     const result = await getPostgresPool().query(`UPDATE lesson_attachments attachment SET status = 'deleting', deleted_at = now(), updated_at = now()

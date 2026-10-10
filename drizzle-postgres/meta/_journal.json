@@ -36,6 +36,13 @@
       "when": 1791635581887,
       "tag": "0004_smart_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791676025982,
+      "tag": "0005_misty_the_captain",
+      "breakpoints": true
     }
   ]
 }

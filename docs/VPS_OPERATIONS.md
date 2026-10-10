@@ -9,11 +9,11 @@
 1. Использовать отдельный Linux VPS с актуальными обновлениями безопасности и Docker Compose.
 2. Разрешить во внешнем firewall только SSH, HTTP и HTTPS. Порт PostgreSQL наружу не публикуется.
 3. Создать `.env` вне Git на основе `.env.example`, установить права `600` и сгенерировать независимые длинные значения `POSTGRES_PASSWORD`, `AUTH_SECRET` и `RESTIC_PASSWORD`.
-4. Настроить приватный S3-совместимый bucket. Фотографиям уроков выделить `S3_PHOTOS_PREFIX`, а Restic — отдельный `S3_PREFIX`; ключам выдать доступ только к необходимым префиксам, без доступа к другим данным аккаунта.
+4. Настроить приватный S3-совместимый bucket. Фотографиям уроков выделить `S3_PHOTOS_PREFIX`, библиотеке преподавателя — `S3_MATERIALS_PREFIX`, а Restic — отдельный `S3_PREFIX`; ключам выдать доступ только к необходимым префиксам, без доступа к другим данным аккаунта.
 5. Сохранить копии production-переменных и `RESTIC_PASSWORD` в отдельном менеджере секретов. Потеря `RESTIC_PASSWORD` делает зашифрованные резервные копии невосстановимыми.
 6. Для почты задать Selectel SMTP через TLS: `SMTP_HOST=smtp.mail.selcloud.ru`, `SMTP_PORT=1127`, `SMTP_SECURE=true`, логин, пароль и адрес отправителя на подтверждённом домене. Пароль не выводить при проверке конфигурации.
 7. Selectel VPS не достигает `api.telegram.org`, поэтому развернуть `workers/telegram-relay/` в Cloudflare. Добавить в Worker secrets `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и независимый `TELEGRAM_RELAY_SECRET`. На VPS задать имя бота без `@`, тот же webhook-secret и relay-secret, а `TELEGRAM_API_BASE_URL` установить в `https://<relay>.workers.dev/bot`. Пустые Telegram-переменные безопасно оставляют модуль выключенным.
-8. Для фотографий задать `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` и отдельный `S3_PHOTOS_PREFIX`. Bucket не должен разрешать публичное чтение. Worker использует те же параметры только для удаления поставленных в очередь и просроченных изображений.
+8. Для фотографий и документов задать `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PHOTOS_PREFIX` и `S3_MATERIALS_PREFIX`. Bucket не должен разрешать публичное чтение. Worker использует те же параметры для удаления поставленных в очередь документов и поставленных в очередь либо просроченных изображений.
 
 ## Telegram relay
 

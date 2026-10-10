@@ -243,6 +243,43 @@ export const lessonAttachments = pgTable("lesson_attachments", {
   index("idx_lesson_attachments_workspace_created").on(table.workspaceId, table.createdAt),
 ]);
 
+export const teacherResources = pgTable("teacher_resources", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  uploadedByMemberId: text("uploaded_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  objectKey: text("object_key").notNull(),
+  contentType: text("content_type").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  status: text("status").notNull().default("active"),
+  deletedAt: instant("deleted_at"),
+  ...timestamps(),
+}, (table) => [
+  check("teacher_resources_content_type_check", sql`${table.contentType} in ('application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')`),
+  check("teacher_resources_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 26214400`),
+  check("teacher_resources_status_check", sql`${table.status} in ('active', 'deleting', 'deleted')`),
+  check("teacher_resources_title_length_check", sql`char_length(${table.title}) between 1 and 120`),
+  uniqueIndex("teacher_resources_object_key_unique").on(table.objectKey),
+  uniqueIndex("teacher_resources_workspace_hash_active_unique").on(table.workspaceId, table.contentSha256).where(sql`${table.status} = 'active'`),
+  index("idx_teacher_resources_workspace_created").on(table.workspaceId, table.createdAt),
+  index("idx_teacher_resources_cleanup").on(table.status, table.updatedAt),
+]);
+
+export const lessonResourceLinks = pgTable("lesson_resource_links", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  lessonId: text("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  resourceId: text("resource_id").notNull().references(() => teacherResources.id, { onDelete: "cascade" }),
+  sharedByMemberId: text("shared_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("lesson_resource_links_lesson_resource_unique").on(table.lessonId, table.resourceId),
+  index("idx_lesson_resource_links_workspace_lesson").on(table.workspaceId, table.lessonId),
+  index("idx_lesson_resource_links_resource").on(table.resourceId),
+]);
+
 export const lessonEvents = pgTable("lesson_events", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
