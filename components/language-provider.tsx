@@ -66,7 +66,15 @@ const translations: Record<string, string> = {
   "Преподаватель получит запрос. Своевременный запрос не будет списан, даже если останется без ответа.": "The tutor will receive your request. A timely cancellation request will not be charged even if it remains unanswered.", "Предложите удобные дату и время. Урок появится в расписании после подтверждения преподавателем.": "Suggest a convenient date and time. The lesson will appear in the schedule after the tutor approves it.", "Выберите свободное время. Оно появится в расписании только после подтверждения преподавателем.": "Choose an available time. It will appear in the schedule only after the tutor approves it.",
   "Свободные слоты": "Available times", "Или другая дата": "Or another date", "Подходящих свободных слотов пока нет.": "No suitable available times yet.", "Выбрать свободное время": "Choose an available time", "После подтверждения появится один двойной урок на два часа, а после проведения спишутся два занятия.": "Once approved, one two-hour double lesson will be created, and two lessons will be deducted after completion.",
   "Все запросы обработаны": "All requests have been handled", "В этой категории запросов нет": "No requests in this category", "Перенос": "Reschedule", "Подтвердить": "Approve", "Отклонить": "Decline", "Ожидает решения": "Pending", "Подтверждён": "Approved", "Отклонён": "Declined", "Предложенное время": "Suggested time",
-  "Привет, ": "Hello, ", "Ваше расписание занятий": "Your lesson schedule", "Ближайший урок": "Upcoming lesson", "Дальнейшие занятия": "Later lessons", "Отмену можно запросить до 23:59 предыдущего дня": "Cancellation can be requested until 11:59 PM on the previous day", "Необходимо оплатить ": "Payment required for ",
+  "Привет, ": "Hello, ", "Ваше расписание занятий": "Your lesson schedule", "Ближайший урок": "Upcoming lesson", "Дальнейшие занятия": "Later lessons", "Недавние уроки": "Recent lessons", "Материалы": "Materials", "Отмену можно запросить до 23:59 предыдущего дня": "Cancellation can be requested until 11:59 PM on the previous day", "Необходимо оплатить ": "Payment required for ",
+  "Проведён": "Completed", "Ожидает ответа": "Awaiting response", "Не оплачен": "Unpaid", "Пробное · проведено": "Trial · completed", "Пробное · бесплатно": "Trial · free",
+  "Расписание осталось без изменений": "The schedule remains unchanged", "Изменение появилось в расписании": "The change is now reflected in the schedule", "Исходный урок уже был изменён или отменён.": "The original lesson has already been changed or cancelled.", "Расписание уже изменено по другому подтверждённому запросу.": "The schedule was already changed by another approved request.",
+  "Урок отменён": "Lesson cancelled", "Постоянное занятие отменено": "Recurring lesson cancelled", "Будущие уроки этого времени удалены из расписания без списания.": "Future lessons at this time were removed from the schedule without charge.", "Преподаватель отменил урок без списания.": "The tutor cancelled the lesson without charge.", "Двойной урок отменён без списания двух занятий.": "The double lesson was cancelled without deducting two lessons.",
+  "Уведомления в Telegram": "Telegram notifications", "Подключите свой Telegram к общему боту Тьюттори. Бот отправляет только напоминания за 24 часа до урока, изменения расписания и запросы ученика.": "Connect your Telegram account to the shared Tyuttori bot. It only sends reminders 24 hours before lessons, schedule changes, and student requests.",
+  "Проверяем подключение…": "Checking connection…", "Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.": "The Telegram bot is still being configured. The connect button will appear here when it is ready.", "Telegram подключён": "Telegram connected", "Отключаю…": "Disconnecting…", "Отключить": "Disconnect",
+  "Нажмите «Подключить Telegram» — откроется бот Тьюттори.": "Select “Connect Telegram” to open the Tyuttori bot.", "В Telegram нажмите «Запустить» или отправьте команду /start.": "In Telegram, select “Start” or send the /start command.", "Вернитесь в Тьюттори и нажмите «Проверить подключение».": "Return to Tyuttori and select “Check connection”.", "Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.": "The one-time link is valid for 15 minutes. The bot cannot access your chats or contacts. You can disconnect it at any time.",
+  "Создаю ссылку…": "Creating link…", "Подключить Telegram": "Connect Telegram", "Проверить подключение": "Check connection", "Telegram отключён": "Telegram disconnected", "В Telegram нажмите «Запустить», затем вернитесь сюда и проверьте подключение": "In Telegram, select “Start”, then return here and check the connection", "Не удалось проверить подключение Telegram": "Could not check the Telegram connection", "Не удалось создать ссылку": "Could not create the link", "Не удалось подключить Telegram": "Could not connect Telegram", "Не удалось отключить Telegram": "Could not disconnect Telegram",
+  "Материалы урока": "Lesson materials", "Заметки, документы и фотографии": "Notes, documents, and photos", "Загружаю материалы…": "Loading materials…", "Домашнее задание": "Homework", "Задание преподавателя": "Tutor assignment", "Преподаватель пока не добавил задание.": "The tutor has not added an assignment yet.", "Мой ответ или комментарий": "My answer or comment", "Напишите, что выполнено, или задайте вопрос по заданию": "Describe what you completed or ask a question about the assignment", "Сохранить ответ": "Save answer", "Моя заметка преподавателю": "My note to the tutor", "Вопрос или комментарий к уроку": "A question or comment about the lesson", "Сохранить заметку": "Save note", "Заметка преподавателя": "Tutor note", "Документы": "Documents", "PDF и Word, которыми преподаватель поделился для этого урока.": "PDF and Word files shared by the tutor for this lesson.", "Скачать": "Download", "Документов для урока пока нет": "No lesson documents yet", "Фотографии": "Photos", "До 5 фотографий от каждого участника. Файлы автоматически удаляются через 90 дней после урока.": "Up to 5 photos from each participant. Files are automatically deleted 90 days after the lesson.", "Добавить": "Add", "Фотографий пока нет": "No photos yet",
   "Кабинет ученика не найден": "Student portal not found", "Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.": "You are signed in, but this account is not linked to a student profile. Ask your tutor to create a new invitation.", "Данные временно недоступны": "Data is temporarily unavailable", "Локальная база не ответила. Попробуйте ещё раз.": "The local database did not respond. Please try again.", "Повторить": "Try again",
   "Закрыть": "Close", "Отметить всё прочитанным": "Mark all as read", "Новых уведомлений нет": "No new notifications", "Открыть ученика": "Open student", "Обе части двойного урока будут перенесены или отменены вместе.": "Both parts of the double lesson will be rescheduled or cancelled together.", "Перенести оба": "Reschedule both", "Отменить оба занятия": "Cancel both lessons", "Перенести": "Reschedule", "Отменить урок": "Cancel lesson",
   "Управление платформой": "Platform management", "Список кабинетов преподавателей и управление доступом.": "Tutor accounts and access management.", "Преподаватель": "Tutor", "Создан": "Created", "Доступ": "Access", "Активен": "Active", "Заблокирован": "Blocked", "Заблокировать": "Block", "Разблокировать": "Unblock",
@@ -93,7 +101,10 @@ const translations: Record<string, string> = {
 };
 
 const months: Record<string, string> = { января: "January", февраля: "February", марта: "March", апреля: "April", мая: "May", июня: "June", июля: "July", августа: "August", сентября: "September", октября: "October", ноября: "November", декабря: "December" };
+const shortMonths: Record<string, string> = { "янв.": "Jan", "февр.": "Feb", "мар.": "Mar", "апр.": "Apr", мая: "May", "июн.": "Jun", "июл.": "Jul", "авг.": "Aug", "сент.": "Sep", "окт.": "Oct", "нояб.": "Nov", "дек.": "Dec" };
 const weekdays: Record<string, string> = { понедельник: "Monday", вторник: "Tuesday", среда: "Wednesday", четверг: "Thursday", пятница: "Friday", суббота: "Saturday", воскресенье: "Sunday" };
+
+const englishLessons = (value: string) => `${value} ${Math.abs(Number(value)) === 1 ? "lesson" : "lessons"}`;
 
 export function translateUiText(value: string) {
   if (!/[А-Яа-яЁё]/.test(value)) return value;
@@ -107,19 +118,25 @@ export function translateUiText(value: string) {
     .replace(/^Кабинет ученика — (.+)$/, "Student portal — $1")
     .replace(/^Пригласить (.+)$/, "Invite $1")
     .replace(/^Введите: (.+)$/, "Enter: $1")
-    .replace(/^Баланс: (-?\d+) занятия?$/, "Balance: $1 lessons")
-    .replace(/^Баланс на момент архивации: (-?\d+) занятия?$/, "Balance when archived: $1 lessons")
-    .replace(/^Текущий баланс: (-?\d+) занятия?$/, "Current balance: $1 lessons")
-    .replace(/^После оплаты баланс составит (-?\d+) занятия?$/, "Balance after payment: $1 lessons")
-    .replace(/^После корректировки баланс составит (-?\d+) занятия?$/, "Balance after adjustment: $1 lessons")
+    .replace(/^Баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance: ${englishLessons(count)}`)
+    .replace(/^Баланс на момент архивации: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance when archived: ${englishLessons(count)}`)
+    .replace(/^Текущий баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Current balance: ${englishLessons(count)}`)
+    .replace(/^После оплаты баланс составит (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance after payment: ${englishLessons(count)}`)
+    .replace(/^После корректировки баланс составит (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance after adjustment: ${englishLessons(count)}`)
+    .replace(/^Необходимо оплатить (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Payment required for ${englishLessons(count)}`)
     .replace(/^(\d+) (ученик|ученика|учеников)$/, "$1 students")
     .replace(/^(\d+) (урок|урока|уроков)$/, "$1 lessons")
-    .replace(/^(\d+) (занятие|занятия|занятий)$/, "$1 lessons")
+    .replace(/^(-?\d+) (занятие|занятия|занятий)$/, (_, count: string) => englishLessons(count))
     .replace(/^(\d+) (запрос|запроса|запросов)$/, "$1 requests")
     .replace(/ требуют ответа$/, " need attention")
-    .replace(/ ожидают решения$/, " pending");
-  for (const [month, english] of Object.entries(months)) translated = translated.replace(new RegExp(`\\b${month}\\b`, "gi"), english);
-  for (const [weekday, english] of Object.entries(weekdays)) translated = translated.replace(new RegExp(`\\b${weekday}\\b`, "gi"), english);
+    .replace(/ ожидают решения$/, " pending")
+    .replace(/^Баланс пополнен на (\d+) (?:занятие|занятия|занятий)\.$/, "Balance increased by $1 lessons.")
+    .replace(/^Ошибочная оплата на (\d+) (?:занятие|занятия|занятий) отменена\.$/, "An incorrect payment for $1 lessons was reversed.")
+    .replace(/^Новое время: (.+)\. Перенесены оба занятия\.$/, "New time: $1. Both lessons were rescheduled.")
+    .replace(/^Новое время: (.+)\.$/, "New time: $1.");
+  for (const [month, english] of Object.entries(months)) translated = translated.replace(new RegExp(month, "gi"), english);
+  for (const [month, english] of Object.entries(shortMonths)) translated = translated.replace(new RegExp(month.replace(".", "\\."), "gi"), english);
+  for (const [weekday, english] of Object.entries(weekdays)) translated = translated.replace(new RegExp(weekday, "gi"), english);
   return `${leading}${translated}${trailing}`;
 }
 
