@@ -272,6 +272,10 @@ export const teacherResources = pgTable("teacher_resources", {
   contentType: text("content_type").notNull(),
   contentSha256: text("content_sha256").notNull(),
   byteSize: integer("byte_size").notNull(),
+  folder: text("folder"),
+  tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
+  versionNumber: integer("version_number").notNull().default(1),
+  lastUsedAt: instant("last_used_at"),
   status: text("status").notNull().default("active"),
   deletedAt: instant("deleted_at"),
   ...timestamps(),
@@ -280,10 +284,39 @@ export const teacherResources = pgTable("teacher_resources", {
   check("teacher_resources_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 26214400`),
   check("teacher_resources_status_check", sql`${table.status} in ('active', 'deleting', 'deleted')`),
   check("teacher_resources_title_length_check", sql`char_length(${table.title}) between 1 and 120`),
+  check("teacher_resources_folder_length_check", sql`${table.folder} is null or char_length(${table.folder}) between 1 and 80`),
+  check("teacher_resources_tags_count_check", sql`cardinality(${table.tags}) <= 10`),
+  check("teacher_resources_version_check", sql`${table.versionNumber} >= 1`),
   uniqueIndex("teacher_resources_object_key_unique").on(table.objectKey),
   uniqueIndex("teacher_resources_workspace_hash_active_unique").on(table.workspaceId, table.contentSha256).where(sql`${table.status} = 'active'`),
   index("idx_teacher_resources_workspace_created").on(table.workspaceId, table.createdAt),
   index("idx_teacher_resources_cleanup").on(table.status, table.updatedAt),
+]);
+
+export const teacherResourceUploadEvents = pgTable("teacher_resource_upload_events", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  resourceId: text("resource_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  contentType: text("content_type").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("teacher_resource_upload_events_version_check", sql`${table.versionNumber} >= 1`),
+  check("teacher_resource_upload_events_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 26214400`),
+  uniqueIndex("teacher_resource_upload_events_resource_version_unique").on(table.resourceId, table.versionNumber),
+  index("idx_teacher_resource_upload_events_workspace_created").on(table.workspaceId, table.createdAt),
+]);
+
+export const teacherResourceFileCleanup = pgTable("teacher_resource_file_cleanup", {
+  id: text("id").primaryKey(),
+  objectKey: text("object_key").notNull(),
+  ...timestamps(),
+}, (table) => [
+  uniqueIndex("teacher_resource_file_cleanup_object_key_unique").on(table.objectKey),
+  index("idx_teacher_resource_file_cleanup_created").on(table.createdAt),
 ]);
 
 export const lessonResourceLinks = pgTable("lesson_resource_links", {

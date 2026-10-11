@@ -64,6 +64,18 @@ async function deleteTeacherMaterials(client) {
       failed += 1;
     }
   }
+  const replacedFiles = await client.query(`SELECT id, object_key FROM teacher_resource_file_cleanup
+    ORDER BY created_at LIMIT 100`);
+  for (const file of replacedFiles.rows) {
+    try {
+      await photoStorage.client.send(new DeleteObjectCommand({ Bucket: photoStorage.bucket, Key: String(file.object_key) }));
+      await client.query("DELETE FROM teacher_resource_file_cleanup WHERE id = $1", [file.id]);
+      deleted += 1;
+    } catch {
+      await client.query("UPDATE teacher_resource_file_cleanup SET updated_at = now() WHERE id = $1", [file.id]).catch(() => undefined);
+      failed += 1;
+    }
+  }
   return { deleted, failed };
 }
 

@@ -20,6 +20,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const row = result.rows[0];
     if (!row) return Response.json({ error: "Материал не найден" }, { status: 404 });
     const bytes = await getTeacherMaterial(String(row.object_key));
+    await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [id, auth.workspaceId]);
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": String(row.content_type),

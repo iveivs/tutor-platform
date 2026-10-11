@@ -50,6 +50,13 @@
       "when": 1791719885354,
       "tag": "0006_nasty_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791728581763,
+      "tag": "0007_nappy_thor_girl",
+      "breakpoints": true
     }
   ]
 }

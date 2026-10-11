@@ -193,6 +193,7 @@ export async function POST(request: Request) {
           const exists = await getPostgresPool().query("SELECT 1 FROM teacher_resources WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [body.resourceId, auth.workspaceId]);
           if (!exists.rowCount) return Response.json({ error: "Материал не найден" }, { status: 404 });
         }
+        await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [body.resourceId, auth.workspaceId]);
       } else {
         await getPostgresPool().query(`DELETE FROM lesson_resource_links
           WHERE workspace_id = $1 AND lesson_id = $2 AND resource_id = $3`, [auth.workspaceId, lesson.lessonId, body.resourceId]);

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, Camera, ChevronLeft, ChevronRight, Clock3, Copy,
-  Download, FileText, FolderOpen, History as HistoryIcon, Home, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, Search, Send, Settings, ShieldCheck, Trash2, Unlink, Upload, UserRound, UsersRound, WalletCards,
+  Download, FileText, FolderOpen, History as HistoryIcon, Home, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, Tag, Trash2, Unlink, Upload, UserRound, UsersRound, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BrandIcon } from "@/components/brand-icon";
@@ -45,7 +45,8 @@ type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: Recu
 type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };
 type LessonMaterialPhoto = { id: string; authorName: string; mine: boolean; canDelete: boolean; byteSize: number; width: number; height: number; expiresAt: number; createdAt: number; url: string };
-type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number };
+type TeacherMaterialAssignment = { lessonId: string; studentId: string; studentName: string; startsAt: number };
+type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number; folder?: string | null; tags?: string[]; versionNumber?: number; updatedAt?: number; lastUsedAt?: number | null; assignments?: TeacherMaterialAssignment[] };
 type TeacherMaterialsData = { contentRulesAccepted: boolean; storageConfigured: boolean; maxFileBytes: number; maxUploadsPerMonth: number; maxStorageBytes: number; uploadsThisMonth: number; storageBytes: number; resources: TeacherMaterial[] };
 type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; homework: { assignment: string; studentResponse: string; assignmentUpdatedAt: number | null; responseUpdatedAt: number | null }; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[] };
 
@@ -565,15 +566,34 @@ function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onR
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+const materialTags = (value: string) => value.split(",").map((tag) => tag.trim().replace(/^#+/, "")).filter(Boolean).filter((tag, index, tags) => tags.findIndex((candidate) => candidate.toLocaleLowerCase("ru-RU") === tag.toLocaleLowerCase("ru-RU")) === index).slice(0, 10);
+const isPdfMaterial = (resource: TeacherMaterial) => resource.contentType === "application/pdf";
+
 function TeacherMaterialsView() {
   const [data, setData] = useState<TeacherMaterialsData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
+  const [folder, setFolder] = useState("");
+  const [tags, setTags] = useState("");
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "pdf" | "word">("all");
+  const [folderFilter, setFolderFilter] = useState("all");
+  const [sort, setSort] = useState<"recent" | "new" | "title">("recent");
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => setData(await readTeacherMaterials()), []);
   useEffect(() => { let active = true; void readTeacherMaterials().then((next) => active && setData(next)).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Не удалось загрузить библиотеку")); return () => { active = false; }; }, []);
+  const folders = useMemo(() => [...new Set((data?.resources ?? []).map((resource) => resource.folder).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "ru")), [data]);
+  const filteredResources = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("ru-RU");
+    return [...(data?.resources ?? [])].filter((resource) => {
+      const matchesType = typeFilter === "all" || typeFilter === "pdf" && isPdfMaterial(resource) || typeFilter === "word" && !isPdfMaterial(resource);
+      const matchesFolder = folderFilter === "all" || folderFilter === "none" && !resource.folder || resource.folder === folderFilter;
+      const haystack = [resource.title, resource.filename, resource.folder ?? "", ...(resource.tags ?? []), ...(resource.assignments ?? []).map((item) => item.studentName)].join(" ").toLocaleLowerCase("ru-RU");
+      return matchesType && matchesFolder && (!needle || haystack.includes(needle));
+    }).sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ru") : sort === "new" ? b.createdAt - a.createdAt : (b.lastUsedAt ?? b.createdAt) - (a.lastUsedAt ?? a.createdAt));
+  }, [data, folderFilter, query, sort, typeFilter]);
   const acceptRules = async () => {
     if (!acceptedRules) return;
     setPending(true); setError("");
@@ -586,12 +606,34 @@ function TeacherMaterialsView() {
     if (file.size > data.maxFileBytes) { setError("Документ должен быть не больше 25 МБ"); return; }
     setPending(true); setError("");
     try {
-      const form = new FormData(); form.set("file", file); form.set("title", title.trim());
+      const form = new FormData(); form.set("file", file); form.set("title", title.trim()); form.set("folder", folder.trim()); form.set("tags", JSON.stringify(materialTags(tags)));
       const response = await appFetch("/api/teacher-materials", { method: "POST", body: form });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить документ");
-      setFile(null); setTitle(""); await load(); toast.success("Материал добавлен в библиотеку");
+      setFile(null); setTitle(""); setFolder(""); setTags(""); await load(); toast.success("Материал добавлен в библиотеку");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить документ"); }
+    finally { setPending(false); }
+  };
+  const saveMetadata = async (resource: TeacherMaterial, next: { title: string; folder: string; tags: string[] }) => {
+    setPending(true); setError("");
+    try {
+      const response = await appFetch("/api/teacher-materials", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: resource.id, title: next.title, folder: next.folder.trim() || null, tags: next.tags }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось обновить материал");
+      await load(); toast.success("Название, папка и теги сохранены"); return true;
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обновить материал"); return false; }
+    finally { setPending(false); }
+  };
+  const replaceFile = async (resource: TeacherMaterial, replacement: File) => {
+    if (!data || replacement.size > data.maxFileBytes) { setError("Документ должен быть не больше 25 МБ"); return false; }
+    setPending(true); setError("");
+    try {
+      const form = new FormData(); form.set("file", replacement);
+      const response = await appFetch(`/api/teacher-materials?id=${encodeURIComponent(resource.id)}`, { method: "PUT", body: form });
+      const result = await response.json() as { error?: string; versionNumber?: number };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось заменить файл");
+      await load(); toast.success(`Новая версия ${result.versionNumber ?? ""} сохранена, назначения не изменились`); return true;
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось заменить файл"); return false; }
     finally { setPending(false); }
   };
   const remove = async (resource: TeacherMaterial) => {
@@ -606,17 +648,33 @@ function TeacherMaterialsView() {
     finally { setPending(false); }
   };
   return <Shell title="Материалы" eyebrow="Библиотека преподавателя"><div className="space-y-6">
-    {error && <p className="max-w-4xl rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-    {!data && !error && <div className="card max-w-4xl p-8 text-center text-slate-500">Загружаю библиотеку…</div>}
+    {error && <p className="max-w-5xl rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
+    {!data && !error && <div className="card max-w-5xl p-8 text-center text-slate-500">Загружаю библиотеку…</div>}
     {data && !data.contentRulesAccepted && <section className="card max-w-3xl border-indigo-200 bg-indigo-50 p-6"><h2 className="text-xl font-bold text-indigo-950">Правила пользовательского контента</h2><p className="mt-2 text-sm leading-6 text-indigo-900">Перед загрузкой документов подтвердите, что у вас есть права на их хранение и передачу ученикам.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента</a> и несу ответственность за загружаемые материалы.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
     {data?.contentRulesAccepted && <>
-      <section className="card max-w-4xl p-6 md:p-8"><div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="text-xl font-bold">Добавить документ</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">PDF, DOC или DOCX до 25 МБ. Файл хранится один раз и может использоваться в любом количестве уроков.</p></div><div className="text-sm text-slate-500"><p>{data.uploadsThisMonth} из {data.maxUploadsPerMonth} загрузок в этом месяце</p><p>{formatBytes(data.storageBytes)} из {formatBytes(data.maxStorageBytes)}</p></div></div>
+      <datalist id="teacher-material-folders">{folders.map((item) => <option value={item} key={item} />)}</datalist>
+      <section className="card max-w-5xl p-6 md:p-8"><div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="text-xl font-bold">Добавить документ</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">PDF, DOC или DOCX до 25 МБ. Папка необязательна, теги вводятся через запятую.</p></div><div className="text-sm text-slate-500"><p>{data.uploadsThisMonth} из {data.maxUploadsPerMonth} загрузок в этом месяце</p><p>{formatBytes(data.storageBytes)} из {formatBytes(data.maxStorageBytes)}</p></div></div>
         {!data.storageConfigured && <p className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">S3-хранилище документов пока не настроено.</p>}
-        {data.storageConfigured && <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="Например: Упражнения на координацию" /></Field><Field label="Файл"><Input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending} onChange={(event) => { const next = event.target.files?.[0] ?? null; setFile(next); if (next && !title) setTitle(next.name.replace(/\.(pdf|docx?)$/i, "")); }} /></Field><Button className="bg-indigo-600" disabled={pending || !file || !title.trim() || data.uploadsThisMonth >= data.maxUploadsPerMonth} onClick={() => void upload()}><Upload />{pending ? "Загружаю…" : "Добавить"}</Button></div>}
+        {data.storageConfigured && <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1fr_1.2fr_auto] xl:items-end"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="Упражнения на координацию" /></Field><Field label="Папка"><Input list="teacher-material-folders" value={folder} maxLength={80} onChange={(event) => setFolder(event.target.value)} placeholder="Например: Начинающие" /></Field><Field label="Теги"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="ритм, техника" /></Field><Field label="Файл"><Input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending} onChange={(event) => { const next = event.target.files?.[0] ?? null; setFile(next); if (next && !title) setTitle(next.name.replace(/\.(pdf|docx?)$/i, "")); }} /></Field><Button className="bg-indigo-600 md:col-span-2 xl:col-span-1" disabled={pending || !file || !title.trim() || data.uploadsThisMonth >= data.maxUploadsPerMonth} onClick={() => void upload()}><Upload />{pending ? "Загружаю…" : "Добавить"}</Button></div>}
       </section>
-      <section className="card max-w-4xl overflow-hidden"><div className="border-b border-slate-200 p-5 md:px-7"><h2 className="text-xl font-bold">Моя библиотека</h2><p className="mt-1 text-sm text-slate-500">Документы не удаляются автоматически. Удаляйте ненужные материалы вручную.</p></div>{data.resources.length ? <div className="divide-y divide-slate-200">{data.resources.map((resource) => <article key={resource.id} className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:px-7"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><FileText className="size-5" /></span><div className="min-w-0 flex-1"><strong className="block truncate">{resource.title}</strong><p className="mt-1 truncate text-sm text-slate-500">{resource.filename} · {formatBytes(resource.byteSize)} · в {plural(resource.lessonCount ?? 0, "уроке", "уроках", "уроках")}</p></div><div className="flex gap-2"><Button asChild size="sm" variant="outline"><a href={resource.url}><Download />Скачать</a></Button><Button size="sm" variant="outline" className="text-rose-600" disabled={pending} onClick={() => void remove(resource)}><Trash2 />Удалить</Button></div></article>)}</div> : <Empty text="В библиотеке пока нет документов" />}</section>
+      <section className="card max-w-5xl overflow-hidden"><div className="border-b border-slate-200 p-5 md:px-7"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="text-xl font-bold">Моя библиотека</h2><p className="mt-1 text-sm text-slate-500">Поиск работает по названию, файлу, папкам, тегам и ученикам.</p></div><p className="text-sm font-medium text-slate-500">Показано {filteredResources.length} из {data.resources.length}</p></div><div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_180px_210px_210px]"><label className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти материал или ученика" className="pl-9" /></label><Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as typeof typeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">PDF и Word</SelectItem><SelectItem value="pdf">Только PDF</SelectItem><SelectItem value="word">Только Word</SelectItem></SelectContent></Select><Select value={folderFilter} onValueChange={setFolderFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все папки</SelectItem><SelectItem value="none">Без папки</SelectItem>{folders.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select><Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="recent">Недавно использованные</SelectItem><SelectItem value="new">Сначала новые</SelectItem><SelectItem value="title">По названию</SelectItem></SelectContent></Select></div></div>
+        {filteredResources.length ? <div className="divide-y divide-slate-200">{filteredResources.map((resource) => <article key={resource.id} className="p-5 md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-start"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><FileText className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="min-w-0 truncate">{resource.title}</strong><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{isPdfMaterial(resource) ? "PDF" : "Word"}</span><span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">версия {resource.versionNumber ?? 1}</span></div><p className="mt-1 truncate text-sm text-slate-500">{resource.filename} · {formatBytes(resource.byteSize)}{resource.folder ? ` · ${resource.folder}` : ""}</p>{Boolean(resource.tags?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{resource.tags?.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700"><Tag className="size-3" />{tag}</span>)}</div>}<p className="mt-2 text-xs text-slate-400">{resource.lastUsedAt ? `Недавно использован ${new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Moscow" }).format(resource.lastUsedAt)}` : "Ещё не использовался"}</p></div><div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><a href={resource.url}><Download />Скачать</a></Button><ManageTeacherMaterialDialog resource={resource} folders={folders} maxFileBytes={data.maxFileBytes} uploadLimitReached={data.uploadsThisMonth >= data.maxUploadsPerMonth} pending={pending} onSave={saveMetadata} onReplace={replaceFile} /><Button size="sm" variant="outline" className="text-rose-600" disabled={pending} onClick={() => void remove(resource)}><Trash2 />Удалить</Button></div></div>
+          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Назначен: {plural(resource.assignments?.length ?? 0, "уроку", "урокам", "урокам")}</summary><div className="border-t border-slate-200 px-4 py-3">{resource.assignments?.length ? <ul className="space-y-2">{resource.assignments.map((assignment) => <li key={`${assignment.lessonId}-${assignment.startsAt}`} className="flex flex-col justify-between gap-1 text-sm sm:flex-row"><span className="font-medium">{assignment.studentName}</span><span className="text-slate-500">{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(assignment.startsAt)}</span></li>)}</ul> : <p className="text-sm text-slate-500">Материал пока не назначен ни одному уроку.</p>}</div></details>
+        </article>)}</div> : <Empty text={data.resources.length ? "По выбранным условиям ничего не найдено" : "В библиотеке пока нет документов"} />}
+      </section>
     </>}
   </div></Shell>;
+}
+
+function ManageTeacherMaterialDialog({ resource, folders, maxFileBytes, uploadLimitReached, pending, onSave, onReplace }: { resource: TeacherMaterial; folders: string[]; maxFileBytes: number; uploadLimitReached: boolean; pending: boolean; onSave: (resource: TeacherMaterial, next: { title: string; folder: string; tags: string[] }) => Promise<boolean>; onReplace: (resource: TeacherMaterial, file: File) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(resource.title);
+  const [folder, setFolder] = useState(resource.folder ?? "");
+  const [tags, setTags] = useState((resource.tags ?? []).join(", "));
+  const [replacement, setReplacement] = useState<File | null>(null);
+  const save = async () => { if (await onSave(resource, { title: title.trim(), folder, tags: materialTags(tags) })) setOpen(false); };
+  const replace = async () => { if (!replacement || replacement.size > maxFileBytes) return; if (await onReplace(resource, replacement)) { setReplacement(null); setOpen(false); } };
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Pencil />Настроить</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-xl"><DialogHeader><DialogTitle>Настроить материал</DialogTitle><DialogDescription>Измените метаданные или загрузите новую версию. Связи с уроками сохранятся.</DialogDescription></DialogHeader><div className="space-y-5"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} /></Field><Field label="Папка"><Input list="teacher-material-folders" value={folder} maxLength={80} onChange={(event) => setFolder(event.target.value)} placeholder="Без папки" />{folders.length > 0 && <p className="text-xs text-slate-500">Можно выбрать существующую папку или написать новую.</p>}</Field><Field label="Теги"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="через, запятую" /><p className="text-xs text-slate-500">До 10 тегов, каждый не длиннее 30 символов.</p></Field><Button className="w-full bg-indigo-600" disabled={pending || !title.trim() || materialTags(tags).some((tag) => tag.length > 30)} onClick={() => void save()}>{pending ? "Сохраняю…" : "Сохранить название, папку и теги"}</Button><div className="border-t border-slate-200 pt-5"><h3 className="font-bold">Заменить файл</h3><p className="mt-1 text-sm leading-6 text-slate-500">Новая версия заменит текущий PDF или Word. Все назначения ученикам и урокам останутся на месте.</p><Input className="mt-4" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending || uploadLimitReached} onChange={(event) => setReplacement(event.target.files?.[0] ?? null)} />{uploadLimitReached && <p className="mt-2 text-xs font-medium text-amber-700">Месячный лимит загрузок исчерпан.</p>}<Button variant="outline" className="mt-3 w-full" disabled={pending || uploadLimitReached || !replacement || replacement.size > maxFileBytes} onClick={() => void replace()}><RefreshCw />{pending ? "Заменяю…" : `Загрузить версию ${(resource.versionNumber ?? 1) + 1}`}</Button></div></div></DialogContent></Dialog>;
 }
 
 function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability, onLogout, isPlatformAdmin }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void>; onLogout?: () => void; isPlatformAdmin: boolean }) {
