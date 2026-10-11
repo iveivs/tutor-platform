@@ -871,11 +871,17 @@ function TelegramNotificationsCard({ compact = false }: { compact?: boolean }) {
   return <section className={`card p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>
     <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
       <h2 className="text-xl font-bold">Уведомления в Telegram</h2>
-      <p className="mt-1 text-sm text-slate-500">Только напоминание за 24 часа до урока, изменения расписания и запросы ученика.</p>
+      <p className="mt-1 text-sm text-slate-500">Подключите свой Telegram к общему боту Тьюттори. Бот отправляет только напоминания за 24 часа до урока, изменения расписания и запросы ученика.</p>
       {!status && <p className="mt-4 text-sm text-slate-500">Проверяем подключение…</p>}
       {status && !status.configured && <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
       {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-emerald-700">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
-      {status?.configured && !status.connected && <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button type="button" className="bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send />{pending ? "Создаю ссылку…" : "Подключить Telegram"}</Button><Button type="button" variant="outline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>}
+      {status?.configured && !status.connected && <div className="mt-5">
+        <ol className="space-y-3 text-sm text-slate-700">
+          {["Нажмите «Подключить Telegram» — откроется бот Тьюттори.", "В Telegram нажмите «Запустить» или отправьте команду /start.", "Вернитесь в Тьюттори и нажмите «Проверить подключение»."].map((step, index) => <li key={step} className="flex items-start gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">{index + 1}</span><span className="pt-0.5 leading-5">{step}</span></li>)}
+        </ol>
+        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.</p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button type="button" className="bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send />{pending ? "Создаю ссылку…" : "Подключить Telegram"}</Button><Button type="button" variant="outline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>
+      </div>}
     </div></div>
   </section>;
 }
