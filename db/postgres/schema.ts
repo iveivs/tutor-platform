@@ -219,6 +219,25 @@ export const lessonNotes = pgTable("lesson_notes", {
   index("idx_lesson_notes_workspace_lesson").on(table.workspaceId, table.lessonId),
 ]);
 
+export const lessonHomework = pgTable("lesson_homework", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  lessonId: text("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  assignment: text("assignment"),
+  studentResponse: text("student_response"),
+  assignmentUpdatedByMemberId: text("assignment_updated_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  responseUpdatedByMemberId: text("response_updated_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  assignmentUpdatedAt: instant("assignment_updated_at"),
+  responseUpdatedAt: instant("response_updated_at"),
+  ...timestamps(),
+}, (table) => [
+  check("lesson_homework_assignment_length_check", sql`${table.assignment} is null or char_length(${table.assignment}) between 1 and 4000`),
+  check("lesson_homework_response_length_check", sql`${table.studentResponse} is null or char_length(${table.studentResponse}) between 1 and 4000`),
+  check("lesson_homework_content_check", sql`${table.assignment} is not null or ${table.studentResponse} is not null`),
+  uniqueIndex("lesson_homework_lesson_unique").on(table.lessonId),
+  index("idx_lesson_homework_workspace_lesson").on(table.workspaceId, table.lessonId),
+]);
+
 export const lessonAttachments = pgTable("lesson_attachments", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull(),

@@ -17,6 +17,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("deleteAttachment"), attachmentId: z.string().uuid() }).strict(),
   z.object({ action: z.literal("attachResource"), lessonId: lessonIdSchema, resourceId: z.string().uuid() }).strict(),
   z.object({ action: z.literal("detachResource"), lessonId: lessonIdSchema, resourceId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal("updateHomework"), lessonId: lessonIdSchema, field: z.enum(["assignment", "student_response"]), body: z.string().max(MAX_NOTE_LENGTH) }).strict(),
 ]);
 
 async function requireAuth(request: Request) {
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     if (!parsedLessonId.success) return Response.json({ error: "Урок не выбран" }, { status: 400 });
     const lesson = await resolveLessonAccess(auth, parsedLessonId.data);
     if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
-    const [accepted, notesResult, attachmentsResult, resourcesResult, libraryResult] = await Promise.all([
+    const [accepted, notesResult, homeworkResult, attachmentsResult, resourcesResult, libraryResult] = await Promise.all([
       hasCurrentContentRulesAcceptance(auth),
       getPostgresPool().query(`SELECT note.id, note.author_member_id, note.visibility, note.body, note.created_at, note.updated_at,
           author.display_name AS author_name, author.role AS author_role
@@ -40,6 +41,8 @@ export async function GET(request: Request) {
         WHERE note.workspace_id = $1 AND note.lesson_id = $2
           AND (note.visibility = 'shared' OR note.author_member_id = $3)
         ORDER BY CASE note.visibility WHEN 'shared' THEN 0 ELSE 1 END, note.created_at`, [auth.workspaceId, lesson.lessonId, auth.memberId]),
+      getPostgresPool().query(`SELECT assignment, student_response, assignment_updated_at, response_updated_at
+        FROM lesson_homework WHERE workspace_id = $1 AND lesson_id = $2 LIMIT 1`, [auth.workspaceId, lesson.lessonId]),
       getPostgresPool().query(`SELECT attachment.id, attachment.uploaded_by_member_id, attachment.byte_size, attachment.width,
           attachment.height, attachment.expires_at, attachment.created_at, author.display_name AS author_name
         FROM lesson_attachments attachment
@@ -61,6 +64,12 @@ export async function GET(request: Request) {
       photoStorageConfigured: lessonPhotoStorageConfigured(),
       photoRetentionDays: 90,
       maxPhotosPerParticipant: 5,
+      homework: homeworkResult.rows[0] ? {
+        assignment: homeworkResult.rows[0].assignment ? String(homeworkResult.rows[0].assignment) : "",
+        studentResponse: homeworkResult.rows[0].student_response ? String(homeworkResult.rows[0].student_response) : "",
+        assignmentUpdatedAt: homeworkResult.rows[0].assignment_updated_at ? new Date(homeworkResult.rows[0].assignment_updated_at).getTime() : null,
+        responseUpdatedAt: homeworkResult.rows[0].response_updated_at ? new Date(homeworkResult.rows[0].response_updated_at).getTime() : null,
+      } : { assignment: "", studentResponse: "", assignmentUpdatedAt: null, responseUpdatedAt: null },
       notes: notesResult.rows.map((row) => ({
         id: String(row.id), authorId: String(row.author_member_id), authorName: String(row.author_name), authorRole: String(row.author_role),
         visibility: String(row.visibility), body: String(row.body), mine: row.author_member_id === auth.memberId,
@@ -125,6 +134,39 @@ export async function POST(request: Request) {
           SET body = EXCLUDED.body, updated_at = now()
         RETURNING id`, [randomUUID(), auth.workspaceId, lesson.lessonId, auth.memberId, body.visibility, body.body]);
       return Response.json({ ok: true, id: String(result.rows[0].id) });
+    }
+    if (body.action === "updateHomework") {
+      if (!await hasCurrentContentRulesAcceptance(auth)) return Response.json({ error: "Сначала примите правила размещения контента" }, { status: 409 });
+      if (auth.role === "student" && body.field !== "student_response") return Response.json({ error: "Задание может изменять только преподаватель" }, { status: 403 });
+      if (auth.role !== "student" && body.field !== "assignment") return Response.json({ error: "Ответ изменяет ученик" }, { status: 403 });
+      const lesson = await resolveLessonAccess(auth, body.lessonId);
+      if (!lesson) return Response.json({ error: "Урок не найден" }, { status: 404 });
+      const value = body.body.trim();
+      const db = getPostgresPool();
+      if (!value) {
+        if (body.field === "assignment") {
+          await db.query("DELETE FROM lesson_homework WHERE workspace_id = $1 AND lesson_id = $2 AND student_response IS NULL", [auth.workspaceId, lesson.lessonId]);
+          await db.query("UPDATE lesson_homework SET assignment = NULL, assignment_updated_by_member_id = $3, assignment_updated_at = now(), updated_at = now() WHERE workspace_id = $1 AND lesson_id = $2 AND student_response IS NOT NULL", [auth.workspaceId, lesson.lessonId, auth.memberId]);
+        } else {
+          await db.query("DELETE FROM lesson_homework WHERE workspace_id = $1 AND lesson_id = $2 AND assignment IS NULL", [auth.workspaceId, lesson.lessonId]);
+          await db.query("UPDATE lesson_homework SET student_response = NULL, response_updated_by_member_id = $3, response_updated_at = now(), updated_at = now() WHERE workspace_id = $1 AND lesson_id = $2 AND assignment IS NOT NULL", [auth.workspaceId, lesson.lessonId, auth.memberId]);
+        }
+      } else if (body.field === "assignment") {
+        await db.query(`INSERT INTO lesson_homework
+            (id, workspace_id, lesson_id, assignment, assignment_updated_by_member_id, assignment_updated_at)
+          VALUES ($1, $2, $3, $4, $5, now())
+          ON CONFLICT (lesson_id) DO UPDATE SET assignment = EXCLUDED.assignment,
+            assignment_updated_by_member_id = EXCLUDED.assignment_updated_by_member_id, assignment_updated_at = now(), updated_at = now()`,
+        [randomUUID(), auth.workspaceId, lesson.lessonId, value, auth.memberId]);
+      } else {
+        await db.query(`INSERT INTO lesson_homework
+            (id, workspace_id, lesson_id, student_response, response_updated_by_member_id, response_updated_at)
+          VALUES ($1, $2, $3, $4, $5, now())
+          ON CONFLICT (lesson_id) DO UPDATE SET student_response = EXCLUDED.student_response,
+            response_updated_by_member_id = EXCLUDED.response_updated_by_member_id, response_updated_at = now(), updated_at = now()`,
+        [randomUUID(), auth.workspaceId, lesson.lessonId, value, auth.memberId]);
+      }
+      return Response.json({ ok: true });
     }
     if (body.action === "deleteNote") {
       const result = await getPostgresPool().query(`DELETE FROM lesson_notes note USING lessons lesson

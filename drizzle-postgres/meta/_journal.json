@@ -43,6 +43,13 @@
       "when": 1791676025982,
       "tag": "0005_misty_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791719885354,
+      "tag": "0006_nasty_toad",
+      "breakpoints": true
     }
   ]
 }
