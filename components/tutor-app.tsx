@@ -95,7 +95,7 @@ async function readTeacherMaterials() {
   return result;
 }
 
-const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ` : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ` : `${Math.max(0, Math.round(bytes / 1024))} КБ`;
 
 const statusStyles = {
   paid: "bg-emerald-50 text-emerald-700 ring-emerald-100",
