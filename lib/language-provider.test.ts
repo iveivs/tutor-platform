@@ -43,6 +43,12 @@ describe("translateUiText", () => {
     ["30 сентября 2026 г. в 17:00–19:00 · 2 занятия", "30 September 2026 at 17:00–19:00 · 2 lessons"],
     ["Назначен урок", "Lesson scheduled"],
     ["Урок назначен на 2026-10-12 в 17:00.", "Lesson scheduled for 12 October 2026 at 17:00."],
+    ["-1 занятие · Урок проведён", "-1 lesson · Lesson completed"],
+    ["+10 занятий · Оплата занятий", "+10 lessons · Lesson payment"],
+    ["-2 занятий · Двойной урок", "-2 lessons · Double lesson"],
+    ["Оплата учтена · отменена", "Payment recorded · reversed"],
+    ["Пробное занятие проведено", "Trial lesson completed"],
+    ["2 октября 2026 г. в 17:00–18:00 · Пробное занятие · бесплатно", "2 October 2026 at 17:00–18:00 · Trial lesson · free"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
