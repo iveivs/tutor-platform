@@ -22,6 +22,11 @@ describe("translateUiText", () => {
     ["Необходимо оплатить 1 занятие", "Payment required for 1 lesson"],
     ["Вс 15:00", "Sun 15:00"],
     ["Остановить", "Stop"],
+    ["0 из 50 загрузок в этом месяце", "0 of 50 uploads this month"],
+    ["0 КБ из 5120 МБ", "0 KB of 5120 MB"],
+    ["Показано 0 из 0", "Showing 0 of 0"],
+    ["Упражнения на координацию", "Coordination exercises"],
+    ["Поиск работает по названию, файлу, папкам, тегам и ученикам.", "Search by title, file, folder, tag, or student."],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
