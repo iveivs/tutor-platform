@@ -49,6 +49,9 @@ describe("translateUiText", () => {
     ["Оплата учтена · отменена", "Payment recorded · reversed"],
     ["Пробное занятие проведено", "Trial lesson completed"],
     ["2 октября 2026 г. в 17:00–18:00 · Пробное занятие · бесплатно", "2 October 2026 at 17:00–18:00 · Trial lesson · free"],
+    ["0 непрочитанных", "0 unread"],
+    ["Новый запрос ученика", "New student request"],
+    ["Новое занятие: запрос требует ответа", "New lesson: request needs review"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
