@@ -11,6 +11,8 @@ describe("translateUiText", () => {
     ["12 октября 2026 г.", "12 October 2026"],
     [" · нажмите на урок для управления", " · select a lesson to manage"],
     ["Открыть календарь", "Open calendar"],
+    ["Необязательно. Оставьте пустым, если подпись над именем не нужна.", "Optional. Leave this blank if you do not need a subtitle."],
+    ["Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.", "These time windows define the availability shown to students you have granted access. You can add several windows for the same day."],
     ["Расписание осталось без изменений", "The schedule remains unchanged"],
     ["Уведомления в Telegram", "Telegram notifications"],
     ["Проверить подключение", "Check connection"],
@@ -22,5 +24,26 @@ describe("translateUiText", () => {
     ["Остановить", "Stop"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
+  });
+
+  it("covers the recently added materials and lesson workflow", () => {
+    const texts = [
+      "Библиотека преподавателя",
+      "Добавить документ",
+      "Нет непривязанных документов",
+      "Настроить материал",
+      "Заменить файл",
+      "Правила пользовательского контента",
+      "Домашнее задание",
+      "Задание ученику",
+      "Личная заметка преподавателя",
+      "Ученик пока не добавил ответ.",
+      "Фотография удалена",
+      "Не удалось загрузить материалы урока",
+      "Материалы и домашка",
+      "Отменить без списания",
+    ];
+
+    for (const text of texts) expect(translateUiText(text)).not.toMatch(/[А-Яа-яЁё]/);
   });
 });
