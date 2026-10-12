@@ -6,6 +6,7 @@ describe("translateUiText", () => {
     ["Недавние уроки", "Recent lessons"],
     ["Материалы", "Materials"],
     ["Сегодня, ", "Today, "],
+    ["Сегодня, 12 октября", "Today, 12 October"],
     ["30 Сентября", "30 September"],
     ["12 октября 2026 г.", "12 October 2026"],
     [" · нажмите на урок для управления", " · select a lesson to manage"],

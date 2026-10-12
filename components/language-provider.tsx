@@ -116,6 +116,7 @@ export function translateUiText(value: string) {
   if (translations[core]) return `${leading}${translations[core]}${trailing}`;
 
   let translated = core
+    .replace(/^Сегодня, /, "Today, ")
     .replace(/^Кабинет ученика — (.+)$/, "Student portal — $1")
     .replace(/^Пригласить (.+)$/, "Invite $1")
     .replace(/^Введите: (.+)$/, "Enter: $1")
