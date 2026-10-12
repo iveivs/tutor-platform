@@ -40,8 +40,8 @@ const translations: Record<string, string> = {
   "Новый кабинет": "New account", "Для преподавателя, тренера или наставника": "For tutors, coaches, and mentors", "Название или роль": "Title or role", "Репетитор, тренер…": "Tutor, coach…", "Повторите пароль": "Repeat password", "Создать кабинет": "Create account", "Создаём…": "Creating…", "Сайт": "Website",
   "Проверьте почту и подтвердите email. Отдельный кабинет будет создан автоматически при первом входе.": "Check your inbox and confirm your email. Your account will be created automatically when you first sign in.", "Перейти ко входу": "Go to sign in", "Пароли не совпадают": "Passwords do not match",
   "Обзор": "Overview", "Календарь": "Calendar", "Ученики": "Students", "Запросы": "Requests", "История": "History", "Настройки": "Settings", "Выйти": "Sign out", "Уведомления": "Notifications", "Основная навигация": "Main navigation", "Мобильная навигация": "Mobile navigation",
-  "Сегодня": "Today", "Вчера": "Yesterday", "Завтра": "Tomorrow", "Назад": "Back", "Вперёд": "Next", "День": "Day", "Неделя": "Week", "Месяц": "Month", "Предыдущий день": "Previous day", "Следующий день": "Next day",
-  "Ваш рабочий день": "Your workday", "Расписание на день": "Daily schedule", "На этот день уроков нет": "No lessons on this day", "Показывать прошедшие уроки": "Show past lessons", "Загружаю прошедшие…": "Loading past lessons…",
+  "Сегодня": "Today", "Сегодня, ": "Today, ", "Вчера": "Yesterday", "Завтра": "Tomorrow", "Назад": "Back", "Вперёд": "Next", "День": "Day", "Неделя": "Week", "Месяц": "Month", "Предыдущий день": "Previous day", "Следующий день": "Next day",
+  "Ваш рабочий день": "Your workday", "Расписание на день": "Daily schedule", "На этот день уроков нет": "No lessons on this day", "Открыть календарь": "Open calendar", " · нажмите на урок для управления": " · select a lesson to manage", "Барабаны · Студия": "Drums · Studio", "Показывать прошедшие уроки": "Show past lessons", "Загружаю прошедшие…": "Loading past lessons…",
   "Следующий урок": "Next lesson", "Следующий урок пока не назначен": "No upcoming lesson yet", "Запросы на рассмотрении": "Pending requests", "Всё в порядке — ничего срочного.": "Everything is on track — nothing needs attention.", "Требуют внимания": "Needs attention",
   "Добавить урок": "Add lesson", "Новый урок": "New lesson", "Добавьте обычное или бесплатное пробное занятие.": "Add a regular or free trial lesson.", "Ученик": "Student", "Выберите ученика": "Select a student", "Тип занятия": "Lesson type", "Обычное занятие": "Regular lesson", "Пробное занятие · бесплатно": "Trial lesson · free",
   "Дата": "Date", "Время": "Time", "Продолжительность": "Duration", "Обычный урок · 1 час": "Regular lesson · 1 hour", "Двойной урок · 2 часа": "Double lesson · 2 hours", "Повторение": "Repeat", "Не повторять": "Do not repeat", "Каждую неделю": "Every week",
@@ -134,7 +134,8 @@ export function translateUiText(value: string) {
     .replace(/^Баланс пополнен на (\d+) (?:занятие|занятия|занятий)\.$/, "Balance increased by $1 lessons.")
     .replace(/^Ошибочная оплата на (\d+) (?:занятие|занятия|занятий) отменена\.$/, "An incorrect payment for $1 lessons was reversed.")
     .replace(/^Новое время: (.+)\. Перенесены оба занятия\.$/, "New time: $1. Both lessons were rescheduled.")
-    .replace(/^Новое время: (.+)\.$/, "New time: $1.");
+    .replace(/^Новое время: (.+)\.$/, "New time: $1.")
+    .replace(/ г\.$/, "");
   for (const [month, english] of Object.entries(months)) translated = translated.replace(new RegExp(month, "gi"), english);
   for (const [month, english] of Object.entries(shortMonths)) translated = translated.replace(new RegExp(month.replace(".", "\\."), "gi"), english);
   for (const [weekday, english] of Object.entries(weekdays)) translated = translated.replace(new RegExp(weekday, "gi"), english);

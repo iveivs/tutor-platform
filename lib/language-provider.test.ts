@@ -5,7 +5,11 @@ describe("translateUiText", () => {
   it.each([
     ["Недавние уроки", "Recent lessons"],
     ["Материалы", "Materials"],
+    ["Сегодня, ", "Today, "],
     ["30 Сентября", "30 September"],
+    ["12 октября 2026 г.", "12 October 2026"],
+    [" · нажмите на урок для управления", " · select a lesson to manage"],
+    ["Открыть календарь", "Open calendar"],
     ["Расписание осталось без изменений", "The schedule remains unchanged"],
     ["Уведомления в Telegram", "Telegram notifications"],
     ["Проверить подключение", "Check connection"],
