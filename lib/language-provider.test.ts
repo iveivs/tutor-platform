@@ -19,8 +19,10 @@ describe("translateUiText", () => {
     ["Баланс: ", "Balance: "],
     ["Баланс: 10 занятий", "Balance: 10 lessons"],
     ["Баланс: -1 занятие", "Balance: -1 lesson"],
+    ["Баланс -1", "Balance: -1 lesson"],
     ["Необходимо оплатить 1 занятие", "Payment required for 1 lesson"],
     ["Вс 15:00", "Sun 15:00"],
+    ["пн, 12 окт.", "Mon, 12 Oct"],
     ["Остановить", "Stop"],
     ["0 из 50 загрузок в этом месяце", "0 of 50 uploads this month"],
     ["0 КБ из 5120 МБ", "0 KB of 5120 MB"],
@@ -32,6 +34,15 @@ describe("translateUiText", () => {
     ["Показано ", "Showing "],
     ["0 КБ", "0 KB"],
     ["5120 МБ", "5120 MB"],
+    ["5 слотов", "5 slots"],
+    ["Запрос на новый урок отклонён", "New lesson request declined"],
+    ["Двойной урок проведён", "Double lesson completed"],
+    ["Списание за двойной урок", "Double lesson charge"],
+    ["Автоматически", "Automatically"],
+    ["10 октября 2026 г. в 21:29", "10 October 2026 at 21:29"],
+    ["30 сентября 2026 г. в 17:00–19:00 · 2 занятия", "30 September 2026 at 17:00–19:00 · 2 lessons"],
+    ["Назначен урок", "Lesson scheduled"],
+    ["Урок назначен на 2026-10-12 в 17:00.", "Lesson scheduled for 12 October 2026 at 17:00."],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
