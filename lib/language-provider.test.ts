@@ -27,6 +27,11 @@ describe("translateUiText", () => {
     ["Показано 0 из 0", "Showing 0 of 0"],
     ["Упражнения на координацию", "Coordination exercises"],
     ["Поиск работает по названию, файлу, папкам, тегам и ученикам.", "Search by title, file, folder, tag, or student."],
+    [" из ", " of "],
+    [" загрузок в этом месяце", " uploads this month"],
+    ["Показано ", "Showing "],
+    ["0 КБ", "0 KB"],
+    ["5120 МБ", "5120 MB"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
