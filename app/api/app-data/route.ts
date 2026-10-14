@@ -50,6 +50,9 @@ export async function GET(request: Request) {
   try {
     const auth = await requireMember(request);
     if (auth instanceof Response) return auth;
+    const studentAccountReadySql = getAuthConfig()?.url === "postgresql"
+      ? "EXISTS(SELECT 1 FROM users account_user WHERE account_user.id = m.user_id AND account_user.password_hash IS NOT NULL)"
+      : "m.status = 'active'";
     const url = new URL(request.url);
     const includePastLessons = url.searchParams.get("includePastLessons") === "1";
     const cursorValue = url.searchParams.get("cursor");
@@ -83,6 +86,7 @@ export async function GET(request: Request) {
       : Promise.resolve({ results: [] as Array<Record<string, unknown>> });
     const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows, availabilityRows, availabilityBusyRows] = await Promise.all([
       loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type, m.can_view_availability,
+        ${studentAccountReadySql} AS account_ready,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         NOT EXISTS(SELECT 1 FROM lessons paid WHERE paid.student_id = m.id AND paid.lesson_type = 'regular' AND paid.status = 'completed')
           AND NOT EXISTS(SELECT 1 FROM balance_entries payment WHERE payment.student_id = m.id AND payment.kind = 'payment') AS trial_eligible,
@@ -178,7 +182,7 @@ export async function GET(request: Request) {
       return {
         id: String(row.id), name: String(row.display_name), email: row.email ? String(row.email) : undefined, initials: initials(String(row.display_name)),
         schedule, next: row.next_lesson ? `${dateLabel.format(new Date(Number(row.next_lesson)))}, ${timeLabel.format(new Date(Number(row.next_lesson)))}` : "Не назначен",
-        balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), archived: row.status === "archived", trialEligible: Boolean(row.trial_eligible), accountStatus: row.status === "active" ? "active" : "invited",
+        balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), archived: row.status === "archived", trialEligible: Boolean(row.trial_eligible), accountStatus: Boolean(row.account_ready) ? "active" : "invited",
       };
     });
     const remainingByStudent = new Map<string, number>();
@@ -456,9 +460,13 @@ export async function POST(request: Request) {
       const name = body.name?.trim();
       const email = body.email?.trim() || null;
       if (!body.studentId || !name || name.length > 80 || (email && !/^\S+@\S+\.\S+$/.test(email))) return invalid();
-      const student = await db.prepare("SELECT id, status, email FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; status: string; email: string | null }>();
+      const accountReadySql = getAuthConfig()?.url === "postgresql"
+        ? "EXISTS(SELECT 1 FROM users account_user WHERE account_user.id = members.user_id AND account_user.password_hash IS NOT NULL)"
+        : "status = 'active'";
+      const student = await db.prepare(`SELECT id, status, email, ${accountReadySql} AS account_ready FROM members
+        WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'`).bind(body.studentId, auth.workspaceId).first<{ id: string; status: string; email: string | null; account_ready: number | boolean }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
-      if (student.status === "active" && (student.email ?? "").toLowerCase() !== (email ?? "").toLowerCase()) return Response.json({ error: "Email подключённого аккаунта меняется через поддержку" }, { status: 409 });
+      if (Boolean(student.account_ready) && (student.email ?? "").toLowerCase() !== (email ?? "").toLowerCase()) return Response.json({ error: "Email подключённого аккаунта меняется через поддержку" }, { status: 409 });
       await db.prepare("UPDATE members SET display_name = ?, email = ?, can_view_availability = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
         .bind(name, email, body.canViewAvailability ? 1 : 0, Date.now(), student.id, auth.workspaceId).run();
     } else if (body.action === "convertTrialContact") {
@@ -495,9 +503,13 @@ export async function POST(request: Request) {
       ]);
     } else if (body.action === "createStudentInvite") {
       if (!body.studentId) return invalid();
-      const student = await db.prepare("SELECT id, email, status, display_name FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string; display_name: string }>();
+      const accountReadySql = getAuthConfig()?.url === "postgresql"
+        ? "EXISTS(SELECT 1 FROM users account_user WHERE account_user.id = members.user_id AND account_user.password_hash IS NOT NULL)"
+        : "status = 'active'";
+      const student = await db.prepare(`SELECT id, email, status, display_name, ${accountReadySql} AS account_ready FROM members
+        WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'`).bind(body.studentId, auth.workspaceId).first<{ id: string; email: string | null; status: string; display_name: string; account_ready: number | boolean }>();
       if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
-      if (student.status === "active") return Response.json({ error: "Ученик уже подключил аккаунт" }, { status: 409 });
+      if (Boolean(student.account_ready)) return Response.json({ error: "Ученик уже подключил аккаунт" }, { status: 409 });
       if (!student.email) return Response.json({ error: "Сначала укажите email ученика" }, { status: 409 });
       const inviteToken = randomToken();
       await db.batch([
