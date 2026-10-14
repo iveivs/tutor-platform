@@ -3,11 +3,17 @@
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
 :root {
+  /* Product design tokens. Components consume these values; feature code should not invent new ones. */
+  --space-page-x: 1rem; --space-page-y: 1.25rem; --space-card: 1.25rem; --space-card-comfortable: 1.5rem; --space-section: 1.25rem;
+  --control-height: 2.75rem; --control-height-lg: 3rem; --radius-control: 0.75rem; --radius-card: 1.5rem;
   --background: #f6f8fc; --foreground: #0f172a; --card: #ffffff; --card-foreground: #0f172a;
   --popover: #ffffff; --popover-foreground: #0f172a; --primary: #4f46e5; --primary-foreground: #ffffff;
   --secondary: #eef2ff; --secondary-foreground: #3730a3; --muted: #f1f5f9; --muted-foreground: #64748b;
   --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
   --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
+}
+@media (min-width: 48rem) {
+  :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
 }
 
 .legal-document { @apply mt-8 rounded-2xl border border-border bg-card p-5 leading-7 shadow-sm sm:p-8; }
@@ -38,7 +44,7 @@
 html { background: var(--background); }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
 button, input { font: inherit; } button { cursor: pointer; } ::selection { background: #c7d2fe; color: #1e1b4b; }
-.card { border: 1px solid var(--border); border-radius: 1.5rem; background: var(--card); color: var(--card-foreground); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.04); }
+.card { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); color: var(--card-foreground); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.04); }
 .dark .card { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22); }
 .calendar-surface { background-color: #ffffff; }
 .calendar-weekday { background-color: #ffffff; }

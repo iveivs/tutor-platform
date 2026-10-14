@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, Send, Trash2, Upload, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -82,13 +83,13 @@ export function ProfilePersonalizationCard({ name, initials, avatarColor, avatar
     } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось удалить фотографию профиля"); }
     finally { setPending(false); }
   };
-  return <section className="card p-5 md:p-6">
-    <div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-16 text-xl" /><div><h2 className="text-lg font-bold">Персонализация</h2><p className="mt-1 text-sm text-slate-500">Фото профиля и цвет кружка с инициалами</p></div></div>
+  return <AppCard>
+    <div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-16 text-xl" /><div><AppCardTitle>Персонализация</AppCardTitle><AppCardDescription>Фото профиля и цвет кружка с инициалами</AppCardDescription></div></div>
     <div className="mt-5"><p className="mb-2 text-sm font-semibold">Цвет аватара</p><AvatarColorPicker value={avatarColor} onChange={changeColor} disabled={pending} /></div>
-    <div className="mt-5 flex min-w-0 flex-col gap-2"><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal px-3 py-2 text-center leading-5" disabled={pending} onClick={() => fileRef.current?.click()}><Upload className="shrink-0" /><span className="min-w-0">Загрузить фотографию</span></Button>{avatarUrl && <Button type="button" variant="ghost" className="h-auto min-h-10 w-full min-w-0 whitespace-normal px-3 py-2 text-center leading-5" disabled={pending} onClick={() => void remove()}><Trash2 className="shrink-0" /><span className="min-w-0">Удалить фотографию</span></Button>}</div>
+    <div className="mt-5 flex min-w-0 flex-col gap-2"><Button type="button" variant="outline" size="control" className="h-auto min-h-[var(--control-height)] w-full min-w-0 whitespace-normal py-2 text-center leading-5" disabled={pending} onClick={() => fileRef.current?.click()}><Upload /><span className="min-w-0">Загрузить фотографию</span></Button>{avatarUrl && <Button type="button" variant="ghost" size="control" className="h-auto min-h-[var(--control-height)] w-full min-w-0 whitespace-normal py-2 text-center leading-5" disabled={pending} onClick={() => void remove()}><Trash2 /><span className="min-w-0">Удалить фотографию</span></Button>}</div>
     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => void upload(event.target.files?.[0])} />
     <p className="mt-3 text-xs leading-5 text-slate-500">JPEG, PNG или WebP до 2 МБ. Перед загрузкой применяются правила размещения контента.</p>
-  </section>;
+  </AppCard>;
 }
 
 export function StudentAvatarPreferenceCard({ studentId, name, initials, avatarColor, ownAvatarColor, avatarUrl, onChanged }: { studentId: string; name: string; initials: string; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; onChanged: () => Promise<void> | void }) {
@@ -103,7 +104,7 @@ export function StudentAvatarPreferenceCard({ studentId, name, initials, avatarC
     } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить цвет карточки"); }
     finally { setPending(false); }
   };
-  return <section className="card p-6"><div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-14" /><div><h2 className="text-lg font-bold">Вид карточки</h2><p className="mt-1 text-sm text-slate-500">Этот цвет видите только вы. Фото ученика, если оно есть, остаётся общим.</p></div></div><div className="mt-5"><AvatarColorPicker value={avatarColor} ownValue={ownAvatarColor} onChange={change} allowReset disabled={pending} /></div></section>;
+  return <AppCard><div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-14" /><div><AppCardTitle>Вид карточки</AppCardTitle><AppCardDescription>Этот цвет видите только вы. Фото ученика, если оно есть, остаётся общим.</AppCardDescription></div></div><div className="mt-5"><AvatarColorPicker value={avatarColor} ownValue={ownAvatarColor} onChange={change} allowReset disabled={pending} /></div></AppCard>;
 }
 
 type MessagePeer = { id: string; name: string; role: string; initials: string; avatarColor: string; avatarUrl: string | null; unreadCount: number; lastMessage: string | null; lastAt: number | null };
@@ -154,7 +155,7 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
     <section className="flex min-w-0 flex-col">
       {compact && data.peers.length > 1 ? <Select value={selectedId} onValueChange={setSelectedId}><SelectTrigger className="mb-3 w-full"><SelectValue placeholder="Выберите преподавателя" /></SelectTrigger><SelectContent>{data.peers.map((peer) => <SelectItem key={peer.id} value={peer.id}>{peer.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong className="truncate">{selected?.name}</strong></div>}
       <div className={`flex flex-1 flex-col gap-2 overflow-y-auto ${compact ? "my-3 max-h-64 min-h-40 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900/60" : "max-h-[330px] min-h-52 py-4"}`}>{thread.map((message) => <div key={message.id} className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${message.senderId === data.currentMemberId ? "ml-auto bg-indigo-600 text-white" : "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className={`mt-1 block text-right text-[10px] ${message.senderId === data.currentMemberId ? "text-indigo-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time></div>)}{!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-slate-500">Сообщений пока нет</div>}</div>
-      <div className="flex min-w-0 items-end gap-2"><Textarea className="min-h-20 min-w-0 resize-none" value={body} maxLength={500} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon" className="size-11 shrink-0 bg-indigo-600" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send className="size-4" /></Button></div>
+      <div className="flex min-w-0 items-end gap-2"><Textarea className="min-h-20 min-w-0 resize-none" value={body} maxLength={500} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon-control" className="shrink-0" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send /></Button></div>
       <div className="mt-1 flex items-start justify-between gap-2 text-[11px] text-slate-400"><span>Enter — отправить, Shift+Enter — новая строка</span><span className="shrink-0">{body.length}/500</span></div>
     </section>
   </div>;
@@ -166,5 +167,5 @@ export function MessagesDialog({ initialPeerId, label = "Сообщения" }: 
 }
 
 export function MessagesCard() {
-  return <section className="card min-w-0 overflow-hidden p-5 md:p-6"><div className="mb-4 flex min-w-0 items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><MessageCircle className="size-5" /></span><div className="min-w-0"><h2 className="text-lg font-bold">Сообщения</h2><p className="text-sm text-slate-500">Связь с преподавателем внутри кабинета</p></div></div><MessagesContent compact /></section>;
+  return <AppCard className="overflow-hidden"><div className="mb-4 flex min-w-0 items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><MessageCircle className="size-5" /></span><div className="min-w-0"><AppCardTitle>Сообщения</AppCardTitle><AppCardDescription>Связь с преподавателем внутри кабинета</AppCardDescription></div></div><MessagesContent compact /></AppCard>;
 }

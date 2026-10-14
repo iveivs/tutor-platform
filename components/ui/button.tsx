@@ -29,6 +29,9 @@ const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
+        control: "h-[var(--control-height)] rounded-[var(--radius-control)] px-4 has-[>svg]:px-3.5",
+        "control-lg": "h-[var(--control-height-lg)] rounded-[var(--radius-control)] px-5 text-base has-[>svg]:px-4",
+        "icon-control": "size-[var(--control-height)] rounded-[var(--radius-control)]",
       },
     },
     defaultVariants: {
