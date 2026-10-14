@@ -56,6 +56,7 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_PHOTOS_PREFIX: ${S3_PHOTOS_PREFIX:-tutor-platform/lesson-photos}
       S3_MATERIALS_PREFIX: ${S3_MATERIALS_PREFIX:-tutor-platform/teacher-materials}
+      S3_AVATARS_PREFIX: ${S3_AVATARS_PREFIX:-tutor-platform/member-avatars}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
       LEGAL_DOCUMENTS_DIR: /legal-documents
     volumes:
@@ -109,6 +110,7 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_PHOTOS_PREFIX: ${S3_PHOTOS_PREFIX:-tutor-platform/lesson-photos}
       S3_MATERIALS_PREFIX: ${S3_MATERIALS_PREFIX:-tutor-platform/teacher-materials}
+      S3_AVATARS_PREFIX: ${S3_AVATARS_PREFIX:-tutor-platform/member-avatars}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
     depends_on:
       migrate:

@@ -39,6 +39,7 @@ function storageConfig() {
     secretAccessKey: required(process.env.S3_SECRET_ACCESS_KEY, "S3_SECRET_ACCESS_KEY"),
     photosPrefix: (process.env.S3_PHOTOS_PREFIX?.trim() || "tutor-platform/lesson-photos").replace(/^\/+|\/+$/g, ""),
     materialsPrefix: (process.env.S3_MATERIALS_PREFIX?.trim() || "tutor-platform/teacher-materials").replace(/^\/+|\/+$/g, ""),
+    avatarsPrefix: (process.env.S3_AVATARS_PREFIX?.trim() || "tutor-platform/member-avatars").replace(/^\/+|\/+$/g, ""),
   };
 }
 
@@ -50,7 +51,7 @@ function client() {
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
   });
-  return { client: s3Client, bucket: config.bucket, photosPrefix: config.photosPrefix, materialsPrefix: config.materialsPrefix };
+  return { client: s3Client, bucket: config.bucket, photosPrefix: config.photosPrefix, materialsPrefix: config.materialsPrefix, avatarsPrefix: config.avatarsPrefix };
 }
 
 export function lessonPhotoObjectKey(workspaceId: string, lessonId: string, attachmentId: string) {
@@ -61,6 +62,11 @@ export function lessonPhotoObjectKey(workspaceId: string, lessonId: string, atta
 export function teacherMaterialObjectKey(workspaceId: string, resourceId: string, extension: string) {
   const { materialsPrefix } = client();
   return `${materialsPrefix}/${encodeURIComponent(workspaceId)}/${resourceId}.${extension}`;
+}
+
+export function memberAvatarObjectKey(workspaceId: string, memberId: string, avatarId: string) {
+  const { avatarsPrefix } = client();
+  return `${avatarsPrefix}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(memberId)}/${avatarId}.webp`;
 }
 
 export async function putLessonPhoto(objectKey: string, body: Uint8Array) {
@@ -85,6 +91,26 @@ export async function getLessonPhoto(objectKey: string) {
 export async function deleteLessonPhoto(objectKey: string) {
   const storage = client();
   await storage.client.send(new DeleteObjectCommand({ Bucket: storage.bucket, Key: objectKey }));
+}
+
+export async function putMemberAvatar(objectKey: string, body: Uint8Array) {
+  const storage = client();
+  await storage.client.send(new PutObjectCommand({
+    Bucket: storage.bucket,
+    Key: objectKey,
+    Body: body,
+    ContentType: "image/webp",
+    CacheControl: "private, max-age=86400",
+    Metadata: { kind: "member-avatar" },
+  }));
+}
+
+export async function getMemberAvatar(objectKey: string) {
+  return getLessonPhoto(objectKey);
+}
+
+export async function deleteMemberAvatar(objectKey: string) {
+  return deleteLessonPhoto(objectKey);
 }
 
 export async function putTeacherMaterial(objectKey: string, body: Uint8Array, contentType: string, contentSha256: string) {

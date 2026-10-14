@@ -113,6 +113,9 @@ export const members = pgTable("members", {
   email: text("email"),
   phone: text("phone"),
   notes: text("notes"),
+  avatarColor: text("avatar_color").notNull().default("indigo"),
+  avatarObjectKey: text("avatar_object_key"),
+  avatarUpdatedAt: instant("avatar_updated_at"),
   isTrialContact: boolean("is_trial_contact").notNull().default(false),
   scheduleType: text("schedule_type").notNull().default("floating"),
   canViewAvailability: boolean("can_view_availability").notNull().default(false),
@@ -121,8 +124,38 @@ export const members = pgTable("members", {
   check("members_role_check", sql`${table.role} in ('owner', 'teacher', 'student')`),
   check("members_status_check", sql`${table.status} in ('invited', 'active', 'archived')`),
   check("members_schedule_type_check", sql`${table.scheduleType} in ('fixed', 'floating')`),
+  check("members_avatar_color_check", sql`${table.avatarColor} in ('indigo', 'violet', 'rose', 'amber', 'emerald', 'cyan', 'slate')`),
   index("idx_members_workspace_role").on(table.workspaceId, table.role),
   uniqueIndex("members_workspace_user_unique").on(table.workspaceId, table.userId),
+]);
+
+export const memberDisplayPreferences = pgTable("member_display_preferences", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  viewerMemberId: text("viewer_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  studentMemberId: text("student_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  avatarColor: text("avatar_color").notNull(),
+  ...timestamps(),
+}, (table) => [
+  check("member_display_preferences_avatar_color_check", sql`${table.avatarColor} in ('indigo', 'violet', 'rose', 'amber', 'emerald', 'cyan', 'slate')`),
+  uniqueIndex("member_display_preferences_viewer_student_unique").on(table.viewerMemberId, table.studentMemberId),
+  index("idx_member_display_preferences_workspace").on(table.workspaceId),
+]);
+
+export const directMessages = pgTable("direct_messages", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  senderMemberId: text("sender_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  recipientMemberId: text("recipient_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  readAt: instant("read_at"),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("direct_messages_body_length_check", sql`char_length(${table.body}) between 1 and 1000`),
+  check("direct_messages_participants_check", sql`${table.senderMemberId} <> ${table.recipientMemberId}`),
+  index("idx_direct_messages_sender_created").on(table.senderMemberId, table.createdAt),
+  index("idx_direct_messages_recipient_read_created").on(table.recipientMemberId, table.readAt, table.createdAt),
+  index("idx_direct_messages_workspace_created").on(table.workspaceId, table.createdAt),
 ]);
 
 /** Immutable proof that a user accepted a specific legal document version. */

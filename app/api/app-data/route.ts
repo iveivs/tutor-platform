@@ -8,6 +8,7 @@ import { groupDoubleLessonCharges, groupDoubleLessonEvents } from "@/lib/double-
 import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
 import { env } from "cloudflare:workers";
 import { sendStudentInvitation } from "@/lib/account-email";
+import { deleteMemberAvatar } from "@/lib/lesson-materials";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { z } from "zod";
 
@@ -18,6 +19,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const duration = z.number().int().min(15).max(240).optional();
 const lessonCount = z.union([z.literal(1), z.literal(2)]).optional();
+const avatarColor = z.enum(["indigo", "violet", "rose", "amber", "emerald", "cyan", "slate"]);
 const email = z.union([z.literal(""), z.string().email().max(254)]).optional();
 const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("createLesson"), studentId: id.optional(), trialGuestName: z.string().trim().min(1).max(80).optional(), trialGuestEmail: email, trialGuestPhone: z.string().trim().max(40).optional(), trialGuestNote: z.string().trim().max(300).optional(), date, time, durationMinutes: duration, lessonCount, lessonType: z.enum(["regular", "trial"]).optional(), repeat: z.enum(["once", "weekly"]).optional() }).strict(),
@@ -39,6 +41,8 @@ const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80), professionalTitle: z.string().trim().max(50) }).strict(),
   z.object({ action: z.literal("replaceAvailability"), windows: z.array(z.object({ weekday: z.number().int().min(1).max(7), start: time, end: time }).strict()).max(50) }).strict(),
   z.object({ action: z.literal("markNotificationsRead") }).strict(),
+  z.object({ action: z.literal("updateOwnAvatarColor"), color: avatarColor }).strict(),
+  z.object({ action: z.literal("updateStudentAvatarColor"), studentId: id, color: avatarColor.nullable() }).strict(),
 ]);
 type ActionBody = z.infer<typeof actionBodySchema>;
 
@@ -86,6 +90,9 @@ export async function GET(request: Request) {
       : Promise.resolve({ results: [] as Array<Record<string, unknown>> });
     const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows, availabilityRows, availabilityBusyRows] = await Promise.all([
       loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type, m.can_view_availability,
+        m.avatar_color, m.avatar_object_key IS NOT NULL AS has_avatar, m.avatar_updated_at,
+        (SELECT preference.avatar_color FROM member_display_preferences preference
+          WHERE preference.viewer_member_id = ? AND preference.student_member_id = m.id LIMIT 1) AS avatar_override_color,
         ${studentAccountReadySql} AS account_ready,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = m.id), 0) AS balance,
         NOT EXISTS(SELECT 1 FROM lessons paid WHERE paid.student_id = m.id AND paid.lesson_type = 'regular' AND paid.status = 'completed')
@@ -93,7 +100,7 @@ export async function GET(request: Request) {
         (SELECT MIN(l.starts_at) FROM lessons l WHERE l.student_id = m.id AND l.status = 'scheduled' AND l.starts_at >= ?) AS next_lesson
         FROM members m
         WHERE m.workspace_id = ? AND m.role = 'student' AND m.is_trial_contact = 0 AND (? IS NULL OR m.id = ?)
-        ORDER BY m.display_name`).bind(Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
+        ORDER BY m.display_name`).bind(auth.memberId, Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("students", "lessons"), () => db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name, m.is_trial_contact,
@@ -133,8 +140,10 @@ export async function GET(request: Request) {
         WHERE n.member_id = ? ORDER BY n.created_at DESC LIMIT 30`).bind(auth.memberId).all()),
       needs("profile") ? db.prepare(`SELECT display_name, professional_title FROM members WHERE workspace_id = ? AND role IN ('owner', 'teacher') AND status = 'active'
         ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END LIMIT 1`).bind(auth.workspaceId).first<{ display_name: string; professional_title: string }>() : Promise.resolve(null),
-      needs("profile") ? db.prepare(`SELECT m.display_name, m.professional_title, COALESCE(m.email, u.email, '') AS email FROM members m LEFT JOIN users u ON u.id = m.user_id
-        WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<{ display_name: string; professional_title: string; email: string }>() : Promise.resolve(null),
+      needs("profile") ? db.prepare(`SELECT m.display_name, m.professional_title, COALESCE(m.email, u.email, '') AS email,
+          m.avatar_color, m.avatar_object_key IS NOT NULL AS has_avatar, m.avatar_updated_at
+        FROM members m LEFT JOIN users u ON u.id = m.user_id
+        WHERE m.id = ? AND m.workspace_id = ? LIMIT 1`).bind(auth.memberId, auth.workspaceId).first<Record<string, unknown>>() : Promise.resolve(null),
       loadRows(needs("historyEvents"), () => db.prepare(`SELECT e.id, e.student_id, e.event_type, e.previous_starts_at, e.starts_at, e.ends_at, e.note, e.occurred_at,
         lesson.group_id AS lesson_group_id, lesson.lesson_type, student.display_name, actor.display_name AS actor_name
         FROM lesson_events e
@@ -183,6 +192,8 @@ export async function GET(request: Request) {
         id: String(row.id), name: String(row.display_name), email: row.email ? String(row.email) : undefined, initials: initials(String(row.display_name)),
         schedule, next: row.next_lesson ? `${dateLabel.format(new Date(Number(row.next_lesson)))}, ${timeLabel.format(new Date(Number(row.next_lesson)))}` : "Не назначен",
         balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), archived: row.status === "archived", trialEligible: Boolean(row.trial_eligible), accountStatus: Boolean(row.account_ready) ? "active" : "invited",
+        ownAvatarColor: String(row.avatar_color ?? "indigo"), avatarColor: String(row.avatar_override_color ?? row.avatar_color ?? "indigo"),
+        avatarUrl: row.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(String(row.id))}&v=${Number(row.avatar_updated_at ?? 0)}` : undefined,
       };
     });
     const remainingByStudent = new Map<string, number>();
@@ -275,7 +286,11 @@ export async function GET(request: Request) {
       payload.currentStudentId = ownStudentId;
       payload.teacherName = teacherRow?.display_name ?? "Преподаватель";
       payload.teacherTitle = teacherRow?.professional_title ?? "Репетитор";
-      payload.profile = viewerRow ? { name: viewerRow.display_name, professionalTitle: viewerRow.professional_title, email: viewerRow.email } : undefined;
+      payload.profile = viewerRow ? {
+        name: viewerRow.display_name, professionalTitle: viewerRow.professional_title, email: viewerRow.email,
+        avatarColor: viewerRow.avatar_color ?? "indigo",
+        avatarUrl: viewerRow.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(auth.memberId)}&v=${Number(viewerRow.avatar_updated_at ?? 0)}` : undefined,
+      } : undefined;
     }
     return Response.json(payload);
   } catch (error) {
@@ -302,11 +317,28 @@ export async function POST(request: Request) {
       const limited = await enforceRateLimit(env.STUDENT_REQUEST_RATE_LIMITER, `${auth.workspaceId}:${auth.memberId}`, "student_request");
       if (limited) return limited;
     }
-    if (!["submitStudentRequest", "markNotificationsRead"].includes(body.action) && !["owner", "teacher"].includes(auth.role)) return Response.json({ error: "Недостаточно прав" }, { status: 403 });
+    if (!["submitStudentRequest", "markNotificationsRead", "updateOwnAvatarColor"].includes(body.action) && !["owner", "teacher"].includes(auth.role)) return Response.json({ error: "Недостаточно прав" }, { status: 403 });
     const db = getD1();
     const id = crypto.randomUUID();
 
-    if (body.action === "updateProfile") {
+    if (body.action === "updateOwnAvatarColor") {
+      await db.prepare("UPDATE members SET avatar_color = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
+        .bind(body.color, Date.now(), auth.memberId, auth.workspaceId).run();
+    } else if (body.action === "updateStudentAvatarColor") {
+      const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'")
+        .bind(body.studentId, auth.workspaceId).first();
+      if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+      if (body.color === null) {
+        await db.prepare("DELETE FROM member_display_preferences WHERE viewer_member_id = ? AND student_member_id = ?")
+          .bind(auth.memberId, body.studentId).run();
+      } else {
+        await db.prepare(`INSERT INTO member_display_preferences
+          (id, workspace_id, viewer_member_id, student_member_id, avatar_color, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(viewer_member_id, student_member_id) DO UPDATE SET avatar_color = excluded.avatar_color, updated_at = excluded.updated_at`)
+          .bind(crypto.randomUUID(), auth.workspaceId, auth.memberId, body.studentId, body.color, Date.now(), Date.now()).run();
+      }
+    } else if (body.action === "updateProfile") {
       const name = body.name?.trim();
       const professionalTitle = body.professionalTitle.trim();
       if (!name || name.length < 2 || name.length > 80) return invalid();
@@ -488,7 +520,7 @@ export async function POST(request: Request) {
         WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status = 'archived'`).bind(Date.now(), body.studentId, auth.workspaceId).run();
       if (!restored.meta.changes) return Response.json({ error: "Ученик не найден в архиве" }, { status: 404 });
     } else if (body.action === "deleteStudent") {
-      const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status = 'archived'").bind(body.studentId, auth.workspaceId).first();
+      const student = await db.prepare("SELECT id, avatar_object_key FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status = 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; avatar_object_key: string | null }>();
       if (!student) return Response.json({ error: "Окончательно удалить можно только ученика из архива" }, { status: 409 });
       await db.batch([
         db.prepare("DELETE FROM notifications WHERE member_id = ? OR student_id = ? OR lesson_id IN (SELECT id FROM lessons WHERE student_id = ? AND workspace_id = ?) OR request_id IN (SELECT id FROM lesson_requests WHERE student_id = ? AND workspace_id = ?) OR balance_entry_id IN (SELECT id FROM balance_entries WHERE student_id = ? AND workspace_id = ?)").bind(body.studentId, body.studentId, body.studentId, auth.workspaceId, body.studentId, auth.workspaceId, body.studentId, auth.workspaceId),
@@ -501,6 +533,7 @@ export async function POST(request: Request) {
         db.prepare("DELETE FROM data_changes WHERE audience_member_id = ? AND workspace_id = ?").bind(body.studentId, auth.workspaceId),
         db.prepare("DELETE FROM members WHERE id = ? AND workspace_id = ? AND status = 'archived'").bind(body.studentId, auth.workspaceId),
       ]);
+      if (student.avatar_object_key) await deleteMemberAvatar(student.avatar_object_key).catch((error) => console.warn("Failed to delete archived student avatar", error));
     } else if (body.action === "createStudentInvite") {
       if (!body.studentId) return invalid();
       const accountReadySql = getAuthConfig()?.url === "postgresql"
