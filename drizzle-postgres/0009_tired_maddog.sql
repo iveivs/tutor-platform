@@ -1,0 +1,2 @@
+ALTER TABLE "direct_messages" DROP CONSTRAINT "direct_messages_body_length_check";--> statement-breakpoint
+ALTER TABLE "direct_messages" ADD CONSTRAINT "direct_messages_body_length_check" CHECK (char_length("direct_messages"."body") between 1 and 500);

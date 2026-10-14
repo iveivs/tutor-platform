@@ -7,8 +7,11 @@ import { readLimitedJson } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 
-const sendSchema = z.object({ recipientId: z.string().uuid(), body: z.string().trim().min(1).max(1000) }).strict();
-const readSchema = z.object({ peerId: z.string().uuid() }).strict();
+// Imported accounts can retain identifiers from the previous platform, so member
+// ids must not be restricted to UUIDs here.
+const memberId = z.string().trim().min(1).max(128);
+const sendSchema = z.object({ recipientId: memberId, body: z.string().trim().min(1).max(500) }).strict();
+const readSchema = z.object({ peerId: memberId }).strict();
 
 async function accessiblePeer(workspaceId: string, memberId: string, role: string, peerId: string) {
   const result = await getPostgresPool().query(`SELECT peer.id
@@ -79,7 +82,7 @@ export async function POST(request: Request) {
     const json = await readLimitedJson<unknown>(request);
     if (!json.ok) return json.response;
     const parsed = sendSchema.safeParse(json.value);
-    if (!parsed.success) return Response.json({ error: "Сообщение должно содержать от 1 до 1000 символов" }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: "Сообщение должно содержать от 1 до 500 символов" }, { status: 400 });
     if (!await accessiblePeer(auth.workspaceId, auth.memberId, auth.role, parsed.data.recipientId)) return Response.json({ error: "Собеседник недоступен" }, { status: 404 });
     const hourly = await getPostgresPool().query(`SELECT count(*)::int AS count FROM direct_messages
       WHERE workspace_id = $1 AND sender_member_id = $2 AND created_at > now() - interval '1 hour'`, [auth.workspaceId, auth.memberId]);

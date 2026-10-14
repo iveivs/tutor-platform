@@ -142,7 +142,7 @@ export const directMessages = sqliteTable("direct_messages", {
   readAt: integer("read_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`),
 }, (table) => [
-  check("direct_messages_body_length_check", sql`length(${table.body}) between 1 and 1000`),
+  check("direct_messages_body_length_check", sql`length(${table.body}) between 1 and 500`),
   check("direct_messages_participants_check", sql`${table.senderMemberId} <> ${table.recipientMemberId}`),
   index("idx_direct_messages_sender_created").on(table.senderMemberId, table.createdAt),
   index("idx_direct_messages_recipient_read_created").on(table.recipientMemberId, table.readAt, table.createdAt),

@@ -6,6 +6,7 @@ import { MessageCircle, Send, Trash2, Upload, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 export const avatarColors = ["indigo", "violet", "rose", "amber", "emerald", "cyan", "slate"] as const;
@@ -84,7 +85,7 @@ export function ProfilePersonalizationCard({ name, initials, avatarColor, avatar
   return <section className="card p-5 md:p-6">
     <div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-16 text-xl" /><div><h2 className="text-lg font-bold">Персонализация</h2><p className="mt-1 text-sm text-slate-500">Фото профиля и цвет кружка с инициалами</p></div></div>
     <div className="mt-5"><p className="mb-2 text-sm font-semibold">Цвет аватара</p><AvatarColorPicker value={avatarColor} onChange={changeColor} disabled={pending} /></div>
-    <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><Button type="button" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}><Upload />Загрузить фотографию</Button>{avatarUrl && <Button type="button" variant="ghost" disabled={pending} onClick={() => void remove()}><Trash2 />Удалить фотографию</Button>}</div>
+    <div className="mt-5 flex min-w-0 flex-col gap-2"><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal px-3 py-2 text-center leading-5" disabled={pending} onClick={() => fileRef.current?.click()}><Upload className="shrink-0" /><span className="min-w-0">Загрузить фотографию</span></Button>{avatarUrl && <Button type="button" variant="ghost" className="h-auto min-h-10 w-full min-w-0 whitespace-normal px-3 py-2 text-center leading-5" disabled={pending} onClick={() => void remove()}><Trash2 className="shrink-0" /><span className="min-w-0">Удалить фотографию</span></Button>}</div>
     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => void upload(event.target.files?.[0])} />
     <p className="mt-3 text-xs leading-5 text-slate-500">JPEG, PNG или WebP до 2 МБ. Перед загрузкой применяются правила размещения контента.</p>
   </section>;
@@ -109,7 +110,7 @@ type MessagePeer = { id: string; name: string; role: string; initials: string; a
 type DirectMessage = { id: string; senderId: string; recipientId: string; body: string; read: boolean; createdAt: number };
 type MessagesData = { currentMemberId: string; peers: MessagePeer[]; messages: DirectMessage[] };
 
-function MessagesContent({ initialPeerId }: { initialPeerId?: string }) {
+function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: string; compact?: boolean }) {
   const [data, setData] = useState<MessagesData | null>(null);
   const [selectedId, setSelectedId] = useState(initialPeerId ?? "");
   const [body, setBody] = useState("");
@@ -134,7 +135,7 @@ function MessagesContent({ initialPeerId }: { initialPeerId?: string }) {
     void apiFetch("/api/messages", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ peerId: selectedId }) }).then(() => load()).catch(() => undefined);
   }, [selectedId, load]);
   const selected = data?.peers.find((peer) => peer.id === selectedId);
-  const thread = useMemo(() => data?.messages.filter((message) => message.senderId === selectedId || message.recipientId === selectedId) ?? [], [data, selectedId]);
+  const thread = useMemo(() => (data?.messages.filter((message) => message.senderId === selectedId || message.recipientId === selectedId) ?? []).slice(-50), [data, selectedId]);
   const send = async () => {
     const text = body.trim(); if (!selectedId || !text) return;
     setPending(true);
@@ -148,9 +149,14 @@ function MessagesContent({ initialPeerId }: { initialPeerId?: string }) {
   };
   if (!data) return <div className="grid min-h-56 place-items-center text-sm text-slate-500">Загружаю сообщения…</div>;
   if (!data.peers.length) return <div className="grid min-h-56 place-items-center text-center text-sm text-slate-500"><span><UserRound className="mx-auto mb-2 size-7" />Доступных собеседников пока нет</span></div>;
-  return <div className="grid min-h-[420px] gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-    <aside className="max-h-[480px] space-y-1 overflow-y-auto md:border-r md:pr-3">{data.peers.map((peer) => <button key={peer.id} type="button" onClick={() => setSelectedId(peer.id)} className={`flex w-full items-center gap-3 rounded-xl p-2.5 text-left ${selectedId === peer.id ? "bg-indigo-50 dark:bg-indigo-950/50" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}><MemberAvatar name={peer.name} initials={peer.initials} color={peer.avatarColor} url={peer.avatarUrl} className="size-10 text-sm" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{peer.name}</strong><span className="block truncate text-xs text-slate-500">{peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель")}</span></span>{peer.unreadCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-xs font-bold text-white">{peer.unreadCount}</span>}</button>)}</aside>
-    <section className="flex min-w-0 flex-col"><div className="flex items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong>{selected?.name}</strong></div><div className="flex max-h-[330px] min-h-52 flex-1 flex-col gap-2 overflow-y-auto py-4">{thread.map((message) => <div key={message.id} className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${message.senderId === data.currentMemberId ? "ml-auto bg-indigo-600 text-white" : "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className={`mt-1 block text-right text-[10px] ${message.senderId === data.currentMemberId ? "text-indigo-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time></div>)}{!thread.length && <div className="grid flex-1 place-items-center text-sm text-slate-500">Сообщений пока нет</div>}</div><div className="flex items-end gap-2"><Textarea value={body} maxLength={1000} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon" className="shrink-0 bg-indigo-600" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send className="size-4" /></Button></div><p className="mt-1 text-right text-xs text-slate-400">{body.length}/1000</p></section>
+  return <div className={compact ? "min-w-0" : "grid min-h-[420px] min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]"}>
+    {!compact && <aside className="max-h-[480px] min-w-0 space-y-1 overflow-y-auto md:border-r md:pr-3">{data.peers.map((peer) => <button key={peer.id} type="button" onClick={() => setSelectedId(peer.id)} className={`flex w-full min-w-0 items-center gap-3 rounded-xl p-2.5 text-left ${selectedId === peer.id ? "bg-indigo-50 dark:bg-indigo-950/50" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}><MemberAvatar name={peer.name} initials={peer.initials} color={peer.avatarColor} url={peer.avatarUrl} className="size-10 text-sm" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{peer.name}</strong><span className="block truncate text-xs text-slate-500">{peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель")}</span></span>{peer.unreadCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-xs font-bold text-white">{peer.unreadCount}</span>}</button>)}</aside>}
+    <section className="flex min-w-0 flex-col">
+      {compact && data.peers.length > 1 ? <Select value={selectedId} onValueChange={setSelectedId}><SelectTrigger className="mb-3 w-full"><SelectValue placeholder="Выберите преподавателя" /></SelectTrigger><SelectContent>{data.peers.map((peer) => <SelectItem key={peer.id} value={peer.id}>{peer.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong className="truncate">{selected?.name}</strong></div>}
+      <div className={`flex flex-1 flex-col gap-2 overflow-y-auto ${compact ? "my-3 max-h-64 min-h-40 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900/60" : "max-h-[330px] min-h-52 py-4"}`}>{thread.map((message) => <div key={message.id} className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${message.senderId === data.currentMemberId ? "ml-auto bg-indigo-600 text-white" : "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className={`mt-1 block text-right text-[10px] ${message.senderId === data.currentMemberId ? "text-indigo-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time></div>)}{!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-slate-500">Сообщений пока нет</div>}</div>
+      <div className="flex min-w-0 items-end gap-2"><Textarea className="min-h-20 min-w-0 resize-none" value={body} maxLength={500} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon" className="size-11 shrink-0 bg-indigo-600" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send className="size-4" /></Button></div>
+      <div className="mt-1 flex items-start justify-between gap-2 text-[11px] text-slate-400"><span>Enter — отправить, Shift+Enter — новая строка</span><span className="shrink-0">{body.length}/500</span></div>
+    </section>
   </div>;
 }
 
@@ -160,5 +166,5 @@ export function MessagesDialog({ initialPeerId, label = "Сообщения" }: 
 }
 
 export function MessagesCard() {
-  return <section className="card p-5 md:p-6"><div className="mb-4 flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><MessageCircle className="size-5" /></span><div><h2 className="text-lg font-bold">Сообщения</h2><p className="text-sm text-slate-500">Связь с преподавателем внутри кабинета</p></div></div><MessagesContent /></section>;
+  return <section className="card min-w-0 overflow-hidden p-5 md:p-6"><div className="mb-4 flex min-w-0 items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><MessageCircle className="size-5" /></span><div className="min-w-0"><h2 className="text-lg font-bold">Сообщения</h2><p className="text-sm text-slate-500">Связь с преподавателем внутри кабинета</p></div></div><MessagesContent compact /></section>;
 }
