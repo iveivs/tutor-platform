@@ -1,0 +1,26 @@
+export type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "materials" | "settings";
+export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
+export type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean };
+export type LessonDraft = { date: string; time: string; studentId?: string; repeat: "once" | "weekly"; lessonCount: 1 | 2; lessonType: "regular" | "trial"; trialGuestName?: string; trialGuestEmail?: string; trialGuestPhone?: string; trialGuestNote?: string };
+export type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
+export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
+export type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
+export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string };
+export type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
+export type AvailableSlot = { startsAt: number; endsAt: number; maxUnits: 1 | 2 };
+export type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
+export type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean };
+export type HistoryEvent = { id: string; sourceId?: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; canReverse?: boolean; occurredAt: number };
+export type AppNotification = {
+  id: string; type: string; title: string; body: string; read: boolean; createdAt: number;
+  studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
+  lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
+};
+export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string }; syncCursor?: number };
+export type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
+export type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };
+export type LessonMaterialPhoto = { id: string; authorName: string; mine: boolean; canDelete: boolean; byteSize: number; width: number; height: number; expiresAt: number; createdAt: number; url: string };
+export type TeacherMaterialAssignment = { lessonId: string; studentId: string; studentName: string; startsAt: number };
+export type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number; folder?: string | null; tags?: string[]; versionNumber?: number; updatedAt?: number; lastUsedAt?: number | null; assignments?: TeacherMaterialAssignment[] };
+export type TeacherMaterialsData = { contentRulesAccepted: boolean; storageConfigured: boolean; maxFileBytes: number; maxUploadsPerMonth: number; maxStorageBytes: number; uploadsThisMonth: number; storageBytes: number; resources: TeacherMaterial[] };
+export type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; homework: { assignment: string; studentResponse: string; assignmentUpdatedAt: number | null; responseUpdatedAt: number | null }; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[] };

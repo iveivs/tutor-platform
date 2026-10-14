@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { appFetch as apiFetch } from "@/lib/client-fetch";
 
 export const avatarColors = ["indigo", "violet", "rose", "amber", "emerald", "cyan", "slate"] as const;
 export type AvatarColor = typeof avatarColors[number];
@@ -27,15 +28,6 @@ export function MemberAvatar({ name, initials, color = "indigo", url, className 
   return <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full font-bold ${avatarClasses[color] ?? avatarClasses.indigo} ${className}`}>
     {url ? <img src={url} alt={`Фото профиля ${name}`} className="size-full object-cover" /> : initials}
   </span>;
-}
-
-async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
-  let response = await fetch(input, init);
-  if (response.status === 401) {
-    const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
-    if (refreshed.ok) response = await fetch(input, init);
-  }
-  return response;
 }
 
 export function AvatarColorPicker({ value, ownValue, onChange, allowReset = false, disabled = false }: { value: string; ownValue?: string; onChange: (value: AvatarColor | null) => void; allowReset?: boolean; disabled?: boolean }) {

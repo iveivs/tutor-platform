@@ -8,8 +8,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
+import { AppShell as Shell } from "@/components/common/app-shell";
 import { ShowMoreButton } from "@/components/common/show-more-button";
 import { StudentAvailabilityAccessCard } from "@/components/features/students/student-availability-access-card";
+import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
+import { HistoryView } from "@/components/features/history/history-view";
+import { NotificationsView } from "@/components/features/notifications/notifications-view";
+import { RequestsView } from "@/components/features/requests/requests-view";
+import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, HistoryEvent, Lesson, LessonDraft, LessonMaterialsData, LessonRequest, RecurringSlot, Student, StudentDraft, StudentRequestDraft, TeacherMaterial, TeacherMaterialsData, TelegramStatus, View } from "@/components/features/app/types";
 import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,60 +31,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MemberAvatar, MessagesCard, MessagesDialog, ProfilePersonalizationCard, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { minutesToInputTime } from "@/lib/availability";
+import { readAppData, saveAppData } from "@/lib/app-data-client";
+import { appFetch } from "@/lib/client-fetch";
+import { dateAtNoon, dateTitle, moscowDate, moscowTime, shiftDate, shiftMonth, today, toIsoDate } from "@/lib/date-time";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 import { russianPlural as plural } from "@/lib/russian-plural";
-
-type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "materials" | "settings";
-type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
-type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean };
-type LessonDraft = { date: string; time: string; studentId?: string; repeat: "once" | "weekly"; lessonCount: 1 | 2; lessonType: "regular" | "trial"; trialGuestName?: string; trialGuestEmail?: string; trialGuestPhone?: string; trialGuestNote?: string };
-type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
-type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
-type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
-type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string };
-type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
-type AvailableSlot = { startsAt: number; endsAt: number; maxUnits: 1 | 2 };
-type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
-type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean };
-type HistoryEvent = { id: string; sourceId?: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; canReverse?: boolean; occurredAt: number };
-type AppNotification = {
-  id: string; type: string; title: string; body: string; read: boolean; createdAt: number;
-  studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
-  lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
-};
-type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string }; syncCursor?: number };
-type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
-type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };
-type LessonMaterialPhoto = { id: string; authorName: string; mine: boolean; canDelete: boolean; byteSize: number; width: number; height: number; expiresAt: number; createdAt: number; url: string };
-type TeacherMaterialAssignment = { lessonId: string; studentId: string; studentName: string; startsAt: number };
-type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number; folder?: string | null; tags?: string[]; versionNumber?: number; updatedAt?: number; lastUsedAt?: number | null; assignments?: TeacherMaterialAssignment[] };
-type TeacherMaterialsData = { contentRulesAccepted: boolean; storageConfigured: boolean; maxFileBytes: number; maxUploadsPerMonth: number; maxStorageBytes: number; uploadsThisMonth: number; storageBytes: number; resources: TeacherMaterial[] };
-type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; homework: { assignment: string; studentResponse: string; assignmentUpdatedAt: number | null; responseUpdatedAt: number | null }; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[] };
-
-async function appFetch(input: RequestInfo | URL, init?: RequestInit) {
-  let response = await fetch(input, init);
-  if (response.status === 401) {
-    const refreshed = await fetch("/api/auth/refresh", { method: "POST" });
-    if (refreshed.ok) response = await fetch(input, init);
-  }
-  return response;
-}
-
-async function readAppData(includePastLessons = false, cursor?: number): Promise<AppData> {
-  const params = new URLSearchParams();
-  if (includePastLessons) params.set("includePastLessons", "1");
-  if (cursor !== undefined) params.set("cursor", String(cursor));
-  const response = await appFetch(`/api/app-data${params.size ? `?${params}` : ""}`, { cache: "no-store" });
-  if (!response.ok) throw new Error("Не удалось загрузить данные");
-  return response.json() as Promise<AppData>;
-}
-
-async function saveAppData(body: Record<string, unknown>) {
-  const response = await appFetch("/api/app-data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const result = await response.json() as { error?: string; inviteUrl?: string; expired?: boolean };
-  if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить изменения");
-  return result;
-}
 
 async function readLessonMaterials(lessonId: string) {
   const response = await appFetch(`/api/lesson-materials?lessonId=${encodeURIComponent(lessonId)}`, { cache: "no-store" });
@@ -114,14 +71,6 @@ const preferenceKey = (scope: string, name: string) => `tutor-platform:${scope}:
 const readPreference = (key: string) => typeof window === "undefined" ? null : window.localStorage.getItem(key);
 const writePreference = (key: string, value: string) => { if (typeof window !== "undefined") window.localStorage.setItem(key, value); };
 
-const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date());
-const moscowDate = (value: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date(value));
-const moscowTime = (value: number) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Moscow" }).format(new Date(value));
-const dateAtNoon = (value: string) => new Date(`${value}T12:00:00Z`);
-const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
-const shiftDate = (value: string, days: number) => { const date = dateAtNoon(value); date.setUTCDate(date.getUTCDate() + days); return toIsoDate(date); };
-const shiftMonth = (value: string, months: number) => { const date = dateAtNoon(value); const day = date.getUTCDate(); date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + months); date.setUTCDate(Math.min(day, new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate())); return toIsoDate(date); };
-const dateTitle = (value: string, options: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" }) => new Intl.DateTimeFormat("ru-RU", { ...options, timeZone: "UTC" }).format(dateAtNoon(value));
 export default function TutorApp({ role = "owner", user, onLogout }: { role?: "owner" | "teacher" | "student"; user?: CurrentUser; onLogout?: () => void }) {
   const preferenceScope = user?.email || role;
   const [view, setView] = useState<View>("today");
@@ -394,10 +343,6 @@ function MobileNav({ view, setView }: { view: View; setView: (view: View) => voi
   return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-5 sm:size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
 }
 
-function Shell({ eyebrow, title, actions, children }: { eyebrow?: string; title: string; actions?: React.ReactNode; children: React.ReactNode }) {
-  return <div className="mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-9 xl:px-12"><div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <p className="mb-1 text-sm font-semibold text-indigo-600">{eyebrow}</p>}<h1 className="text-3xl font-bold tracking-tight md:text-4xl">{title}</h1></div>{actions}</div>{children}</div>;
-}
-
 function TodayView({ lessons, students, requests, onAdd, onUpdate, onDelete, onMaterials, setView, onOpenStudent }: { lessons: Lesson[]; students: Student[]; requests: LessonRequest[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onUpdate: (id: string, date: string, time: string) => Promise<boolean>; onDelete: (id: string) => Promise<boolean>; onMaterials: (lesson: Lesson) => void; setView: (view: View) => void; onOpenStudent: (id: string) => void }) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [editing, setEditing] = useState<Lesson | null>(null);
@@ -542,29 +487,6 @@ function InviteStudentDialog({ student, onCreateInvite }: { student: Student; on
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
-
-function HistoryView({ events, students, onReversePayment }: { events: HistoryEvent[]; students: Student[]; onReversePayment: (id: string) => Promise<boolean> }) {
-  const [category, setCategory] = useState<"all" | HistoryEvent["category"]>("all");
-  const [studentId, setStudentId] = useState("all");
-  const visible = events.filter((event) => (category === "all" || event.category === category) && (studentId === "all" || event.studentId === studentId));
-  return <Shell title="История" eyebrow="Уроки, оплаты и запросы"><div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="flex gap-2 overflow-x-auto pb-1">{[["all", "Все"], ["lesson", "Уроки"], ["payment", "Баланс"], ["request", "Запросы"]].map(([value, label]) => <button key={value} onClick={() => setCategory(value as "all" | HistoryEvent["category"])} className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold ${category === value ? "bg-indigo-600 text-white" : "border bg-white text-slate-600"}`}>{label}</button>)}</div><Select value={studentId} onValueChange={setStudentId}><SelectTrigger className="h-11 w-full rounded-xl bg-white xl:w-72" aria-label="Ученик"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все ученики</SelectItem>{students.map((student) => <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>)}</SelectContent></Select></div><HistoryTimeline events={visible} onReversePayment={onReversePayment} /></Shell>;
-}
-
-function HistoryTimeline({ events, showStudent = true, onReversePayment }: { events: HistoryEvent[]; showStudent?: boolean; onReversePayment?: (id: string) => Promise<boolean> }) {
-  const colors = { lesson: "bg-indigo-50 text-indigo-700", payment: "bg-emerald-50 text-emerald-700", request: "bg-amber-50 text-amber-700" };
-  const labels = { lesson: "Урок", payment: "Баланс", request: "Запрос" };
-  const Icons = { lesson: CalendarDays, payment: WalletCards, request: Bell };
-  const dateTime = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
-  return <div className="card divide-y">{events.map((event) => { const Icon = Icons[event.category]; return <article key={event.id} className="flex gap-4 p-5 md:p-6"><span className={`grid size-11 shrink-0 place-items-center rounded-xl ${colors[event.category]}`}><Icon className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"><div><span className={`mr-2 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${colors[event.category]}`}>{labels[event.category]}</span><strong>{event.title}</strong></div><time className="shrink-0 text-xs text-slate-400">{dateTime.format(new Date(event.occurredAt))}</time></div>{showStudent && <p className="mt-1 font-medium text-slate-700">{event.studentName}</p>}{event.detail && <p className="mt-1 text-sm text-slate-500">{event.detail}</p>}{event.actor && <p className="mt-2 text-xs text-slate-400">Кто: {event.actor}</p>}{event.canReverse && event.sourceId && onReversePayment && <div className="mt-3"><ReversePaymentButton paymentId={event.sourceId} onReverse={onReversePayment} /></div>}</div></article>; })}{!events.length && <Empty text="История пока пуста" />}</div>;
-}
-
-function BalanceHistory({ entries, onReversePayment }: { entries: BalanceEntry[]; onReversePayment?: (id: string) => Promise<boolean> }) { return <div className="card divide-y">{entries.map((entry) => <div key={entry.id} className="flex items-center gap-4 p-5"><span className={`grid size-11 place-items-center rounded-xl font-bold ${entry.units > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{entry.units > 0 ? "+" : ""}{entry.units}</span><span className="min-w-0 flex-1"><strong className="block">{entry.note}{entry.reversed ? " · отменена" : ""}</strong><span className="text-sm text-slate-500">{dateTitle(entry.date, { day: "numeric", month: "long", year: "numeric" })}</span>{entry.kind === "payment" && !entry.reversed && onReversePayment && <span className="mt-2 block"><ReversePaymentButton paymentId={entry.id} onReverse={onReversePayment} /></span>}</span></div>)}{!entries.length && <Empty text="История пока пуста" />}</div>; }
-
-function ReversePaymentButton({ paymentId, onReverse }: { paymentId: string; onReverse: (id: string) => Promise<boolean> }) {
-  const [open, setOpen] = useState(false); const [pending, setPending] = useState(false);
-  const reverse = async () => { setPending(true); const saved = await onReverse(paymentId); setPending(false); if (saved) setOpen(false); };
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline">Отменить оплату</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-md"><DialogHeader><DialogTitle>Отменить ошибочную оплату?</DialogTitle><DialogDescription>Исходная запись останется в истории. Будет создана обратная операция, а баланс ученика уменьшится на то же количество занятий.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button variant="destructive" disabled={pending} onClick={() => void reverse()}>{pending ? "Отменяю…" : "Отменить оплату"}</Button></DialogFooter></DialogContent></Dialog>;
-}
 
 const materialTags = (value: string) => value.split(",").map((tag) => tag.trim().replace(/^#+/, "")).filter(Boolean).filter((tag, index, tags) => tags.findIndex((candidate) => candidate.toLocaleLowerCase("ru-RU") === tag.toLocaleLowerCase("ru-RU")) === index).slice(0, 10);
 const isPdfMaterial = (resource: TeacherMaterial) => resource.contentType === "application/pdf";
@@ -732,33 +654,6 @@ function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability
       <Button type="button" variant="outline" onClick={onLogout} className="mt-4 h-11 w-full rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700"><LogOut />Выйти</Button>
     </section>}
   </div></Shell>;
-}
-
-function RequestsView({ requests, onResolved }: { requests: LessonRequest[]; onResolved: () => Promise<void> }) {
-  const [filter, setFilter] = useState("Все");
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const visibleRequests = requests.filter((request) => filter === "Все" || filter === "Отмена" && request.kind === "cancel" || filter === "Перенос" && request.kind === "reschedule" || filter === "Новый урок" && request.kind === "new_lesson");
-  const resolve = async (id: string, decision: "approved" | "declined") => { setPendingId(id); try { const result = await saveAppData({ action: "resolveRequest", requestId: id, decision }); await onResolved(); if (result.expired) toast.info("Запрос уже неактуален и закрыт"); else toast.success(decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён"); } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось обработать запрос"); } finally { setPendingId(null); } };
-  return <Shell title="Запросы" eyebrow={`${requests.length} требуют ответа`}><div className="mb-5 flex gap-2 overflow-x-auto">{["Все", "Отмена", "Перенос", "Новый урок"].map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${filter === item ? "bg-indigo-600 text-white" : "border bg-white text-slate-600"}`}>{item}</button>)}</div><div className="grid gap-4">{visibleRequests.map((request, index) => <article key={request.id} className={`card p-5 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-amber-50/40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-amber-700" : "text-indigo-600"}`}>{request.type}</p><h2 className="mt-1 text-xl font-bold">{request.name}</h2><p className="mt-1 text-slate-600">{request.detail}</p><p className="mt-2 text-sm text-slate-500">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "approved")} className="rounded-xl bg-indigo-600">{pendingId === request.id ? "Сохраняю…" : "Подтвердить"}</Button><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "declined")} variant="outline" className="rounded-xl">Отклонить</Button></div></div></article>)}{visibleRequests.length === 0 && <Empty text={requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"} />}</div></Shell>;
-}
-
-function NotificationsView({ notifications, onRead, onOpenRequests }: { notifications: AppNotification[]; onRead: () => Promise<void>; onOpenRequests: () => void }) {
-  const requestTypes: Record<string, string> = { cancel: "Отмена урока", reschedule: "Перенос урока", new_lesson: "Новое занятие" };
-  const requestStatuses: Record<string, string> = { pending: "Ожидает решения", approved: "Подтверждён", declined: "Отклонён", expired: "Истёк" };
-  const formatMoment = (value: number) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(value));
-  const formatLesson = (startsAt: number, endsAt?: number) => `${formatMoment(startsAt)}${endsAt ? `–${new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(endsAt))}` : ""}`;
-  return <Shell title="Уведомления" eyebrow={`${notifications.filter((item) => !item.read).length} непрочитанных`} actions={<Button variant="outline" disabled={!notifications.some((item) => !item.read)} onClick={() => void onRead()}>Отметить всё прочитанным</Button>}><div className="grid gap-4">{notifications.map((item) => {
-    const details = [
-      item.studentName ? { label: "Ученик", value: item.studentName } : null,
-      item.requestType ? { label: "Запрос", value: requestTypes[item.requestType] ?? item.requestType } : null,
-      item.requestStatus ? { label: "Статус", value: requestStatuses[item.requestStatus] ?? item.requestStatus } : null,
-      item.lessonStartsAt ? { label: "Урок", value: formatLesson(item.lessonStartsAt, item.lessonEndsAt) } : null,
-      item.proposedStartsAt ? { label: item.requestType === "reschedule" ? "Предложенное время" : "Время занятия", value: formatLesson(item.proposedStartsAt, item.proposedEndsAt) } : null,
-      item.requestType ? { label: "Комментарий", value: item.requestMessage ?? "Без комментария" } : null,
-      item.lessonUnits !== undefined ? { label: "Изменение баланса", value: `${item.lessonUnits < 0 ? "−" : "+"}${plural(Math.abs(item.lessonUnits), "занятие", "занятия", "занятий")}` } : null,
-    ].filter((detail): detail is { label: string; value: string } => Boolean(detail));
-    return <article key={item.id} className={`card p-5 md:p-6 ${item.read ? "opacity-70" : "border-indigo-200 bg-indigo-50/40"}`}><div className="flex gap-4"><span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-indigo-600"}`} /><div className="min-w-0 flex-1"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-lg font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.body}</p></div><time className="shrink-0 text-xs text-slate-400">{formatMoment(item.createdAt)}</time></div>{details.length > 0 && <dl className="mt-4 grid gap-x-8 gap-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 sm:grid-cols-2">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{detail.label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-800">{detail.value}</dd></div>)}</dl>}{item.type === "new_request" && item.requestStatus === "pending" && <Button onClick={onOpenRequests} className="mt-4 bg-indigo-600">Открыть запрос</Button>}</div></div></article>;
-  })}{!notifications.length && <div className="card"><Empty text="Новых уведомлений нет" /></div>}</div></Shell>;
 }
 
 function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onMaterials, onBack, onReload }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; historyEvents: HistoryEvent[]; requests: LessonRequest[]; notifications: AppNotification[]; availableSlots: AvailableSlot[]; onReadNotifications: () => Promise<void>; onRequest: (body: StudentRequestDraft) => Promise<boolean>; onMaterials: (lesson: Lesson) => void; onBack: () => void; onReload: () => Promise<void> }) {
