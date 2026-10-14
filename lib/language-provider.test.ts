@@ -76,4 +76,22 @@ describe("translateUiText", () => {
 
     for (const text of texts) expect(translateUiText(text)).not.toMatch(/[А-Яа-яЁё]/);
   });
+
+  it("covers messages and profile personalization", () => {
+    const texts = [
+      "Сообщения",
+      "Написать ученику",
+      "Короткие личные сообщения между учеником и преподавателем.",
+      "Сообщений пока нет",
+      "Введите сообщение",
+      "Персонализация",
+      "Фото профиля и цвет кружка с инициалами",
+      "Цвет аватара",
+      "Загрузить фотографию",
+      "Использовать цвет ученика",
+      "Фотография профиля должна быть не больше 2 МБ",
+    ];
+
+    for (const text of texts) expect(translateUiText(text)).not.toMatch(/[А-Яа-яЁё]/);
+  });
 });
