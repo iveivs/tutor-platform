@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
 import { ShowMoreButton } from "@/components/common/show-more-button";
+import { StudentAvailabilityAccessCard } from "@/components/features/students/student-availability-access-card";
 import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { MemberAvatar, MessagesCard, MessagesDialog, ProfilePersonalizationCard, StudentAvatarPreferenceCard } from "@/components/profile-and-messages";
+import { MemberAvatar, MessagesCard, MessagesDialog, ProfilePersonalizationCard, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { minutesToInputTime } from "@/lib/availability";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 import { russianPlural as plural } from "@/lib/russian-plural";
@@ -541,16 +542,6 @@ function InviteStudentDialog({ student, onCreateInvite }: { student: Student; on
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
-
-function StudentAvailabilityAccessCard({ student, onUpdate }: { student: Student; onUpdate: (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => Promise<boolean> }) {
-  const [pending, setPending] = useState(false);
-  const toggle = async () => {
-    setPending(true);
-    await onUpdate({ id: student.id, name: student.name, email: student.email, canViewAvailability: !student.canViewAvailability });
-    setPending(false);
-  };
-  return <AppCard><div className="flex items-start justify-between gap-4"><div><AppCardTitle>Доступ к свободным слотам</AppCardTitle><AppCardDescription className="leading-6">Ученик сможет открыть список свободных рабочих часов и отправить запрос на выбранное время.</AppCardDescription></div><span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${student.canViewAvailability ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{student.canViewAvailability ? "Разрешён" : "Запрещён"}</span></div><Button type="button" size="control" variant={student.canViewAvailability ? "outline" : "default"} className="mt-5 w-full" disabled={pending} onClick={() => void toggle()}>{student.canViewAvailability ? "Закрыть доступ" : "Показывать свободные слоты"}</Button></AppCard>;
-}
 
 function HistoryView({ events, students, onReversePayment }: { events: HistoryEvent[]; students: Student[]; onReversePayment: (id: string) => Promise<boolean> }) {
   const [category, setCategory] = useState<"all" | HistoryEvent["category"]>("all");
