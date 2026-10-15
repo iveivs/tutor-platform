@@ -4,18 +4,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Bell, CalendarDays, Camera, ChevronLeft, ChevronRight, Clock3, Copy,
-  Download, FileText, FolderOpen, History as HistoryIcon, Home, LayoutGrid, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, RefreshCw, Rows3, Search, Send, Settings, ShieldCheck, Tag, Trash2, Unlink, Upload, UserRound, UsersRound, WalletCards,
+  Download, FileText, FolderOpen, History as HistoryIcon, Home, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, RefreshCw, Search, Send, Settings, Tag, Trash2, Unlink, Upload, UserRound, UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
+import { EmptyState as Empty } from "@/components/common/empty-state";
+import { FormField as Field } from "@/components/common/form-field";
 import { AppShell as Shell } from "@/components/common/app-shell";
-import { ShowMoreButton } from "@/components/common/show-more-button";
 import { StudentAvailabilityAccessCard } from "@/components/features/students/student-availability-access-card";
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { HistoryView } from "@/components/features/history/history-view";
+import { lessonStatusStyles as statusStyles } from "@/components/features/lessons/status-styles";
 import { NotificationsView } from "@/components/features/notifications/notifications-view";
 import { RequestsView } from "@/components/features/requests/requests-view";
-import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, HistoryEvent, Lesson, LessonDraft, LessonMaterialsData, LessonRequest, RecurringSlot, Student, StudentDraft, StudentRequestDraft, TeacherMaterial, TeacherMaterialsData, TelegramStatus, View } from "@/components/features/app/types";
+import { StudentPortal } from "@/components/features/student-portal/student-portal";
+import { SettingsView } from "@/components/features/settings/settings-view";
+import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, HistoryEvent, Lesson, LessonDraft, LessonMaterialsData, LessonRequest, RecurringSlot, Student, StudentDraft, StudentRequestDraft, TeacherMaterial, TeacherMaterialsData, View } from "@/components/features/app/types";
 import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,11 +32,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { MemberAvatar, MessagesCard, MessagesDialog, ProfilePersonalizationCard, StudentAvatarPreferenceCard } from "@/components/features/account";
-import { minutesToInputTime } from "@/lib/availability";
+import { MemberAvatar, MessagesDialog, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { readAppData, saveAppData } from "@/lib/app-data-client";
 import { appFetch } from "@/lib/client-fetch";
-import { dateAtNoon, dateTitle, moscowDate, moscowTime, shiftDate, shiftMonth, today, toIsoDate } from "@/lib/date-time";
+import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
+import { dateAtNoon, dateTitle, shiftDate, shiftMonth, today, toIsoDate } from "@/lib/date-time";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 import { russianPlural as plural } from "@/lib/russian-plural";
 
@@ -58,18 +61,6 @@ async function readTeacherMaterials() {
 }
 
 const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ` : `${Math.max(0, Math.round(bytes / 1024))} КБ`;
-
-const statusStyles = {
-  paid: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  low: "bg-indigo-50 text-indigo-700 ring-indigo-100",
-  debt: "bg-rose-50 text-rose-700 ring-rose-100",
-  request: "bg-amber-50 text-amber-700 ring-amber-100",
-  trial: "bg-sky-50 text-sky-700 ring-sky-100",
-};
-
-const preferenceKey = (scope: string, name: string) => `tutor-platform:${scope}:${name}`;
-const readPreference = (key: string) => typeof window === "undefined" ? null : window.localStorage.getItem(key);
-const writePreference = (key: string, value: string) => { if (typeof window !== "undefined") window.localStorage.setItem(key, value); };
 
 export default function TutorApp({ role = "owner", user, onLogout }: { role?: "owner" | "teacher" | "student"; user?: CurrentUser; onLogout?: () => void }) {
   const preferenceScope = user?.email || role;
@@ -599,100 +590,6 @@ function ManageTeacherMaterialDialog({ resource, folders, maxFileBytes, uploadLi
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Pencil />Настроить</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-xl"><DialogHeader><DialogTitle>Настроить материал</DialogTitle><DialogDescription>Измените метаданные или загрузите новую версию. Связи с уроками сохранятся.</DialogDescription></DialogHeader><div className="space-y-5"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} /></Field><Field label="Папка"><Input list="teacher-material-folders" value={folder} maxLength={80} onChange={(event) => setFolder(event.target.value)} placeholder="Без папки" />{folders.length > 0 && <p className="text-xs text-slate-500">Можно выбрать существующую папку или написать новую.</p>}</Field><Field label="Теги"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="через, запятую" /><p className="text-xs text-slate-500">До 10 тегов, каждый не длиннее 30 символов.</p></Field><Button className="w-full bg-indigo-600" disabled={pending || !title.trim() || materialTags(tags).some((tag) => tag.length > 30)} onClick={() => void save()}>{pending ? "Сохраняю…" : "Сохранить название, папку и теги"}</Button><div className="border-t border-slate-200 pt-5"><h3 className="font-bold">Заменить файл</h3><p className="mt-1 text-sm leading-6 text-slate-500">Новая версия заменит текущий PDF или Word. Все назначения ученикам и урокам останутся на месте.</p><Input className="mt-4" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending || uploadLimitReached} onChange={(event) => setReplacement(event.target.files?.[0] ?? null)} />{uploadLimitReached && <p className="mt-2 text-xs font-medium text-amber-700">Месячный лимит загрузок исчерпан.</p>}<Button variant="outline" className="mt-3 w-full" disabled={pending || uploadLimitReached || !replacement || replacement.size > maxFileBytes} onClick={() => void replace()}><RefreshCw />{pending ? "Заменяю…" : `Загрузить версию ${(resource.versionNumber ?? 1) + 1}`}</Button></div></div></DialogContent></Dialog>;
 }
 
-function SettingsView({ profile, availabilityWindows, onSave, onSaveAvailability, onLogout, isPlatformAdmin }: { profile: { name: string; professionalTitle: string; email: string }; availabilityWindows: AvailabilityWindow[]; onSave: (name: string, professionalTitle: string) => Promise<void>; onSaveAvailability: (windows: Array<{ weekday: number; start: string; end: string }>) => Promise<void>; onLogout?: () => void; isPlatformAdmin: boolean }) {
-  const [name, setName] = useState(profile.name);
-  const [professionalTitle, setProfessionalTitle] = useState(profile.professionalTitle);
-  const [pending, setPending] = useState(false);
-  const [availabilityPending, setAvailabilityPending] = useState(false);
-  const [windows, setWindows] = useState<Array<{ id: string; weekday: number; start: string; end: string }>>(() => availabilityWindows.map((window) => ({ id: window.id, weekday: window.weekday, start: minutesToInputTime(window.startMinutes), end: minutesToInputTime(window.endMinutes) })));
-  const weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
-  const save = async () => {
-    setPending(true);
-    try { await onSave(name.trim(), professionalTitle.trim()); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить настройки"); }
-    finally { setPending(false); }
-  };
-  const saveAvailability = async () => {
-    setAvailabilityPending(true);
-    try { await onSaveAvailability(windows.map(({ weekday, start, end }) => ({ weekday, start, end }))); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить рабочие часы"); }
-    finally { setAvailabilityPending(false); }
-  };
-  const changeWindow = (id: string, patch: Partial<{ weekday: number; start: string; end: string }>) => setWindows((current) => current.map((window) => window.id === id ? { ...window, ...patch } : window));
-  return <Shell title="Настройки" eyebrow="Профиль преподавателя"><div className="space-y-6">
-    <section className="card max-w-2xl p-6 md:p-8">
-      <h2 className="text-xl font-bold">Основные данные</h2>
-      <p className="mt-1 text-sm text-slate-500">Это имя видно в меню и в кабинете ваших учеников.</p>
-      <div className="mt-6 space-y-5">
-        <Field label="Имя преподавателя"><Input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} placeholder="Ваше имя" className="h-11 rounded-xl" /></Field>
-        <Field label="Название или роль"><Input value={professionalTitle} onChange={(event) => setProfessionalTitle(event.target.value)} maxLength={50} placeholder="Например: Репетитор или Тренер" className="h-11 rounded-xl" /><p className="text-xs text-slate-500">Необязательно. Оставьте пустым, если подпись над именем не нужна.</p></Field>
-        <Field label="Email для входа"><Input value={profile.email} readOnly className="h-11 rounded-xl opacity-70" /></Field>
-        <p className="text-sm text-slate-500">Email хранится в вашей учётной записи и сейчас не изменяется через настройки.</p>
-        <Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name && professionalTitle.trim() === profile.professionalTitle} className="w-full bg-indigo-600 sm:w-auto">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button>
-      </div>
-    </section>
-    <section className="card min-w-0 max-w-3xl overflow-hidden p-5 md:p-8">
-      <h2 className="text-xl font-bold">Рабочие часы</h2>
-      <p className="mt-1 text-sm text-slate-500">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.</p>
-      <div className="mt-6 space-y-3">{windows.map((window) => <div key={window.id} className="grid min-w-0 gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_130px_130px_auto] sm:items-end">
-        <Field label="День"><Select value={String(window.weekday)} onValueChange={(value) => changeWindow(window.id, { weekday: Number(value) })}><SelectTrigger className="h-11 w-full min-w-0 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{weekdays.map((day, index) => <SelectItem key={day} value={String(index + 1)}>{day}</SelectItem>)}</SelectContent></Select></Field>
-        <Field label="Начало"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></Field>
-        <Field label="Конец"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></Field>
-        <Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /><span className="sm:sr-only">Удалить интервал</span></Button>
-        {window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-4">Интервал заканчивается на следующий день.</p>}
-      </div>)}{!windows.length && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Рабочие часы пока не заданы. Ученики не увидят свободных слотов.</p>}</div>
-      <div className="mt-5 grid gap-3 pb-2 sm:flex sm:flex-wrap">
-        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday: 1, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button>
-        <Button type="button" className="w-full bg-indigo-600 sm:w-auto" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button>
-      </div>
-    </section>
-    <TelegramNotificationsCard />
-    {isPlatformAdmin && <section className="card max-w-3xl p-5 md:p-8"><h2 className="text-xl font-bold">Управление платформой</h2><p className="mt-1 text-sm text-slate-500">Список кабинетов преподавателей и управление доступом.</p><Button asChild variant="outline" className="mt-4"><a href="/admin"><ShieldCheck />Открыть админку</a></Button></section>}
-    {onLogout && <section className="card max-w-3xl p-5 lg:hidden">
-      <h2 className="text-xl font-bold">Сеанс</h2>
-      <p className="mt-1 text-sm text-slate-500">Завершить работу в кабинете на этом устройстве.</p>
-      <Button type="button" variant="outline" onClick={onLogout} className="mt-4 h-11 w-full rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700"><LogOut />Выйти</Button>
-    </section>}
-  </div></Shell>;
-}
-
-function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onMaterials, onBack, onReload }: { student: Student; teacherName: string; lessons: Lesson[]; entries: BalanceEntry[]; historyEvents: HistoryEvent[]; requests: LessonRequest[]; notifications: AppNotification[]; availableSlots: AvailableSlot[]; onReadNotifications: () => Promise<void>; onRequest: (body: StudentRequestDraft) => Promise<boolean>; onMaterials: (lesson: Lesson) => void; onBack: () => void; onReload: () => Promise<void> }) {
-  const [recentExpanded, setRecentExpanded] = useState(false);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [compactView, setCompactView] = useState(false);
-  const futureLessons = lessons.filter((lesson) => lesson.date >= today()).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
-  const recentLessons = lessons.filter((lesson) => lesson.past).sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).slice(0, 10);
-  const visibleRecentLessons = recentExpanded ? recentLessons : recentLessons.slice(0, 3);
-  const visibleHistoryEvents = historyExpanded ? historyEvents : historyEvents.slice(0, 3);
-  const nextLesson = futureLessons[0];
-  const paymentEntries = entries.filter((entry) => entry.kind === "payment" || entry.kind === "refund" || entry.kind === "adjustment");
-  useEffect(() => {
-    const timer = window.setTimeout(() => setCompactView(readPreference(preferenceKey(student.id, "student-portal-view")) === "compact"), 0);
-    return () => window.clearTimeout(timer);
-  }, [student.id]);
-  const changeView = (compact: boolean) => { setCompactView(compact); writePreference(preferenceKey(student.id, "student-portal-view"), compact ? "compact" : "dashboard"); };
-  return <main className="min-h-screen overflow-x-clip bg-background px-4 pb-24 pt-5 text-foreground"><div className={`mx-auto ${compactView ? "max-w-xl" : "max-w-7xl"}`}>
-    <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-slate-500"><LogOut className="size-4" />Выйти</button>
-    <div className="mb-4 flex justify-end"><Button type="button" size="sm" variant="outline" onClick={() => changeView(!compactView)}>{compactView ? <LayoutGrid /> : <Rows3 />}{compactView ? "Расширенный вид" : "Компактный вид"}</Button></div>
-    <div className="mb-7 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><BrandIcon className="size-12" /><div className="min-w-0"><h1 className="truncate text-3xl font-bold">Привет, {student.name.split(" ")[0]}</h1><p className="mt-1 text-slate-500">Ваше расписание занятий</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><MemberAvatar name={student.name} initials={student.initials.slice(0, 1)} color={student.ownAvatarColor} url={student.avatarUrl} className="size-12" /></div></div>
-    <div className={`grid items-start gap-6 ${compactView ? "" : "lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,380px)]"}`}><div className="min-w-0">
-    {notifications.some((item) => !item.read) && <button onClick={() => void onReadNotifications()} className="mb-4 flex w-full items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-950/55 dark:text-indigo-50 dark:hover:bg-indigo-950/75"><Bell className="mt-0.5 size-5 shrink-0 text-indigo-600 dark:text-indigo-300" /><span><strong className="block">{notifications.find((item) => !item.read)?.title}</strong><span className="mt-1 block text-sm text-indigo-800 dark:text-indigo-100">{notifications.find((item) => !item.read)?.body}</span></span></button>}
-    {nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-500">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-slate-500">{teacherName}</p></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${statusStyles[nextLesson.status]}`}>{nextLesson.label}</span></div><Button type="button" variant="outline" className="mt-5 w-full" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button><div className="mt-3 grid gap-3"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-slate-500">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><Empty text="Следующий урок пока не назначен" /></section>}
-    {futureLessons.length > 1 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Дальнейшие занятия</h2><div className="card divide-y">{futureLessons.slice(1).map((lesson) => <article key={lesson.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><strong className="capitalize">{dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" })}</strong><p className="mt-1 text-sm text-slate-500">{lesson.time}–{lesson.end}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[lesson.status]}`}>{lesson.label}</span></div><Button type="button" size="sm" variant="outline" className="mt-3 w-full" onClick={() => onMaterials(lesson)}><NotebookPen />Материалы урока</Button><div className="mt-2 grid gap-2"><StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} /></div></article>)}</div></section>}
-    {recentLessons.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Недавние уроки</h2><div className="card divide-y overflow-hidden">{visibleRecentLessons.map((lesson) => <button key={lesson.id} type="button" onClick={() => onMaterials(lesson)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800/80 dark:hover:text-white"><span><strong className="block capitalize">{dateTitle(lesson.date, { day: "numeric", month: "long" })}</strong><span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">{lesson.time}–{lesson.end}</span></span><span className="flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400"><NotebookPen className="size-4" />Материалы</span></button>)}{recentLessons.length > 3 && <ShowMoreButton expanded={recentExpanded} remaining={recentLessons.length - 3} className="rounded-none border-x-0 border-b-0" onToggle={() => setRecentExpanded((value) => !value)} />}</div></section>}
-    <section className="mt-5"><h2 className="mb-3 text-lg font-bold">История</h2><HistoryTimeline events={visibleHistoryEvents} showStudent={false} />{historyEvents.length > 3 && <ShowMoreButton expanded={historyExpanded} remaining={historyEvents.length - 3} className="mt-3" onToggle={() => setHistoryExpanded((value) => !value)} />}</section>
-    </div><aside className={`${compactView ? "" : "order-first lg:order-none lg:sticky lg:top-5"} min-w-0 space-y-5`}>
-    <ProfilePersonalizationCard name={student.name} initials={student.initials} avatarColor={student.ownAvatarColor} avatarUrl={student.avatarUrl} onChanged={onReload} />
-    <MessagesCard />
-    <section className={`rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-400/30 dark:bg-rose-950/45 dark:text-rose-50" : "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-50"}`}><div className="flex items-center gap-3"><WalletCards className={`size-6 ${student.balance < 0 ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`} /><div><p className="font-semibold opacity-80">Баланс</p><p className="text-2xl font-bold">{plural(student.balance, "занятие", "занятия", "занятий")}</p></div></div>{student.balance < 0 && <p className="mt-3 text-rose-800 dark:text-rose-100">Необходимо оплатить {plural(Math.abs(student.balance), "занятие", "занятия", "занятий")}</p>}</section>
-    {(student.floating || student.canViewAvailability) && <AppCard><AppCardTitle>Свободные слоты</AppCardTitle><AppCardDescription>Выберите подходящее свободное время и отправьте запрос преподавателю.</AppCardDescription><div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div></AppCard>}
-    {requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-slate-500">{request.detail}</p></div>)}</div></section>}
-    <div className="mt-5"><TelegramNotificationsCard compact /></div>
-    <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Оплаты</h2><BalanceHistory entries={paymentEntries} /></section>
-    </aside></div>
-  </div><Toaster position="top-center" richColors /></main>;
-}
-
 function LessonMaterialsDialog({ lesson, role, onOpenChange }: { lesson: Lesson | null; role: "owner" | "teacher" | "student"; onOpenChange: (open: boolean) => void }) {
   const [data, setData] = useState<LessonMaterialsData | null>(null);
   const [sharedNote, setSharedNote] = useState("");
@@ -818,74 +715,6 @@ function LessonMaterialsDialog({ lesson, role, onOpenChange }: { lesson: Lesson 
   </DialogContent></Dialog>;
 }
 
-function TelegramNotificationsCard({ compact = false }: { compact?: boolean }) {
-  const [status, setStatus] = useState<TelegramStatus | null>(null);
-  const [pending, setPending] = useState(false);
-  const load = useCallback(async () => {
-    const response = await appFetch("/api/telegram/link", { cache: "no-store" });
-    if (!response.ok) throw new Error("Не удалось проверить подключение Telegram");
-    setStatus(await response.json() as TelegramStatus);
-  }, []);
-  useEffect(() => {
-    let active = true;
-    void appFetch("/api/telegram/link", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() as Promise<TelegramStatus> : Promise.reject(new Error("Telegram status failed")))
-      .then((nextStatus) => { if (active) setStatus(nextStatus); })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, []);
-  const connect = async () => {
-    setPending(true);
-    try {
-      const response = await appFetch("/api/telegram/link", { method: "POST" });
-      const result = await response.json() as { url?: string; error?: string };
-      if (!response.ok || !result.url) throw new Error(result.error ?? "Не удалось создать ссылку");
-      window.open(result.url, "_blank", "noopener,noreferrer");
-      toast.info("В Telegram нажмите «Запустить», затем вернитесь сюда и проверьте подключение");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось подключить Telegram"); }
-    finally { setPending(false); }
-  };
-  const disconnect = async () => {
-    setPending(true);
-    try {
-      const response = await appFetch("/api/telegram/link", { method: "DELETE" });
-      if (!response.ok) throw new Error("Не удалось отключить Telegram");
-      await load();
-      toast.success("Telegram отключён");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отключить Telegram"); }
-    finally { setPending(false); }
-  };
-  return <section className={`card min-w-0 overflow-hidden p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>
-    <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
-      <h2 className="text-xl font-bold">Уведомления в Telegram</h2>
-      <p className="mt-1 text-sm text-slate-500">Подключите свой Telegram к общему боту Тьюттори. Бот отправляет только напоминания за 24 часа до урока, изменения расписания и запросы ученика.</p>
-      {!status && <p className="mt-4 text-sm text-slate-500">Проверяем подключение…</p>}
-      {status && !status.configured && <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
-      {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-emerald-700">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
-      {status?.configured && !status.connected && <div className="mt-5">
-        <ol className="space-y-3 text-sm text-slate-700">
-          {["Нажмите «Подключить Telegram» — откроется бот Тьюттори.", "В Telegram нажмите «Запустить» или отправьте команду /start.", "Вернитесь в Тьюттори и нажмите «Проверить подключение»."].map((step, index) => <li key={step} className="flex items-start gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">{index + 1}</span><span className="pt-0.5 leading-5">{step}</span></li>)}
-        </ol>
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.</p>
-        <div className="mt-4 grid min-w-0 gap-2"><Button type="button" className="h-auto min-h-10 w-full min-w-0 whitespace-normal bg-sky-600 text-center hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send className="shrink-0" /><span>{pending ? "Создаю ссылку…" : "Подключить Telegram"}</span></Button><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal text-center" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>
-      </div>}
-    </div></div>
-  </section>;
-}
-
-function StudentRequestDialog({ type, lesson, student, availableSlots, onRequest, fullWidth = false }: { type: "cancel" | "reschedule" | "new_lesson"; lesson?: Lesson; student: Student; availableSlots?: AvailableSlot[]; onRequest: (body: StudentRequestDraft) => Promise<boolean>; fullWidth?: boolean }) {
-  const [open, setOpen] = useState(false); const [date, setDate] = useState(lesson?.date ?? shiftDate(today(), 1)); const [time, setTime] = useState(lesson?.time ?? "17:00"); const [lessonCount, setLessonCount] = useState<1 | 2>(1); const [selectedSlot, setSelectedSlot] = useState<number | null>(null); const [expandedSlotDay, setExpandedSlotDay] = useState<string | null>(null); const [message, setMessage] = useState(""); const [pending, setPending] = useState(false);
-  const cancellationExpired = type === "cancel" && Boolean(lesson && lesson.date <= today());
-  const label = cancellationExpired ? "Срок отмены истёк" : type === "cancel" ? "Запросить отмену" : type === "reschedule" ? "Запросить перенос" : "Предложить время урока";
-  const slotOnly = type === "new_lesson" && Boolean(availableSlots) && !student.floating;
-  const visibleSlots = availableSlots?.filter((slot) => slot.maxUnits >= lessonCount) ?? [];
-  const slotGroups = Object.entries(visibleSlots.reduce<Record<string, AvailableSlot[]>>((groups, slot) => { const day = moscowDate(slot.startsAt); (groups[day] ??= []).push(slot); return groups; }, {})).map(([day, slots]) => ({ day, slots }));
-  const activeSlotDay = expandedSlotDay && slotGroups.some((group) => group.day === expandedSlotDay) ? expandedSlotDay : slotGroups[0]?.day ?? null;
-  const chooseSlot = (slot: AvailableSlot) => { setSelectedSlot(slot.startsAt); setDate(moscowDate(slot.startsAt)); setTime(moscowTime(slot.startsAt)); };
-  const submit = async () => { setPending(true); const saved = await onRequest({ requestType: type, lessonId: lesson?.id, proposedDate: type === "cancel" ? undefined : date, proposedTime: type === "cancel" ? undefined : time, lessonCount: type === "new_lesson" ? lessonCount : undefined, message, studentId: student.id }); setPending(false); if (saved) setOpen(false); };
-  return <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (next) { setSelectedSlot(null); setExpandedSlotDay(null); } }}><DialogTrigger asChild><Button size="lg" disabled={cancellationExpired} variant={type === "cancel" ? "outline" : "default"} className={`${fullWidth ? "w-full" : ""} h-auto min-h-12 min-w-0 whitespace-normal rounded-xl px-4 text-center leading-snug ${type === "cancel" ? "" : "bg-indigo-600"}`}>{availableSlots ? "Выбрать свободное время" : label}</Button></DialogTrigger><DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>{type === "cancel" ? "Преподаватель получит запрос. Своевременный запрос не будет списан, даже если останется без ответа." : availableSlots ? "Выберите свободное время. Оно появится в расписании только после подтверждения преподавателем." : "Предложите удобные дату и время. Урок появится в расписании после подтверждения преподавателем."}</DialogDescription></DialogHeader>{type === "new_lesson" && <><Field label="Продолжительность"><Select value={String(lessonCount)} onValueChange={(value) => { setLessonCount(value === "2" ? 2 : 1); setSelectedSlot(null); setExpandedSlotDay(null); }}><SelectTrigger aria-label="Продолжительность урока" className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Обычный урок · 1 час</SelectItem><SelectItem value="2">Двойной урок · 2 часа</SelectItem></SelectContent></Select></Field>{lessonCount === 2 && <p className="rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800">После подтверждения появится один двойной урок на два часа, а после проведения спишутся два занятия.</p>}{availableSlots && <Field label="Свободные слоты"><div className="max-h-80 space-y-2 overflow-y-auto pr-1">{slotGroups.map((group) => <section key={group.day} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"><button type="button" aria-expanded={activeSlotDay === group.day} onClick={() => setExpandedSlotDay(group.day)} className="flex w-full items-center justify-between gap-3 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100 dark:bg-slate-800/70 dark:hover:bg-slate-800"><span><strong className="block capitalize">{dateTitle(group.day, { weekday: "long", day: "numeric", month: "long" })}</strong><span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{plural(group.slots.length, "слот", "слота", "слотов")}</span></span><ChevronRight className={`size-4 shrink-0 text-slate-400 transition-transform ${activeSlotDay === group.day ? "rotate-90" : ""}`} /></button>{activeSlotDay === group.day && <div className="grid gap-2 border-t border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-700">{group.slots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => chooseSlot(slot)} className={`rounded-xl border p-3 text-left text-sm transition ${selectedSlot === slot.startsAt ? "border-indigo-600 bg-indigo-50 text-indigo-900 ring-1 ring-indigo-600 dark:border-indigo-400 dark:bg-indigo-950/60 dark:text-indigo-50 dark:ring-indigo-400" : "border-slate-200 hover:border-indigo-300 dark:border-slate-700 dark:hover:border-indigo-500"}`}><span>{moscowTime(slot.startsAt)}–{moscowTime(slot.startsAt + lessonCount * 60 * 60_000)}</span></button>)}</div>}</section>)}{!visibleSlots.length && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800/70 dark:text-slate-300">Подходящих свободных слотов пока нет.</p>}</div></Field>}</>}{type !== "cancel" && !slotOnly && <div className="grid gap-4 sm:grid-cols-2"><Field label={availableSlots ? "Или другая дата" : "Дата"}><Input type="date" value={date} min={today()} onChange={(event) => { setDate(event.target.value); setSelectedSlot(null); }} /></Field><Field label="Время"><Input type="time" value={time} onChange={(event) => { setTime(event.target.value); setSelectedSlot(null); }} /></Field></div>}<Field label="Комментарий"><Input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Необязательно" /></Field><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Назад</Button><Button className="bg-indigo-600" disabled={pending || (type !== "cancel" && (!date || !time)) || (slotOnly && selectedSlot === null)} onClick={() => void submit()}>{pending ? "Отправляю…" : "Отправить запрос"}</Button></DialogFooter></DialogContent></Dialog>;
-}
-
 function AddLessonDialog({ students, defaultDate, onAdd, compact = false }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => Promise<boolean>; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState(students.find((student) => !student.archived && student.trialEligible)?.id ?? students[0]?.id ?? "");
@@ -942,11 +771,6 @@ function BalanceAdjustmentDialog({ student, onAdjust }: { student: Student; onAd
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="lg" variant="outline" className="h-11 rounded-xl"><Minus />Корректировать баланс</Button></DialogTrigger><DialogContent className="rounded-3xl sm:max-w-lg"><DialogHeader><DialogTitle className="text-2xl">Корректировка баланса</DialogTitle><DialogDescription>{student.name}. Используйте отрицательное число для долга и положительное — для добавления занятий без оплаты.</DialogDescription></DialogHeader><div className={`rounded-2xl p-4 font-semibold ${student.balance < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"}`}>Текущий баланс: {plural(student.balance, "занятие", "занятия", "занятий")}</div><Field label="Изменение"><Input aria-label="Изменение баланса" type="number" min="-100" max="100" value={units} onChange={(event) => setUnits(Number(event.target.value))} className="h-11 rounded-xl" /></Field><Field label="Причина"><Input value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} placeholder="Например: долг до начала работы в приложении" /></Field><div className={`rounded-2xl p-4 ${student.balance + units < 0 ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>После корректировки баланс составит <strong>{plural(student.balance + units, "занятие", "занятия", "занятий")}</strong></div><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button disabled={pending || !Number.isInteger(units) || units === 0 || units < -100 || units > 100 || note.trim().length < 3} onClick={() => void submit()} className="bg-indigo-600">{pending ? "Сохраняю…" : "Сохранить корректировку"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const required = label.endsWith(" *");
-  const visibleLabel = required ? label.slice(0, -2) : label;
-  return <div className="min-w-0 space-y-2"><Label className={required ? "font-semibold text-primary" : undefined}>{visibleLabel}{required && <span aria-hidden="true"> *</span>}</Label>{children}</div>;
-}
 function TimeField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const shift = (hours: number) => {
     const [rawHours, rawMinutes] = value.split(":").map(Number);
@@ -955,4 +779,3 @@ function TimeField({ value, onChange }: { value: string; onChange: (value: strin
   };
   return <div className="flex min-w-0 gap-2"><Button type="button" variant="outline" size="icon" aria-label="Уменьшить время на час" onClick={() => shift(-1)} className="h-11 shrink-0 rounded-xl"><Minus className="size-4" /></Button><Input aria-label="Время" type="time" step="3600" value={value} onChange={(event) => onChange(event.target.value)} className="h-11 min-w-0 rounded-xl text-center" /><Button type="button" variant="outline" size="icon" aria-label="Увеличить время на час" onClick={() => shift(1)} className="h-11 shrink-0 rounded-xl"><Plus className="size-4" /></Button></div>;
 }
-function Empty({ text }: { text: string }) { return <div className="grid min-h-36 place-items-center p-6 text-center text-slate-500"><div><CalendarDays className="mx-auto mb-3 size-7 text-slate-300" /><p>{text}</p></div></div>; }
