@@ -1,10 +1,8 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- protected lesson photos are already resized server-side and require the viewer's session cookie. */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, Bell, CalendarDays, Camera, ChevronLeft, ChevronRight, Clock3, Copy,
-  Download, FileText, FolderOpen, History as HistoryIcon, Home, Link2, LogOut, Minus, NotebookPen, Pencil, Plus, RefreshCw, Search, Send, Settings, Tag, Trash2, Unlink, Upload, UserRound, UsersRound,
+  ArrowLeft, Bell, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy,
+  FolderOpen, History as HistoryIcon, Home, LogOut, Minus, NotebookPen, Pencil, Plus, Search, Send, Settings, Trash2, UserRound, UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState as Empty } from "@/components/common/empty-state";
@@ -14,18 +12,18 @@ import { StudentAvailabilityAccessCard } from "@/components/features/students/st
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { HistoryView } from "@/components/features/history/history-view";
 import { lessonStatusStyles as statusStyles } from "@/components/features/lessons/status-styles";
+import { LessonMaterialsDialog } from "@/components/features/materials/lesson-materials-dialog";
+import { TeacherMaterialsView } from "@/components/features/materials/teacher-materials-view";
 import { NotificationsView } from "@/components/features/notifications/notifications-view";
 import { RequestsView } from "@/components/features/requests/requests-view";
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
 import { SettingsView } from "@/components/features/settings/settings-view";
-import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, HistoryEvent, Lesson, LessonDraft, LessonMaterialsData, LessonRequest, RecurringSlot, Student, StudentDraft, StudentRequestDraft, TeacherMaterial, TeacherMaterialsData, View } from "@/components/features/app/types";
+import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, HistoryEvent, Lesson, LessonDraft, LessonRequest, RecurringSlot, Student, StudentDraft, StudentRequestDraft, View } from "@/components/features/app/types";
 import { BrandIcon } from "@/components/brand-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,33 +32,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MemberAvatar, MessagesDialog, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { readAppData, saveAppData } from "@/lib/app-data-client";
-import { appFetch } from "@/lib/client-fetch";
 import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { dateAtNoon, dateTitle, shiftDate, shiftMonth, today, toIsoDate } from "@/lib/date-time";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 import { russianPlural as plural } from "@/lib/russian-plural";
-
-async function readLessonMaterials(lessonId: string) {
-  const response = await appFetch(`/api/lesson-materials?lessonId=${encodeURIComponent(lessonId)}`, { cache: "no-store" });
-  const result = await response.json() as LessonMaterialsData & { error?: string };
-  if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить материалы урока");
-  return result;
-}
-
-async function saveLessonMaterial(body: Record<string, unknown>) {
-  const response = await appFetch("/api/lesson-materials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const result = await response.json() as { error?: string };
-  if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить материалы урока");
-}
-
-async function readTeacherMaterials() {
-  const response = await appFetch("/api/teacher-materials", { cache: "no-store" });
-  const result = await response.json() as TeacherMaterialsData & { error?: string };
-  if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить библиотеку");
-  return result;
-}
-
-const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} МБ` : `${Math.max(0, Math.round(bytes / 1024))} КБ`;
 
 export default function TutorApp({ role = "owner", user, onLogout }: { role?: "owner" | "teacher" | "student"; user?: CurrentUser; onLogout?: () => void }) {
   const preferenceScope = user?.email || role;
@@ -478,242 +453,6 @@ function InviteStudentDialog({ student, onCreateInvite }: { student: Student; on
 }
 
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof CalendarDays; children: React.ReactNode }) { return <section className="card p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="size-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>; }
-
-const materialTags = (value: string) => value.split(",").map((tag) => tag.trim().replace(/^#+/, "")).filter(Boolean).filter((tag, index, tags) => tags.findIndex((candidate) => candidate.toLocaleLowerCase("ru-RU") === tag.toLocaleLowerCase("ru-RU")) === index).slice(0, 10);
-const isPdfMaterial = (resource: TeacherMaterial) => resource.contentType === "application/pdf";
-
-function TeacherMaterialsView() {
-  const [data, setData] = useState<TeacherMaterialsData | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState("");
-  const [folder, setFolder] = useState("");
-  const [tags, setTags] = useState("");
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "pdf" | "word">("all");
-  const [folderFilter, setFolderFilter] = useState("all");
-  const [sort, setSort] = useState<"recent" | "new" | "title">("recent");
-  const [acceptedRules, setAcceptedRules] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const load = useCallback(async () => setData(await readTeacherMaterials()), []);
-  useEffect(() => { let active = true; void readTeacherMaterials().then((next) => active && setData(next)).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Не удалось загрузить библиотеку")); return () => { active = false; }; }, []);
-  const folders = useMemo(() => [...new Set((data?.resources ?? []).map((resource) => resource.folder).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "ru")), [data]);
-  const filteredResources = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("ru-RU");
-    return [...(data?.resources ?? [])].filter((resource) => {
-      const matchesType = typeFilter === "all" || typeFilter === "pdf" && isPdfMaterial(resource) || typeFilter === "word" && !isPdfMaterial(resource);
-      const matchesFolder = folderFilter === "all" || folderFilter === "none" && !resource.folder || resource.folder === folderFilter;
-      const haystack = [resource.title, resource.filename, resource.folder ?? "", ...(resource.tags ?? []), ...(resource.assignments ?? []).map((item) => item.studentName)].join(" ").toLocaleLowerCase("ru-RU");
-      return matchesType && matchesFolder && (!needle || haystack.includes(needle));
-    }).sort((a, b) => sort === "title" ? a.title.localeCompare(b.title, "ru") : sort === "new" ? b.createdAt - a.createdAt : (b.lastUsedAt ?? b.createdAt) - (a.lastUsedAt ?? a.createdAt));
-  }, [data, folderFilter, query, sort, typeFilter]);
-  const acceptRules = async () => {
-    if (!acceptedRules) return;
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "acceptContentRules", accepted: true }); await load(); toast.success("Правила приняты"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось сохранить согласие"); }
-    finally { setPending(false); }
-  };
-  const upload = async () => {
-    if (!file || !data) return;
-    if (file.size > data.maxFileBytes) { setError("Документ должен быть не больше 25 МБ"); return; }
-    setPending(true); setError("");
-    try {
-      const form = new FormData(); form.set("file", file); form.set("title", title.trim()); form.set("folder", folder.trim()); form.set("tags", JSON.stringify(materialTags(tags)));
-      const response = await appFetch("/api/teacher-materials", { method: "POST", body: form });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить документ");
-      setFile(null); setTitle(""); setFolder(""); setTags(""); await load(); toast.success("Материал добавлен в библиотеку");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить документ"); }
-    finally { setPending(false); }
-  };
-  const saveMetadata = async (resource: TeacherMaterial, next: { title: string; folder: string; tags: string[] }) => {
-    setPending(true); setError("");
-    try {
-      const response = await appFetch("/api/teacher-materials", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: resource.id, title: next.title, folder: next.folder.trim() || null, tags: next.tags }) });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось обновить материал");
-      await load(); toast.success("Название, папка и теги сохранены"); return true;
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обновить материал"); return false; }
-    finally { setPending(false); }
-  };
-  const replaceFile = async (resource: TeacherMaterial, replacement: File) => {
-    if (!data || replacement.size > data.maxFileBytes) { setError("Документ должен быть не больше 25 МБ"); return false; }
-    setPending(true); setError("");
-    try {
-      const form = new FormData(); form.set("file", replacement);
-      const response = await appFetch(`/api/teacher-materials?id=${encodeURIComponent(resource.id)}`, { method: "PUT", body: form });
-      const result = await response.json() as { error?: string; versionNumber?: number };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось заменить файл");
-      await load(); toast.success(`Новая версия ${result.versionNumber ?? ""} сохранена, назначения не изменились`); return true;
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось заменить файл"); return false; }
-    finally { setPending(false); }
-  };
-  const remove = async (resource: TeacherMaterial) => {
-    if (!window.confirm(`Удалить «${resource.title}» из библиотеки и всех уроков?`)) return;
-    setPending(true); setError("");
-    try {
-      const response = await appFetch(`/api/teacher-materials?id=${encodeURIComponent(resource.id)}`, { method: "DELETE" });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось удалить материал");
-      await load(); toast.success("Материал удалён");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить материал"); }
-    finally { setPending(false); }
-  };
-  return <Shell title="Материалы" eyebrow="Библиотека преподавателя"><div className="space-y-6">
-    {error && <p className="max-w-5xl rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-    {!data && !error && <div className="card max-w-5xl p-8 text-center text-slate-500">Загружаю библиотеку…</div>}
-    {data && !data.contentRulesAccepted && <section className="card max-w-3xl border-indigo-200 bg-indigo-50 p-6"><h2 className="text-xl font-bold text-indigo-950">Правила пользовательского контента</h2><p className="mt-2 text-sm leading-6 text-indigo-900">Перед загрузкой документов подтвердите, что у вас есть права на их хранение и передачу ученикам.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента</a> и несу ответственность за загружаемые материалы.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
-    {data?.contentRulesAccepted && <>
-      <datalist id="teacher-material-folders">{folders.map((item) => <option value={item} key={item} />)}</datalist>
-      <section className="card max-w-5xl p-6 md:p-8"><div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="text-xl font-bold">Добавить документ</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">PDF, DOC или DOCX до 25 МБ. Папка необязательна, теги вводятся через запятую.</p></div><div className="text-sm text-slate-500"><p>{data.uploadsThisMonth} из {data.maxUploadsPerMonth} загрузок в этом месяце</p><p>{formatBytes(data.storageBytes)} из {formatBytes(data.maxStorageBytes)}</p></div></div>
-        {!data.storageConfigured && <p className="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">S3-хранилище документов пока не настроено.</p>}
-        {data.storageConfigured && <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1fr_1.2fr_auto] xl:items-end"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="Упражнения на координацию" /></Field><Field label="Папка"><Input list="teacher-material-folders" value={folder} maxLength={80} onChange={(event) => setFolder(event.target.value)} placeholder="Например: Начинающие" /></Field><Field label="Теги"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="ритм, техника" /></Field><Field label="Файл"><Input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending} onChange={(event) => { const next = event.target.files?.[0] ?? null; setFile(next); if (next && !title) setTitle(next.name.replace(/\.(pdf|docx?)$/i, "")); }} /></Field><Button className="bg-indigo-600 md:col-span-2 xl:col-span-1" disabled={pending || !file || !title.trim() || data.uploadsThisMonth >= data.maxUploadsPerMonth} onClick={() => void upload()}><Upload />{pending ? "Загружаю…" : "Добавить"}</Button></div>}
-      </section>
-      <section className="card max-w-5xl overflow-hidden"><div className="border-b border-slate-200 p-5 md:px-7"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="text-xl font-bold">Моя библиотека</h2><p className="mt-1 text-sm text-slate-500">Поиск работает по названию, файлу, папкам, тегам и ученикам.</p></div><p className="text-sm font-medium text-slate-500">Показано {filteredResources.length} из {data.resources.length}</p></div><div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_180px_210px_210px]"><label className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти материал или ученика" className="pl-9" /></label><Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as typeof typeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">PDF и Word</SelectItem><SelectItem value="pdf">Только PDF</SelectItem><SelectItem value="word">Только Word</SelectItem></SelectContent></Select><Select value={folderFilter} onValueChange={setFolderFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все папки</SelectItem><SelectItem value="none">Без папки</SelectItem>{folders.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select><Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="recent">Недавно использованные</SelectItem><SelectItem value="new">Сначала новые</SelectItem><SelectItem value="title">По названию</SelectItem></SelectContent></Select></div></div>
-        {filteredResources.length ? <div className="divide-y divide-slate-200">{filteredResources.map((resource) => <article key={resource.id} className="p-5 md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-start"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><FileText className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="min-w-0 truncate">{resource.title}</strong><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{isPdfMaterial(resource) ? "PDF" : "Word"}</span><span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">версия {resource.versionNumber ?? 1}</span></div><p className="mt-1 truncate text-sm text-slate-500">{resource.filename} · {formatBytes(resource.byteSize)}{resource.folder ? ` · ${resource.folder}` : ""}</p>{Boolean(resource.tags?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{resource.tags?.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700"><Tag className="size-3" />{tag}</span>)}</div>}<p className="mt-2 text-xs text-slate-400">{resource.lastUsedAt ? `Недавно использован ${new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Moscow" }).format(resource.lastUsedAt)}` : "Ещё не использовался"}</p></div><div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><a href={resource.url}><Download />Скачать</a></Button><ManageTeacherMaterialDialog resource={resource} folders={folders} maxFileBytes={data.maxFileBytes} uploadLimitReached={data.uploadsThisMonth >= data.maxUploadsPerMonth} pending={pending} onSave={saveMetadata} onReplace={replaceFile} /><Button size="sm" variant="outline" className="text-rose-600" disabled={pending} onClick={() => void remove(resource)}><Trash2 />Удалить</Button></div></div>
-          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">Назначен: {plural(resource.assignments?.length ?? 0, "уроку", "урокам", "урокам")}</summary><div className="border-t border-slate-200 px-4 py-3">{resource.assignments?.length ? <ul className="space-y-2">{resource.assignments.map((assignment) => <li key={`${assignment.lessonId}-${assignment.startsAt}`} className="flex flex-col justify-between gap-1 text-sm sm:flex-row"><span className="font-medium">{assignment.studentName}</span><span className="text-slate-500">{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(assignment.startsAt)}</span></li>)}</ul> : <p className="text-sm text-slate-500">Материал пока не назначен ни одному уроку.</p>}</div></details>
-        </article>)}</div> : <Empty text={data.resources.length ? "По выбранным условиям ничего не найдено" : "В библиотеке пока нет документов"} />}
-      </section>
-    </>}
-  </div></Shell>;
-}
-
-function ManageTeacherMaterialDialog({ resource, folders, maxFileBytes, uploadLimitReached, pending, onSave, onReplace }: { resource: TeacherMaterial; folders: string[]; maxFileBytes: number; uploadLimitReached: boolean; pending: boolean; onSave: (resource: TeacherMaterial, next: { title: string; folder: string; tags: string[] }) => Promise<boolean>; onReplace: (resource: TeacherMaterial, file: File) => Promise<boolean> }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(resource.title);
-  const [folder, setFolder] = useState(resource.folder ?? "");
-  const [tags, setTags] = useState((resource.tags ?? []).join(", "));
-  const [replacement, setReplacement] = useState<File | null>(null);
-  const save = async () => { if (await onSave(resource, { title: title.trim(), folder, tags: materialTags(tags) })) setOpen(false); };
-  const replace = async () => { if (!replacement || replacement.size > maxFileBytes) return; if (await onReplace(resource, replacement)) { setReplacement(null); setOpen(false); } };
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Pencil />Настроить</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-xl"><DialogHeader><DialogTitle>Настроить материал</DialogTitle><DialogDescription>Измените метаданные или загрузите новую версию. Связи с уроками сохранятся.</DialogDescription></DialogHeader><div className="space-y-5"><Field label="Название"><Input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} /></Field><Field label="Папка"><Input list="teacher-material-folders" value={folder} maxLength={80} onChange={(event) => setFolder(event.target.value)} placeholder="Без папки" />{folders.length > 0 && <p className="text-xs text-slate-500">Можно выбрать существующую папку или написать новую.</p>}</Field><Field label="Теги"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="через, запятую" /><p className="text-xs text-slate-500">До 10 тегов, каждый не длиннее 30 символов.</p></Field><Button className="w-full bg-indigo-600" disabled={pending || !title.trim() || materialTags(tags).some((tag) => tag.length > 30)} onClick={() => void save()}>{pending ? "Сохраняю…" : "Сохранить название, папку и теги"}</Button><div className="border-t border-slate-200 pt-5"><h3 className="font-bold">Заменить файл</h3><p className="mt-1 text-sm leading-6 text-slate-500">Новая версия заменит текущий PDF или Word. Все назначения ученикам и урокам останутся на месте.</p><Input className="mt-4" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={pending || uploadLimitReached} onChange={(event) => setReplacement(event.target.files?.[0] ?? null)} />{uploadLimitReached && <p className="mt-2 text-xs font-medium text-amber-700">Месячный лимит загрузок исчерпан.</p>}<Button variant="outline" className="mt-3 w-full" disabled={pending || uploadLimitReached || !replacement || replacement.size > maxFileBytes} onClick={() => void replace()}><RefreshCw />{pending ? "Заменяю…" : `Загрузить версию ${(resource.versionNumber ?? 1) + 1}`}</Button></div></div></DialogContent></Dialog>;
-}
-
-function LessonMaterialsDialog({ lesson, role, onOpenChange }: { lesson: Lesson | null; role: "owner" | "teacher" | "student"; onOpenChange: (open: boolean) => void }) {
-  const [data, setData] = useState<LessonMaterialsData | null>(null);
-  const [sharedNote, setSharedNote] = useState("");
-  const [privateNote, setPrivateNote] = useState("");
-  const [homeworkAssignment, setHomeworkAssignment] = useState("");
-  const [homeworkResponse, setHomeworkResponse] = useState("");
-  const [selectedResource, setSelectedResource] = useState("");
-  const [acceptedRules, setAcceptedRules] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const load = useCallback(async () => {
-    if (!lesson) return;
-    const next = await readLessonMaterials(lesson.id);
-    setData(next);
-    setSharedNote(next.notes.find((note) => note.mine && note.visibility === "shared")?.body ?? "");
-    setPrivateNote(next.notes.find((note) => note.mine && note.visibility === "teacher_private")?.body ?? "");
-    setHomeworkAssignment(next.homework.assignment);
-    setHomeworkResponse(next.homework.studentResponse);
-  }, [lesson]);
-  useEffect(() => {
-    if (!lesson) return;
-    let active = true;
-    void readLessonMaterials(lesson.id).then((next) => {
-      if (!active) return;
-      setData(next);
-      setSharedNote(next.notes.find((note) => note.mine && note.visibility === "shared")?.body ?? "");
-      setPrivateNote(next.notes.find((note) => note.mine && note.visibility === "teacher_private")?.body ?? "");
-      setHomeworkAssignment(next.homework.assignment);
-      setHomeworkResponse(next.homework.studentResponse);
-    }).catch((reason) => active && setError(reason instanceof Error ? reason.message : "Не удалось загрузить материалы"));
-    return () => { active = false; };
-  }, [lesson]);
-  const acceptRules = async () => {
-    if (!acceptedRules) return;
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "acceptContentRules", accepted: true }); await load(); toast.success("Правила приняты"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось сохранить согласие"); }
-    finally { setPending(false); }
-  };
-  const saveNote = async (visibility: "shared" | "teacher_private", body: string) => {
-    if (!lesson || !body.trim()) return;
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "upsertNote", lessonId: lesson.id, visibility, body: body.trim() }); await load(); toast.success("Заметка сохранена"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось сохранить заметку"); }
-    finally { setPending(false); }
-  };
-  const saveHomework = async (field: "assignment" | "student_response", body: string) => {
-    if (!lesson) return;
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "updateHomework", lessonId: lesson.id, field, body }); await load(); toast.success(body.trim() ? "Домашнее задание сохранено" : "Текст домашнего задания удалён"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось сохранить домашнее задание"); }
-    finally { setPending(false); }
-  };
-  const removeNote = async (noteId: string) => {
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "deleteNote", noteId }); await load(); toast.success("Заметка удалена"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить заметку"); }
-    finally { setPending(false); }
-  };
-  const uploadPhotos = async (files: FileList | null) => {
-    if (!lesson || !files?.length) return;
-    if (files.length > (data?.maxPhotosPerParticipant ?? 5) - (data?.attachments.filter((photo) => photo.mine).length ?? 0)) {
-      setError("К одному уроку можно добавить не более 5 фотографий от каждого участника");
-      return;
-    }
-    if (Array.from(files).some((file) => file.size > 5 * 1024 * 1024)) {
-      setError("Размер каждой фотографии не должен превышать 5 МБ");
-      return;
-    }
-    setPending(true); setError("");
-    try {
-      for (const file of Array.from(files)) {
-        const form = new FormData(); form.set("lessonId", lesson.id); form.set("file", file);
-        const response = await appFetch("/api/lesson-materials/photos", { method: "POST", body: form });
-        const result = await response.json() as { error?: string };
-        if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить фотографию");
-      }
-      await load(); toast.success(files.length === 1 ? "Фотография добавлена" : "Фотографии добавлены");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить фотографию"); }
-    finally { setPending(false); }
-  };
-  const removePhoto = async (attachmentId: string) => {
-    setPending(true); setError("");
-    try { await saveLessonMaterial({ action: "deleteAttachment", attachmentId }); await load(); toast.success("Фотография удалена"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить фотографию"); }
-    finally { setPending(false); }
-  };
-  const changeResourceLink = async (resourceId: string, attach: boolean) => {
-    if (!lesson) return;
-    setPending(true); setError("");
-    try {
-      await saveLessonMaterial({ action: attach ? "attachResource" : "detachResource", lessonId: lesson.id, resourceId });
-      setSelectedResource(""); await load(); toast.success(attach ? "Документ добавлен к уроку" : "Документ откреплён от урока");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось изменить документы урока"); }
-    finally { setPending(false); }
-  };
-  const sharedMine = data?.notes.find((note) => note.mine && note.visibility === "shared");
-  const privateMine = data?.notes.find((note) => note.mine && note.visibility === "teacher_private");
-  const otherNotes = data?.notes.filter((note) => !note.mine && note.visibility === "shared") ?? [];
-  const minePhotoCount = data?.attachments.filter((photo) => photo.mine).length ?? 0;
-  const linkedResourceIds = new Set(data?.documents.map((document) => document.id) ?? []);
-  const availableResources = data?.library.filter((resource) => !linkedResourceIds.has(resource.id)) ?? [];
-  return <Dialog open={Boolean(lesson)} onOpenChange={onOpenChange}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-3xl"><DialogHeader><DialogTitle className="text-2xl">Материалы урока</DialogTitle><DialogDescription>{lesson ? `${lesson.name} · ${dateTitle(lesson.date, { day: "numeric", month: "long", year: "numeric" })}, ${lesson.time}` : "Заметки, документы и фотографии"}</DialogDescription></DialogHeader>
-    {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-    {!data && !error && <p className="py-10 text-center text-slate-500">Загружаю материалы…</p>}
-    {data && !data.contentRulesAccepted && <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><h3 className="font-bold text-indigo-950">Правила пользовательского контента</h3><p className="mt-2 text-sm leading-6 text-indigo-900">Перед первой заметкой, фотографией или документом подтвердите права на материалы. Запрещено размещать чужие персональные данные, документы и изображения людей без необходимых согласий.</p><label className="mt-4 flex items-start gap-3 text-sm leading-5"><Checkbox checked={acceptedRules} onCheckedChange={(value) => setAcceptedRules(value === true)} className="mt-0.5" /><span>Я принимаю <a href="/legal/content-rules" target="_blank" rel="noreferrer" className="underline">Правила размещения контента</a>, подтверждаю наличие необходимых прав и согласий и несу ответственность за загружаемые тексты, документы и изображения.</span></label><Button className="mt-4 bg-indigo-600" disabled={!acceptedRules || pending} onClick={() => void acceptRules()}>{pending ? "Сохраняю…" : "Принять правила"}</Button></section>}
-    {data?.contentRulesAccepted && <div className="space-y-6"><section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5"><div><h3 className="font-bold text-indigo-950">Домашнее задание</h3><p className="mt-1 text-sm text-indigo-800">Задание преподавателя и отдельный ответ ученика — без смешивания с заметками.</p></div>
-      {role !== "student" ? <div className="mt-4"><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="homework-assignment" className="font-bold">Задание ученику</Label><span className="text-xs text-slate-400">{homeworkAssignment.length}/4000</span></div><Textarea id="homework-assignment" value={homeworkAssignment} maxLength={4000} rows={4} onChange={(event) => setHomeworkAssignment(event.target.value)} placeholder="Что нужно подготовить или выполнить к следующему уроку" /><div className="mt-3 flex justify-end gap-2">{data.homework.assignment && <Button variant="outline" disabled={pending} onClick={() => void saveHomework("assignment", "")}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || homeworkAssignment.trim() === data.homework.assignment} onClick={() => void saveHomework("assignment", homeworkAssignment)}>Сохранить задание</Button></div></div> : <div className="mt-4 rounded-xl bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Задание преподавателя</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{data.homework.assignment || "Преподаватель пока не добавил задание."}</p></div>}
-      {role === "student" ? <div className="mt-4"><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="homework-response" className="font-bold">Мой ответ или комментарий</Label><span className="text-xs text-slate-400">{homeworkResponse.length}/4000</span></div><Textarea id="homework-response" value={homeworkResponse} maxLength={4000} rows={4} onChange={(event) => setHomeworkResponse(event.target.value)} placeholder="Напишите, что выполнено, или задайте вопрос по заданию" /><div className="mt-3 flex justify-end gap-2">{data.homework.studentResponse && <Button variant="outline" disabled={pending} onClick={() => void saveHomework("student_response", "")}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || homeworkResponse.trim() === data.homework.studentResponse} onClick={() => void saveHomework("student_response", homeworkResponse)}>Сохранить ответ</Button></div></div> : <div className="mt-4 rounded-xl bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ответ ученика</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{data.homework.studentResponse || "Ученик пока не добавил ответ."}</p></div>}
-    </section><section><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="shared-lesson-note" className="font-bold">{role === "student" ? "Моя заметка преподавателю" : "Общая заметка ученику"}</Label><span className="text-xs text-slate-400">{sharedNote.length}/4000</span></div><Textarea id="shared-lesson-note" value={sharedNote} maxLength={4000} rows={5} onChange={(event) => setSharedNote(event.target.value)} placeholder={role === "student" ? "Вопрос или комментарий к уроку" : "Рекомендация или комментарий к уроку"} /><div className="mt-3 flex justify-end gap-2">{sharedMine && <Button variant="outline" disabled={pending} onClick={() => void removeNote(sharedMine.id)}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || !sharedNote.trim() || sharedNote.trim() === sharedMine?.body} onClick={() => void saveNote("shared", sharedNote)}>Сохранить заметку</Button></div></section>
-      {role !== "student" && <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-2 flex items-center justify-between gap-3"><Label htmlFor="private-lesson-note" className="font-bold">Личная заметка преподавателя</Label><span className="text-xs text-slate-400">{privateNote.length}/4000</span></div><p className="mb-3 text-xs text-slate-500">Ученик её не увидит.</p><Textarea id="private-lesson-note" value={privateNote} maxLength={4000} rows={4} onChange={(event) => setPrivateNote(event.target.value)} placeholder="Личные наблюдения по уроку" /><div className="mt-3 flex justify-end gap-2">{privateMine && <Button variant="outline" disabled={pending} onClick={() => void removeNote(privateMine.id)}><Trash2 />Удалить</Button>}<Button className="bg-indigo-600" disabled={pending || !privateNote.trim() || privateNote.trim() === privateMine?.body} onClick={() => void saveNote("teacher_private", privateNote)}>Сохранить личную заметку</Button></div></section>}
-      {otherNotes.length > 0 && <section><h3 className="mb-3 font-bold">{role === "student" ? "Заметка преподавателя" : "Заметка ученика"}</h3><div className="space-y-3">{otherNotes.map((note) => <article key={note.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{note.authorName}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{note.body}</p></div>{note.canDelete && <Button type="button" size="icon" variant="ghost" disabled={pending} aria-label="Удалить заметку" onClick={() => void removeNote(note.id)}><Trash2 className="size-4" /></Button>}</div></article>)}</div></section>}
-      <section><div><h3 className="font-bold">Документы</h3><p className="mt-1 text-sm text-slate-500">PDF и Word, которыми преподаватель поделился для этого урока.</p></div>
-        {role !== "student" && <div className="mt-4 flex flex-col gap-3 sm:flex-row"><Select value={selectedResource} onValueChange={setSelectedResource}><SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder={availableResources.length ? "Выберите документ из библиотеки" : "Нет непривязанных документов"} /></SelectTrigger><SelectContent>{availableResources.map((resource) => <SelectItem key={resource.id} value={resource.id}>{resource.title} · {formatBytes(resource.byteSize)}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" disabled={pending || !selectedResource} onClick={() => void changeResourceLink(selectedResource, true)}><Link2 />Добавить к уроку</Button></div>}
-        {data.documents.length ? <div className="mt-4 divide-y overflow-hidden rounded-2xl border border-slate-200">{data.documents.map((document) => <article key={document.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><FileText className="size-5 shrink-0 text-indigo-600" /><div className="min-w-0 flex-1"><strong className="block truncate">{document.title}</strong><p className="truncate text-xs text-slate-500">{document.filename} · {formatBytes(document.byteSize)}</p></div><div className="flex gap-2"><Button asChild size="sm" variant="outline"><a href={document.url}><Download />Скачать</a></Button>{role !== "student" && <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void changeResourceLink(document.id, false)}><Unlink />Открепить</Button>}</div></article>)}</div> : <div className="mt-4 grid min-h-24 place-items-center rounded-2xl border border-dashed border-slate-200 text-center text-sm text-slate-500"><span><FileText className="mx-auto mb-2 size-6 text-slate-300" />Документов для урока пока нет</span></div>}
-        {role !== "student" && data.library.length === 0 && <p className="mt-3 text-xs text-slate-500">Сначала добавьте PDF или Word в раздел «Материалы» кабинета.</p>}
-      </section>
-      <section><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="font-bold">Фотографии</h3><p className="mt-1 text-sm text-slate-500">До 5 фотографий от каждого участника. Файлы автоматически удаляются через 90 дней после урока.</p></div>{data.photoStorageConfigured && minePhotoCount < data.maxPhotosPerParticipant && <label className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white ${pending ? "pointer-events-none opacity-50" : ""}`}><Upload className="size-4" />Добавить<input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={pending} onChange={(event) => { void uploadPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>}</div>
-        {!data.photoStorageConfigured && <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Хранилище фотографий пока не настроено. Текстовые заметки работают независимо от него.</p>}
-        {data.attachments.length > 0 ? <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{data.attachments.map((photo) => <figure key={photo.id} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={`Фотография к уроку от ${photo.authorName}`} className="aspect-square w-full object-cover" /></a>{photo.canDelete && <Button type="button" size="icon" variant="destructive" disabled={pending} className="absolute right-2 top-2 size-8" aria-label="Удалить фотографию" onClick={() => void removePhoto(photo.id)}><Trash2 className="size-4" /></Button>}<figcaption className="p-2 text-xs text-slate-500"><span className="block truncate">{photo.authorName}</span><span>до {new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(new Date(photo.expiresAt))}</span></figcaption></figure>)}</div> : <div className="mt-4 grid min-h-28 place-items-center rounded-2xl border border-dashed border-slate-200 text-center text-sm text-slate-500"><span><Camera className="mx-auto mb-2 size-6 text-slate-300" />Фотографий пока нет</span></div>}
-      </section></div>}
-    <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Закрыть</Button></DialogFooter>
-  </DialogContent></Dialog>;
-}
 
 function AddLessonDialog({ students, defaultDate, onAdd, compact = false }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => Promise<boolean>; compact?: boolean }) {
   const [open, setOpen] = useState(false);
