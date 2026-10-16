@@ -18,10 +18,34 @@ export type MaterialPreviewItem = {
 export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPreviewItem | null; onOpenChange: (open: boolean) => void }) {
   const docxRoot = useRef<HTMLDivElement>(null);
   const [docxResult, setDocxResult] = useState<{ url: string; state: "ready" | "error" }>({ url: "", state: "error" });
+  const [pdfResult, setPdfResult] = useState<{ sourceUrl: string; blobUrl?: string; state: "ready" | "error" }>({ sourceUrl: "", state: "error" });
   const isImage = item?.contentType.startsWith("image/") ?? false;
   const isPdf = item?.contentType === "application/pdf";
   const isDocx = item?.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const docxState = item && docxResult.url === item.url ? docxResult.state : "loading";
+  const pdfState = item && pdfResult.sourceUrl === item.url ? pdfResult.state : "loading";
+
+  useEffect(() => {
+    if (!item || !isPdf) return;
+    let active = true;
+    let blobUrl: string | undefined;
+    void (async () => {
+      try {
+        const response = await appFetch(item.url, { cache: "no-store" });
+        if (!response.ok) throw new Error("preview_failed");
+        const blob = await response.blob();
+        if (!active) return;
+        blobUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+        setPdfResult({ sourceUrl: item.url, blobUrl, state: "ready" });
+      } catch {
+        if (active) setPdfResult({ sourceUrl: item.url, state: "error" });
+      }
+    })();
+    return () => {
+      active = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [isPdf, item]);
 
   useEffect(() => {
     if (!item || !isDocx) return;
@@ -48,7 +72,9 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
     <DialogHeader className="border-b px-5 py-4 pr-14"><DialogTitle className="truncate">{item?.title ?? "Просмотр материала"}</DialogTitle><DialogDescription className="truncate">{item?.filename ?? "Материал урока"}</DialogDescription></DialogHeader>
     <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 dark:bg-slate-950 sm:p-5">
       {item && isImage && <img src={item.url} alt={item.title} className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain shadow-sm" />}
-      {item && isPdf && <iframe src={`${item.url}?preview=1`} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
+      {item && isPdf && pdfState === "ready" && pdfResult.blobUrl && <iframe src={pdfResult.blobUrl} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
+      {item && isPdf && pdfState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю PDF…</p>}
+      {item && isPdf && pdfState === "error" && <PreviewUnavailable kind="pdf" />}
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-white text-slate-950 shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
       {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
     </div>
@@ -56,6 +82,6 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
   </DialogContent></Dialog>;
 }
 
-function PreviewUnavailable() {
-  return <div className="grid min-h-[420px] place-items-center text-center"><div><FileText className="mx-auto mb-3 size-10 text-slate-400" /><p className="font-semibold text-slate-700 dark:text-slate-200">Этот формат нельзя показать в браузере</p><p className="mt-1 text-sm text-slate-500">Скачайте файл, чтобы открыть его в приложении Word.</p></div></div>;
+function PreviewUnavailable({ kind = "document" }: { kind?: "document" | "pdf" }) {
+  return <div className="grid min-h-[420px] place-items-center text-center"><div><FileText className="mx-auto mb-3 size-10 text-slate-400" /><p className="font-semibold text-slate-700 dark:text-slate-200">{kind === "pdf" ? "Не удалось открыть PDF" : "Этот формат нельзя показать в браузере"}</p><p className="mt-1 text-sm text-slate-500">{kind === "pdf" ? "Скачайте файл и откройте его на устройстве." : "Скачайте файл, чтобы открыть его в приложении Word."}</p></div></div>;
 }

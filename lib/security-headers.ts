@@ -9,6 +9,7 @@ export const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
+  "frame-src 'self' blob:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
 ].join("; ");
