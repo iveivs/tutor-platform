@@ -1,7 +1,7 @@
 import { getAuthMember } from "@/lib/auth";
 import { getPostgresPool } from "@/db/postgres";
 import { getTeacherMaterial } from "@/lib/lesson-materials";
-import { materialDownloadDisposition } from "@/lib/teacher-material-files";
+import { materialContentDisposition } from "@/lib/teacher-material-files";
 
 export const runtime = "nodejs";
 
@@ -20,12 +20,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const row = result.rows[0];
     if (!row) return Response.json({ error: "Материал не найден" }, { status: 404 });
     const bytes = await getTeacherMaterial(String(row.object_key));
+    const preview = new URL(request.url).searchParams.get("preview") === "1" && row.content_type === "application/pdf";
     await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [id, auth.workspaceId]);
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": String(row.content_type),
         "Content-Length": String(bytes.byteLength),
-        "Content-Disposition": materialDownloadDisposition(String(row.original_filename)),
+        "Content-Disposition": materialContentDisposition(String(row.original_filename), preview ? "inline" : "attachment"),
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "sandbox",

@@ -67,7 +67,7 @@ const translations: Record<string, string> = {
   "Преподаватель получит запрос. Своевременный запрос не будет списан, даже если останется без ответа.": "The tutor will receive your request. A timely cancellation request will not be charged even if it remains unanswered.", "Предложите удобные дату и время. Урок появится в расписании после подтверждения преподавателем.": "Suggest a convenient date and time. The lesson will appear in the schedule after the tutor approves it.", "Выберите свободное время. Оно появится в расписании только после подтверждения преподавателем.": "Choose an available time. It will appear in the schedule only after the tutor approves it.",
   "Свободные слоты": "Available times", "Или другая дата": "Or another date", "Подходящих свободных слотов пока нет.": "No suitable available times yet.", "Выбрать свободное время": "Choose an available time", "После подтверждения появится один двойной урок на два часа, а после проведения спишутся два занятия.": "Once approved, one two-hour double lesson will be created, and two lessons will be deducted after completion.", "слот": "slot", "слота": "slots", "слотов": "slots",
   "Все запросы обработаны": "All requests have been handled", "В этой категории запросов нет": "No requests in this category", "Перенос": "Reschedule", "Подтвердить": "Approve", "Отклонить": "Decline", "Ожидает решения": "Pending", "Подтверждён": "Approved", "Отклонён": "Declined", "Предложенное время": "Suggested time",
-  "Привет, ": "Hello, ", "Ваше расписание занятий": "Your lesson schedule", "Ближайший урок": "Upcoming lesson", "Дальнейшие занятия": "Later lessons", "Недавние уроки": "Recent lessons", "Материалы": "Materials", "Отмену можно запросить до 23:59 предыдущего дня": "Cancellation can be requested until 11:59 PM on the previous day", "Необходимо оплатить ": "Payment required for ",
+  "Привет, ": "Hello, ", "Ваше расписание занятий": "Your lesson schedule", "Ближайший урок": "Upcoming lesson", "Дальнейшие занятия": "Later lessons", "Недавние уроки": "Recent lessons", "Материалы": "Materials", "Все документы и фотографии, которыми преподаватель поделился на уроках.": "All documents and photos shared by your tutor across lessons.", "Открыть": "Open", "Просмотр материала": "Material preview", "Материал урока": "Lesson material", "Открываю документ…": "Opening document…", "Этот формат нельзя показать в браузере": "This format cannot be displayed in the browser", "Скачайте файл, чтобы открыть его в приложении Word.": "Download the file to open it in Word.", "Преподаватель пока не добавил документов.": "Your tutor has not added any documents yet.", "Преподаватель пока не добавил фотографий.": "Your tutor has not added any photos yet.", "Отмену можно запросить до 23:59 предыдущего дня": "Cancellation can be requested until 11:59 PM on the previous day", "Необходимо оплатить ": "Payment required for ",
   "Проведён": "Completed", "Ожидает ответа": "Awaiting response", "Не оплачен": "Unpaid", "Пробное · проведено": "Trial · completed", "Пробное · бесплатно": "Trial · free", "Назначен урок": "Lesson scheduled", "Назначено пробное занятие": "Trial lesson scheduled",
   "Расписание осталось без изменений": "The schedule remains unchanged", "Изменение появилось в расписании": "The change is now reflected in the schedule", "Исходный урок уже был изменён или отменён.": "The original lesson has already been changed or cancelled.", "Расписание уже изменено по другому подтверждённому запросу.": "The schedule was already changed by another approved request.",
   "Урок отменён": "Lesson cancelled", "Постоянное занятие отменено": "Recurring lesson cancelled", "Будущие уроки этого времени удалены из расписания без списания.": "Future lessons at this time were removed from the schedule without charge.", "Преподаватель отменил урок без списания.": "The tutor cancelled the lesson without charge.", "Двойной урок отменён без списания двух занятий.": "The double lesson was cancelled without deducting two lessons.",
@@ -136,6 +136,10 @@ export function translateUiText(value: string) {
     .replace(/^Пригласить (.+)$/, "Invite $1")
     .replace(/^Введите: (.+)$/, "Enter: $1")
     .replace(/^Фото профиля (.+)$/, "Profile photo of $1")
+    .replace(/^Фотография(?: к уроку)? от (.+)$/, "Photo from $1")
+    .replace(/^Скачать (.+)$/, "Download $1")
+    .replace(/^Документы \((\d+)\)$/, "Documents ($1)")
+    .replace(/^Фотографии \((\d+)\)$/, "Photos ($1)")
     .replace(/^Цвет аватара: (.+)$/, "Avatar color: $1")
     .replace(/^Баланс (-?\d+)$/, (_, count: string) => `Balance: ${englishLessons(count)}`)
     .replace(/^Баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance: ${englishLessons(count)}`)
@@ -182,7 +186,7 @@ export function translateUiText(value: string) {
   return `${leading}${translated}${trailing}`;
 }
 
-function localizeNode(root: Node, language: Language, originals: WeakMap<Node, string>, attributeOriginals: WeakMap<Element, Map<string, string>>) {
+function localizeNode(root: Node, language: Language, originals: WeakMap<Node, string>, attributeOriginals: WeakMap<Element, Map<string, string>>, captureChanges = false) {
   const textNodes: Text[] = [];
   if (root.nodeType === Node.TEXT_NODE) textNodes.push(root as Text);
   else {
@@ -192,7 +196,7 @@ function localizeNode(root: Node, language: Language, originals: WeakMap<Node, s
   for (const node of textNodes) {
     if (node.parentElement?.closest("script, style, [data-no-translate]")) continue;
     const previous = originals.get(node);
-    if (!previous || (language === "en" && /[А-Яа-яЁё]/.test(node.data) && node.data !== translateUiText(previous))) originals.set(node, node.data);
+    if (!previous || (captureChanges && node.data !== (language === "en" ? translateUiText(previous) : previous))) originals.set(node, node.data);
     const original = originals.get(node) ?? node.data;
     const next = language === "en" ? translateUiText(original) : original;
     if (node.data !== next) node.data = next;
@@ -206,7 +210,7 @@ function localizeNode(root: Node, language: Language, originals: WeakMap<Node, s
       let stored = attributeOriginals.get(element);
       if (!stored) { stored = new Map(); attributeOriginals.set(element, stored); }
       const previous = stored.get(attribute);
-      if (!previous || (language === "en" && /[А-Яа-яЁё]/.test(current) && current !== translateUiText(previous))) stored.set(attribute, current);
+      if (!previous || (captureChanges && current !== (language === "en" ? translateUiText(previous) : previous))) stored.set(attribute, current);
       const original = stored.get(attribute) ?? current;
       const next = language === "en" ? translateUiText(original) : original;
       if (current !== next) element.setAttribute(attribute, next);
@@ -223,12 +227,12 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     document.title = language === "en" ? "Tyuttori — tutor platform" : "Тьюттори — платформа репетитора";
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     if (description) description.content = language === "en" ? "Scheduling, students, and payments for private tutors." : "Расписание, ученики и оплаты частного преподавателя в Тьюттори.";
-    const apply = (node: Node) => localizeNode(node, language, originals.current, attributeOriginals.current);
+    const apply = (node: Node, captureChanges = false) => localizeNode(node, language, originals.current, attributeOriginals.current, captureChanges);
     apply(document.body);
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        if (mutation.type === "characterData") apply(mutation.target);
-        for (const node of mutation.addedNodes) apply(node);
+        if (mutation.type === "characterData") apply(mutation.target, true);
+        for (const node of mutation.addedNodes) apply(node, true);
       }
     });
     observer.observe(document.body, { childList: true, characterData: true, subtree: true });

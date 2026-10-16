@@ -42,8 +42,12 @@ export function detectTeacherMaterial(filename: string, bytes: Uint8Array): { co
     : null;
 }
 
-export function materialDownloadDisposition(filename: string) {
+export function materialContentDisposition(filename: string, disposition: "attachment" | "inline" = "attachment") {
   const safe = sanitizeMaterialFilename(filename);
   const ascii = safe.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-  return `attachment; filename="${ascii || "material"}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
+  return `${disposition}; filename="${ascii || "material"}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
+}
+
+export function materialDownloadDisposition(filename: string) {
+  return materialContentDisposition(filename, "attachment");
 }

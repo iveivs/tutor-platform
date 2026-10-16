@@ -16,13 +16,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const row = result.rows[0];
     if (!row) return Response.json({ error: "Фотография не найдена" }, { status: 404 });
     const bytes = await getLessonPhoto(String(row.object_key));
+    const download = new URL(request.url).searchParams.get("download") === "1";
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": "image/webp",
         "Content-Length": String(bytes.byteLength),
         "Cache-Control": "private, max-age=86400",
         "X-Content-Type-Options": "nosniff",
-        "Content-Disposition": "inline",
+        "Content-Disposition": download ? `attachment; filename="lesson-photo-${id}.webp"` : "inline",
       },
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-import type { LessonMaterialsData, TeacherMaterialsData } from "@/components/features/app/types";
+import type { LessonMaterialsData, StudentMaterialsData, TeacherMaterialsData } from "@/components/features/app/types";
 import { appFetch } from "@/lib/client-fetch";
 
 export async function readLessonMaterials(lessonId: string) {
@@ -18,5 +18,12 @@ export async function readTeacherMaterials() {
   const response = await appFetch("/api/teacher-materials", { cache: "no-store" });
   const result = await response.json() as TeacherMaterialsData & { error?: string };
   if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить библиотеку");
+  return result;
+}
+
+export async function readStudentMaterials() {
+  const response = await appFetch("/api/student-materials", { cache: "no-store" });
+  const result = await response.json() as StudentMaterialsData & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить материалы");
   return result;
 }

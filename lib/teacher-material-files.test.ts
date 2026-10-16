@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultMaterialTitle, detectTeacherMaterial, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
+import { defaultMaterialTitle, detectTeacherMaterial, materialContentDisposition, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
 
 describe("teacher material files", () => {
   it("recognizes PDF by extension and signature", () => {
@@ -17,5 +17,6 @@ describe("teacher material files", () => {
     expect(sanitizeMaterialFilename("../План\u0000 урока.pdf")).toBe("План урока.pdf");
     expect(defaultMaterialTitle("План урока.pdf")).toBe("План урока");
     expect(materialDownloadDisposition("План урока.pdf")).toContain("filename*=UTF-8''");
+    expect(materialContentDisposition("План урока.pdf", "inline")).toMatch(/^inline;/);
   });
 });

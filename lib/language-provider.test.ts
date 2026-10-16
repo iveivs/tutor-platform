@@ -52,6 +52,9 @@ describe("translateUiText", () => {
     ["0 непрочитанных", "0 unread"],
     ["Новый запрос ученика", "New student request"],
     ["Новое занятие: запрос требует ответа", "New lesson: request needs review"],
+    ["Документы (3)", "Documents (3)"],
+    ["Фотографии (2)", "Photos (2)"],
+    ["Фотография от Светослав", "Photo from Светослав"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });
@@ -72,6 +75,10 @@ describe("translateUiText", () => {
       "Не удалось загрузить материалы урока",
       "Материалы и домашка",
       "Отменить без списания",
+      "Все документы и фотографии, которыми преподаватель поделился на уроках.",
+      "Открываю документ…",
+      "Этот формат нельзя показать в браузере",
+      "Преподаватель пока не добавил документов.",
     ];
 
     for (const text of texts) expect(translateUiText(text)).not.toMatch(/[А-Яа-яЁё]/);
