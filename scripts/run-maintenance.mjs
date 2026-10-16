@@ -80,31 +80,86 @@ async function deleteTeacherMaterials(client) {
 }
 
 async function enqueueTelegramReminders(client) {
+  await client.query(`UPDATE telegram_deliveries delivery
+    SET status = 'cancelled', updated_at = now()
+    FROM members recipient
+    WHERE delivery.member_id = recipient.id
+      AND recipient.role IN ('owner', 'teacher')
+      AND delivery.kind = 'lesson_reminder'
+      AND delivery.status IN ('pending', 'failed')
+      AND delivery.dedupe_key LIKE 'lesson-reminder:%'
+      AND delivery.dedupe_key NOT LIKE 'lesson-reminder-day:%'`);
+
   await client.query(`WITH upcoming AS (
       SELECT min(l.id) AS lesson_id, COALESCE(l.group_id, l.id) AS lesson_key, l.workspace_id, l.student_id,
         min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at, w.timezone,
-        student.display_name AS student_name, owner.id AS owner_id, owner.display_name AS owner_name
+        owner.display_name AS owner_name
       FROM lessons l
       JOIN workspaces w ON w.id = l.workspace_id
-      JOIN members student ON student.id = l.student_id
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
-      GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, student.display_name, owner.id, owner.display_name
-    ), recipients AS (
-      SELECT lesson_id, lesson_key, student_id AS member_id,
-        'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
-        E'\nПреподаватель: ' || owner_name AS message FROM upcoming
-      UNION ALL
-      SELECT lesson_id, lesson_key, owner_id AS member_id,
-        'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
-        E'\nУченик: ' || student_name AS message FROM upcoming
+      GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, owner.display_name
     )
     INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
-    SELECT recipient.member_id, recipient.lesson_id, 'lesson_reminder',
-      'lesson-reminder:' || recipient.lesson_key || ':' || recipient.member_id, recipient.message
-    FROM recipients recipient
-    JOIN telegram_connections connection ON connection.member_id = recipient.member_id AND connection.disabled_at IS NULL
+    SELECT student_id, lesson_id, 'lesson_reminder',
+      'lesson-reminder:' || lesson_key || ':' || student_id,
+      'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
+      E'\nПреподаватель: ' || owner_name
+    FROM upcoming
+    JOIN telegram_connections connection ON connection.member_id = student_id AND connection.disabled_at IS NULL
     ON CONFLICT (dedupe_key) DO NOTHING`);
+
+  const teacherDigests = await client.query(`WITH trigger_days AS (
+      SELECT DISTINCT l.workspace_id, owner.id AS owner_id, w.timezone,
+        (l.starts_at AT TIME ZONE w.timezone)::date AS lesson_date
+      FROM lessons l
+      JOIN workspaces w ON w.id = l.workspace_id
+      JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
+      JOIN telegram_connections connection ON connection.member_id = owner.id AND connection.disabled_at IS NULL
+      WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
+    ), day_lessons AS (
+      SELECT days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
+        min(l.id) AS lesson_id, min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at,
+        count(*)::int AS lesson_count, student.display_name AS student_name
+      FROM trigger_days days
+      JOIN lessons l ON l.workspace_id = days.workspace_id
+        AND l.status = 'scheduled'
+        AND l.starts_at > now()
+        AND (l.starts_at AT TIME ZONE days.timezone)::date = days.lesson_date
+      JOIN members student ON student.id = l.student_id
+      GROUP BY days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
+        COALESCE(l.group_id, l.id), student.display_name
+    )
+    SELECT owner_id AS member_id, workspace_id, lesson_date::text AS lesson_date,
+      min(lesson_id) AS lesson_id,
+      to_char(lesson_date, 'DD.MM.YYYY') AS date_label,
+      lesson_date = ((now() AT TIME ZONE timezone)::date + 1) AS is_tomorrow,
+      json_agg(json_build_object(
+        'start', to_char(starts_at AT TIME ZONE timezone, 'HH24:MI'),
+        'end', to_char(ends_at AT TIME ZONE timezone, 'HH24:MI'),
+        'studentName', student_name,
+        'lessonCount', lesson_count
+      ) ORDER BY starts_at, student_name) AS lessons
+    FROM day_lessons
+    GROUP BY owner_id, workspace_id, timezone, lesson_date
+    ORDER BY lesson_date, owner_id`);
+
+  for (const digest of teacherDigests.rows) {
+    const lessons = Array.isArray(digest.lessons) ? digest.lessons : [];
+    const message = [
+      digest.is_tomorrow ? "Расписание на завтра" : "Расписание на сегодня",
+      String(digest.date_label),
+      ...lessons.map((lesson) => `• ${lesson.start}–${lesson.end} — ${lesson.studentName}${Number(lesson.lessonCount) > 1 ? " · двойной урок" : ""}`),
+    ].join("\n");
+    await client.query(`INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
+      VALUES ($1, $2, 'lesson_reminder', $3, $4)
+      ON CONFLICT (dedupe_key) DO NOTHING`, [
+      digest.member_id,
+      digest.lesson_id,
+      `lesson-reminder-day:${digest.workspace_id}:${digest.lesson_date}:${digest.member_id}`,
+      message,
+    ]);
+  }
 }
 
 async function sendTelegram(chatId, message) {
