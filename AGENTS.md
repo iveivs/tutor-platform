@@ -18,11 +18,15 @@
 
 ## Быстрая карта проекта
 
-- `components/tutor-app.tsx` — экраны преподавателя и ученика, формы и основные сценарии.
-- `app/api/app-data/route.ts` — рабочий API, проверки доступа и операции с данными.
+- `docs/ARCHITECTURE.md` — актуальная карта слоёв, модулей и правил зависимостей.
+- `components/tutor-app.tsx` — корневая композиция кабинета; предметные экраны находятся в `components/features/`.
+- `lib/app-data/` — чтение кабинета, транспорт записи и предметные команды.
+- `lib/lesson-content/` и `lib/teacher-material-library/` — материалы урока и библиотека преподавателя.
+- `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
 - `app/globals.css` — светлая и графитовая тёмная темы, включая календарь.
 - `components/auth-gate.tsx` и `components/invite-accept.tsx` — вход и принятие приглашения.
-- `db/schema.ts` — актуальная схема D1; `drizzle/` — последовательные миграции.
+- `db/postgres/schema.ts` — рабочая схема PostgreSQL; `drizzle-postgres/` — последовательные production-миграции.
+- `db/schema.ts` и `drizzle/` — только схема и миграции совместимого D1-контура.
 - `lib/lesson-maintenance.ts` — автоматическое списание завершённых уроков.
 - `lib/telegram.ts` и `app/api/telegram/` — безопасная привязка Telegram и webhook бота.
 - `workers/telegram-relay/` — минимальный внешний шлюз Telegram для недоступного с VPS `api.telegram.org`.
@@ -100,8 +104,8 @@
 
 ## Команды и публикация
 
-- Локальная проверка: `npm run build`, затем `npm run start`; адрес `http://127.0.0.1:8787`.
-- Разработка с обновлением: `npm run dev`; адрес `http://localhost:5173`.
+- Локальная проверка: `npm run build`, затем `npm run start`; адрес `http://127.0.0.1:3000`.
+- Разработка с обновлением: `npm run dev`; адрес `http://localhost:3000`.
 - Перед публикацией проверить `git diff --check` и выполнить одну итоговую сборку.
 - Миграции рабочей PostgreSQL-базы применять только при появлении нового неприменённого файла в `drizzle-postgres/`; старые файлы не редактировать после применения.
 - `db:import:d1` разрешён только для пустой PostgreSQL. Одноразовый production merge D1 уже выполнен; повторно `db:merge:d1 -- --apply` не запускать без нового отдельного плана восстановления и явного решения владельца.
