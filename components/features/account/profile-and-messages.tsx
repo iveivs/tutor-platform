@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { appFetch as apiFetch } from "@/lib/client-fetch";
 
 export const avatarColors = ["indigo", "violet", "rose", "amber", "emerald", "cyan", "slate"] as const;
@@ -119,10 +120,7 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
     const timer = window.setTimeout(() => void load().catch((error) => toast.error(error instanceof Error ? error.message : "Не удалось загрузить сообщения")), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  useEffect(() => {
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load().catch(() => undefined); }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+  useVisiblePolling(async () => { await load().catch(() => undefined); });
   useEffect(() => {
     if (!selectedId) return;
     void apiFetch("/api/messages", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ peerId: selectedId }) }).then(() => load()).catch(() => undefined);

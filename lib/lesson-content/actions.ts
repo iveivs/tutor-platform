@@ -68,6 +68,12 @@ export async function executeLessonContentAction({
             response_updated_by_member_id = EXCLUDED.response_updated_by_member_id, response_updated_at = now(), updated_at = now()`,
         [randomUUID(), auth.workspaceId, lesson.lessonId, value, auth.memberId]);
       }
+      if (value && body.field === "assignment") {
+        await db.query(`INSERT INTO notifications
+          (id, member_id, student_id, lesson_id, type, title, body)
+          VALUES ($1, $2, $2, $3, 'homework_updated', 'Новое домашнее задание', 'Преподаватель добавил или обновил домашнее задание к уроку.')`,
+        [randomUUID(), lesson.studentId, lesson.lessonId]);
+      }
       return Response.json({ ok: true });
     }
     if (body.action === "deleteNote") {
@@ -96,6 +102,12 @@ export async function executeLessonContentAction({
           if (!exists.rowCount) return Response.json({ error: "Материал не найден" }, { status: 404 });
         }
         await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [body.resourceId, auth.workspaceId]);
+        if (result.rowCount) {
+          await getPostgresPool().query(`INSERT INTO notifications
+            (id, member_id, student_id, lesson_id, type, title, body)
+            VALUES ($1, $2, $2, $3, 'lesson_material_added', 'Добавлен материал к уроку', 'Преподаватель поделился новым материалом.')`,
+          [randomUUID(), lesson.studentId, lesson.lessonId]);
+        }
       } else {
         await getPostgresPool().query(`DELETE FROM lesson_resource_links
           WHERE workspace_id = $1 AND lesson_id = $2 AND resource_id = $3`, [auth.workspaceId, lesson.lessonId, body.resourceId]);

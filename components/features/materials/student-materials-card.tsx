@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- protected thumbnails require the signed-in user's session cookie. */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, Eye, FileText, Images } from "lucide-react";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
 import { ShowMoreButton } from "@/components/common/show-more-button";
@@ -11,6 +11,7 @@ import { formatBytes } from "@/components/features/materials/format";
 import { MaterialPreviewDialog, type MaterialPreviewItem } from "@/components/features/materials/material-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useVisiblePolling } from "@/hooks/use-visible-polling";
 
 const EMPTY_DATA: StudentMaterialsData = { documents: [], photos: [] };
 
@@ -21,12 +22,18 @@ export function StudentMaterialsCard() {
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
   const [photosExpanded, setPhotosExpanded] = useState(false);
   const [preview, setPreview] = useState<MaterialPreviewItem | null>(null);
+  const load = useCallback(async () => {
+    const result = await readStudentMaterials();
+    setData(result);
+    setError("");
+  }, []);
 
   useEffect(() => {
     let active = true;
     void readStudentMaterials().then((result) => { if (active) setData(result); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Не удалось загрузить материалы"); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
+  useVisiblePolling(async () => { await load().catch(() => undefined); }, !loading);
 
   const visibleDocuments = documentsExpanded ? data.documents : data.documents.slice(0, 4);
   const visiblePhotos = photosExpanded ? data.photos : data.photos.slice(0, 6);

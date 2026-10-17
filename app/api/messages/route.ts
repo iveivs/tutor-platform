@@ -90,6 +90,14 @@ export async function POST(request: Request) {
     const message = await getPostgresPool().query(`INSERT INTO direct_messages
       (id, workspace_id, sender_member_id, recipient_member_id, body) VALUES ($1, $2, $3, $4, $5)
       RETURNING id, created_at`, [randomUUID(), auth.workspaceId, auth.memberId, parsed.data.recipientId, parsed.data.body]);
+    await getPostgresPool().query(`INSERT INTO notifications
+      (id, member_id, student_id, type, title, body)
+      VALUES ($1, $2, $3, 'direct_message', 'Новое сообщение', $4)`, [
+      randomUUID(),
+      parsed.data.recipientId,
+      auth.role === "student" ? auth.memberId : null,
+      auth.role === "student" ? "Ученик отправил вам сообщение." : "Преподаватель отправил вам сообщение.",
+    ]);
     return Response.json({ ok: true, id: message.rows[0].id, createdAt: new Date(message.rows[0].created_at).getTime() });
   } catch (error) {
     console.error("Failed to send direct message", error);
