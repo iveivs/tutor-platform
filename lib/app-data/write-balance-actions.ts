@@ -1,12 +1,14 @@
-import { MOSCOW_OFFSET, invalid } from "@/lib/app-data/route-utils";
+import { MOSCOW_OFFSET, invalid, toMoscowDate } from "@/lib/app-data/route-utils";
 
 import type { WriteActionContext } from "@/lib/app-data/write-action-types";
 
 export async function executeBalanceAction({ db, body, auth, id }: WriteActionContext): Promise<Response | void> {
   if (body.action === "addPayment") {
     if (!body.studentId || !Number.isInteger(body.count) || body.count <= 0 || body.count > 100 || (body.paymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate))) return invalid();
-    const occurredAt = body.paymentDate ? new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime() : Date.now();
-    if (!Number.isFinite(occurredAt) || occurredAt > Date.now()) return Response.json({ error: "Дата оплаты не может быть в будущем" }, { status: 400 });
+    const currentDate = toMoscowDate(new Date());
+    if (body.paymentDate && body.paymentDate > currentDate) return Response.json({ error: "Дата оплаты не может быть в будущем" }, { status: 400 });
+    const occurredAt = !body.paymentDate || body.paymentDate === currentDate ? Date.now() : new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime();
+    if (!Number.isFinite(occurredAt)) return invalid();
     const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first();
     if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
     await db.batch([
