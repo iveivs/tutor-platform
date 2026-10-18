@@ -12,6 +12,7 @@ import { BrandIcon } from "@/components/brand-icon";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LegalLinks } from "@/components/legal-links";
+import { PasswordInput } from "@/components/common/password-input";
 
 type AppUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type PlatformAdminUser = { name: string; email: string; role: "platform_admin"; isPlatformAdmin?: true };
@@ -114,7 +115,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
           <>
             <form className="space-y-5" onSubmit={submit}>
               <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="h-12 rounded-xl" /></div>
-              <div className="space-y-2"><Label htmlFor="password">Пароль</Label><Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required className="h-12 rounded-xl" /></div>
+              <div className="space-y-2"><Label htmlFor="password">Пароль</Label><PasswordInput id="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required className="h-12 rounded-xl" /></div>
               {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
               <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-indigo-600 text-base"><LogIn />{pending ? "Входим…" : "Войти"}</Button>
             </form>

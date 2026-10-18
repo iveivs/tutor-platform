@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  return isLegalDocumentSlug(slug) ? { title: `${legalDocuments[slug].title} — Тьюттори` } : {};
+  return isLegalDocumentSlug(slug) ? { title: `${legalDocuments[slug].title} — Тьюттори`, alternates: { canonical: `/legal/${slug}` } } : {};
 }
 
 export default async function LegalPage({ params }: { params: Promise<{ slug: string }> }) {

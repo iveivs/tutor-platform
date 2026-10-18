@@ -8,9 +8,10 @@ type TutorAppActionsOptions = {
   reload: () => Promise<void>;
   setProfile: Dispatch<SetStateAction<TutorProfile>>;
   setTeacherName: Dispatch<SetStateAction<string>>;
+  setStudents: Dispatch<SetStateAction<Student[]>>;
 };
 
-export function useTutorAppActions({ reload, setProfile, setTeacherName }: TutorAppActionsOptions) {
+export function useTutorAppActions({ reload, setProfile, setTeacherName, setStudents }: TutorAppActionsOptions) {
   const addLesson = async (lesson: LessonDraft) => {
     try {
       await saveAppData({ action: "createLesson", studentId: lesson.studentId, trialGuestName: lesson.trialGuestName, trialGuestEmail: lesson.trialGuestEmail, trialGuestPhone: lesson.trialGuestPhone, trialGuestNote: lesson.trialGuestNote, date: lesson.date, time: lesson.time, repeat: lesson.repeat, lessonCount: lesson.lessonCount, lessonType: lesson.lessonType });
@@ -71,7 +72,12 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName }: Tutor
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось добавить оплату"); return false; }
   };
   const adjustBalance = async (studentId: string, units: number, note: string) => {
-    try { await saveAppData({ action: "adjustBalance", studentId, units, note }); await reload(); toast.success("Баланс скорректирован"); return true; }
+    try {
+      await saveAppData({ action: "adjustBalance", studentId, units, note });
+      setStudents((current) => current.map((student) => student.id === studentId ? { ...student, balance: student.balance + units } : student));
+      await reload().catch(() => undefined);
+      toast.success("Баланс скорректирован"); return true;
+    }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось скорректировать баланс"); return false; }
   };
   const reversePayment = async (paymentId: string) => {

@@ -7,7 +7,7 @@ import type { TelegramStatus } from "@/components/features/app/types";
 import { Button } from "@/components/ui/button";
 import { appFetch } from "@/lib/client-fetch";
 
-export function TelegramNotificationsCard({ compact = false }: { compact?: boolean }) {
+export function TelegramNotificationsCard({ compact = false, embedded = false }: { compact?: boolean; embedded?: boolean }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [pending, setPending] = useState(false);
   const load = useCallback(async () => {
@@ -54,9 +54,9 @@ export function TelegramNotificationsCard({ compact = false }: { compact?: boole
     }
   };
 
-  return <section className={`card min-w-0 overflow-hidden p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>
+  const content = <>
     <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
-      <h2 className="text-xl font-bold">Уведомления в Telegram</h2>
+      <h2 className="text-xl font-bold">{embedded ? "Настройка Telegram" : "Уведомления в Telegram"}</h2>
       <p className="mt-1 text-sm text-slate-500">Подключите свой Telegram к общему боту Тьюттори. Бот отправляет только напоминания за 24 часа до урока, изменения расписания и запросы ученика.</p>
       {!status && <p className="mt-4 text-sm text-slate-500">Проверяем подключение…</p>}
       {status && !status.configured && <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
@@ -69,5 +69,6 @@ export function TelegramNotificationsCard({ compact = false }: { compact?: boole
         <div className="mt-4 grid min-w-0 gap-2"><Button type="button" className="h-auto min-h-10 w-full min-w-0 whitespace-normal bg-sky-600 text-center hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send className="shrink-0" /><span>{pending ? "Создаю ссылку…" : "Подключить Telegram"}</span></Button><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal text-center" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>
       </div>}
     </div></div>
-  </section>;
+  </>;
+  return embedded ? <div className="min-w-0">{content}</div> : <section className={`card min-w-0 overflow-hidden p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>{content}</section>;
 }

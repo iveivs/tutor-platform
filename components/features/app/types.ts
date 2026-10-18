@@ -1,7 +1,7 @@
 export type View = "today" | "calendar" | "students" | "history" | "requests" | "notifications" | "student" | "materials" | "settings";
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 export type TutorProfile = { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string };
-export type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean };
+export type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean; hasFile?: boolean; hasNote?: boolean };
 export type LessonDraft = { date: string; time: string; studentId?: string; repeat: "once" | "weekly"; lessonCount: 1 | 2; lessonType: "regular" | "trial"; trialGuestName?: string; trialGuestEmail?: string; trialGuestPhone?: string; trialGuestNote?: string };
 export type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
 export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };

@@ -20,6 +20,7 @@ import type {
 import { readAppData } from "@/lib/app-data-client";
 import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
+import { today } from "@/lib/date-time";
 
 type TutorAppDataOptions = {
   role: CurrentUser["role"];
@@ -53,6 +54,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
   const syncInFlightRef = useRef(false);
   const requestIdsRef = useRef(new Set<string>());
   const notificationIdsRef = useRef(new Set<string>());
+  const currentDayRef = useRef(today());
 
   const applyData = useCallback((data: AppData) => {
     if (data.lessons) setLessons(data.lessons);
@@ -138,6 +140,12 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     if (syncInFlightRef.current || !navigator.onLine) return;
     syncInFlightRef.current = true;
     try {
+      const nextDay = today();
+      if (nextDay !== currentDayRef.current) {
+        currentDayRef.current = nextDay;
+        await reload();
+        return;
+      }
       const data = await readAppData(showPastLessons || role === "student", syncCursorRef.current);
       const newRequest = data.requests?.find((request) => !requestIdsRef.current.has(request.id));
       const newNotification = data.notifications?.find((notification) => !notificationIdsRef.current.has(notification.id) && !notification.read);
@@ -149,7 +157,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     } finally {
       syncInFlightRef.current = false;
     }
-  }, [applyData, role, showPastLessons]);
+  }, [applyData, reload, role, showPastLessons]);
 
   useEffect(() => {
     if (loading) return;
@@ -177,7 +185,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     };
   }, [loading, syncChanges]);
 
-  const actions = useTutorAppActions({ reload, setProfile, setTeacherName });
+  const actions = useTutorAppActions({ reload, setProfile, setTeacherName, setStudents });
 
   return {
     lessons,

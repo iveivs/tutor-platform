@@ -74,6 +74,9 @@ export async function handleGetAppData(request: Request) {
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name, m.is_trial_contact,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
+        (EXISTS(SELECT 1 FROM lesson_resource_links link WHERE link.lesson_id = l.id)
+          OR EXISTS(SELECT 1 FROM lesson_attachments attachment WHERE attachment.lesson_id = l.id AND attachment.status = 'active')) AS has_file,
+        EXISTS(SELECT 1 FROM lesson_notes note WHERE note.lesson_id = l.id) AS has_note,
         (SELECT r.type FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
           WHERE r.status = 'pending' AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id))
           ORDER BY r.created_at LIMIT 1) AS request_type
@@ -165,8 +168,20 @@ export async function handleGetAppData(request: Request) {
         avatarUrl: row.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(String(row.id))}&v=${Number(row.avatar_updated_at ?? 0)}` : undefined,
       };
     });
+    const rawLessonRows = lessonRows.results as Array<Record<string, unknown>>;
+    const outstandingPastLessons = new Set<string>();
+    const remainingDebt = new Map<string, number>();
+    for (const row of [...rawLessonRows].reverse()) {
+      if (row.lesson_status !== "completed" || row.lesson_type === "trial") continue;
+      const studentId = String(row.student_id);
+      const debt = remainingDebt.get(studentId) ?? Math.max(0, -Number(row.balance));
+      if (debt > 0) {
+        outstandingPastLessons.add(String(row.id));
+        remainingDebt.set(studentId, debt - 1);
+      }
+    }
     const remainingByStudent = new Map<string, number>();
-    const lessonParts: LessonPart[] = (lessonRows.results as Array<Record<string, unknown>>).map((row) => {
+    const lessonParts: LessonPart[] = rawLessonRows.map((row) => {
       const studentId = String(row.student_id);
       const balance = Number(row.balance);
       const remaining = remainingByStudent.get(studentId) ?? Math.max(0, balance);
@@ -175,10 +190,11 @@ export async function handleGetAppData(request: Request) {
       const trial = row.lesson_type === "trial";
       const covered = trial || remaining > 0;
       if (!past && !trial && requestType !== "cancel") remainingByStudent.set(studentId, Math.max(0, remaining - 1));
-      const status: LessonPart["status"] = trial ? "trial" : past ? "paid" : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
-      const label = trial ? (past ? "Пробное · проведено" : "Пробное · бесплатно") : past ? "Проведён" : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
+      const pastUnpaid = past && outstandingPastLessons.has(String(row.id));
+      const status: LessonPart["status"] = trial ? "trial" : past ? (pastUnpaid ? "debt" : "paid") : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
+      const label = trial ? (past ? "Пробное · проведено" : "Пробное · бесплатно") : past ? (pastUnpaid ? "Проведён · не оплачен" : "Проведён · оплачен") : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", trialContact: Boolean(row.is_trial_contact), past, startsAt: Number(row.starts_at), units: 1 };
+      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", trialContact: Boolean(row.is_trial_contact), past, startsAt: Number(row.starts_at), units: 1, hasFile: Boolean(row.has_file), hasNote: Boolean(row.has_note) };
     });
     const lessons = groupLessonParts(lessonParts);
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {

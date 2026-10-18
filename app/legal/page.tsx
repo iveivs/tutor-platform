@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandIcon } from "@/components/brand-icon";
 import { legalDocuments } from "@/lib/legal-documents";
@@ -11,3 +12,4 @@ export default function LegalIndexPage() {
     </section>
   </main>;
 }
+export const metadata: Metadata = { title: "Юридические документы — Тьюттори", description: "Юридические документы сервиса Тьюттори.", alternates: { canonical: "/legal" } };

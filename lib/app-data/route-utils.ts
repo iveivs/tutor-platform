@@ -64,7 +64,7 @@ export function lessonRange(date: string, time: string, durationMinutes = 60) {
 }
 export type LessonPart = {
   id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string;
-  status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType: "regular" | "trial"; past: boolean; startsAt: number; units: number;
+  status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType: "regular" | "trial"; past: boolean; startsAt: number; units: number; hasFile?: boolean; hasNote?: boolean;
 };
 export function groupLessonParts(parts: LessonPart[]) {
   const grouped = new Map<string, LessonPart[]>();
@@ -83,13 +83,13 @@ export function groupLessonParts(parts: LessonPart[]) {
       : members.some((member) => member.status === "debt") ? "debt"
         : members.some((member) => member.status === "low") ? "low"
           : members.some((member) => member.status === "trial") ? "trial" : "paid";
-    const label = units === 1 ? first.label : past ? "Проведён · списано 2"
+    const label = units === 1 ? first.label : past ? (status === "debt" ? "Проведён · не оплачен" : "Проведён · оплачен")
       : status === "request" ? "Двойной · ожидает ответа"
         : status === "debt" ? `Двойной · ${first.label}`
           : members.every((member) => member.status === "paid") ? "Двойной · оплачен" : "Двойной · частично оплачен";
     const { startsAt: _startsAt, ...lesson } = first;
     void _startsAt;
-    return { ...lesson, id: actionable.id, end: last.end, status, label, past, units };
+    return { ...lesson, id: actionable.id, end: last.end, status, label, past, units, hasFile: members.some((member) => member.hasFile), hasNote: members.some((member) => member.hasNote) };
   }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
 export type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; lesson_type: "regular" | "trial"; starts_at: number; ends_at: number };

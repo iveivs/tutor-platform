@@ -5,8 +5,29 @@ import { CookieNotice } from "@/components/cookie-notice";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tyuttori.ru"),
   title: "Тьюттори — платформа репетитора",
   description: "Расписание, ученики и оплаты частного преподавателя в Тьюттори.",
+  applicationName: "Тьюттори",
+  keywords: ["репетитор", "расписание занятий", "ученики", "учёт уроков", "Тьюттори"],
+  creator: "Тьюттори",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "/",
+    siteName: "Тьюттори",
+    title: "Тьюттори — платформа репетитора",
+    description: "Расписание, ученики, материалы и оплаты в одном удобном кабинете.",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Тьюттори — платформа репетитора" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Тьюттори — платформа репетитора",
+    description: "Расписание, ученики, материалы и оплаты в одном удобном кабинете.",
+    images: ["/opengraph-image"],
+  },
+  robots: { index: true, follow: true },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [

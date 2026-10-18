@@ -39,7 +39,7 @@ export function AvatarColorPicker({ value, ownValue, onChange, allowReset = fals
   </div>;
 }
 
-export function ProfilePersonalizationCard({ name, initials, avatarColor, avatarUrl, onChanged }: { name: string; initials: string; avatarColor: string; avatarUrl?: string; onChanged: () => Promise<void> | void }) {
+export function ProfilePersonalizationCard({ name, initials, avatarColor, avatarUrl, onChanged, embedded = false }: { name: string; initials: string; avatarColor: string; avatarUrl?: string; onChanged: () => Promise<void> | void; embedded?: boolean }) {
   const [pending, setPending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const changeColor = async (color: AvatarColor | null) => {
@@ -76,13 +76,14 @@ export function ProfilePersonalizationCard({ name, initials, avatarColor, avatar
     } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось удалить фотографию профиля"); }
     finally { setPending(false); }
   };
-  return <AppCard>
-    <div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-16 text-xl" /><div><AppCardTitle>Персонализация</AppCardTitle><AppCardDescription>Фото профиля и цвет кружка с инициалами</AppCardDescription></div></div>
+  const content = <>
+    <div className="flex items-center gap-4"><MemberAvatar name={name} initials={initials} color={avatarColor} url={avatarUrl} className="size-16 text-xl" /><div><AppCardTitle>{embedded ? "Ваш профиль" : "Персонализация"}</AppCardTitle><AppCardDescription>Фото профиля и цвет кружка с инициалами</AppCardDescription></div></div>
     <div className="mt-5"><p className="mb-2 text-sm font-semibold">Цвет аватара</p><AvatarColorPicker value={avatarColor} onChange={changeColor} disabled={pending} /></div>
     <div className="mt-5 flex min-w-0 flex-col gap-2"><Button type="button" variant="outline" size="control" className="h-auto min-h-[var(--control-height)] w-full min-w-0 whitespace-normal py-2 text-center leading-5" disabled={pending} onClick={() => fileRef.current?.click()}><Upload /><span className="min-w-0">Загрузить фотографию</span></Button>{avatarUrl && <Button type="button" variant="ghost" size="control" className="h-auto min-h-[var(--control-height)] w-full min-w-0 whitespace-normal py-2 text-center leading-5" disabled={pending} onClick={() => void remove()}><Trash2 /><span className="min-w-0">Удалить фотографию</span></Button>}</div>
     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => void upload(event.target.files?.[0])} />
     <p className="mt-3 text-xs leading-5 text-slate-500">JPEG, PNG или WebP до 2 МБ. Перед загрузкой применяются правила размещения контента.</p>
-  </AppCard>;
+  </>;
+  return embedded ? <div>{content}</div> : <AppCard>{content}</AppCard>;
 }
 
 export function StudentAvatarPreferenceCard({ studentId, name, initials, avatarColor, ownAvatarColor, avatarUrl, onChanged }: { studentId: string; name: string; initials: string; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; onChanged: () => Promise<void> | void }) {

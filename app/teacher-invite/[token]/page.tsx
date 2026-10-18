@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { TeacherInviteAccept } from "@/components/teacher-invite-accept";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -5,3 +6,4 @@ export default async function TeacherInvitePage({ params }: { params: Promise<{ 
   const { token } = await params;
   return <><div className="fixed right-4 top-4 z-50"><ThemeToggle compact /></div><TeacherInviteAccept token={token} /></>;
 }
+export const metadata: Metadata = { title: "Приглашение преподавателя — Тьюттори", robots: { index: false, follow: false } };
