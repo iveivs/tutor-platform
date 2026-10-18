@@ -313,7 +313,7 @@ export const teacherResources = pgTable("teacher_resources", {
   deletedAt: instant("deleted_at"),
   ...timestamps(),
 }, (table) => [
-  check("teacher_resources_content_type_check", sql`${table.contentType} in ('application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')`),
+  check("teacher_resources_content_type_check", sql`${table.contentType} in ('application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/webp')`),
   check("teacher_resources_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 26214400`),
   check("teacher_resources_status_check", sql`${table.status} in ('active', 'deleting', 'deleted')`),
   check("teacher_resources_title_length_check", sql`char_length(${table.title}) between 1 and 120`),

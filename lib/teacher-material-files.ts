@@ -5,7 +5,8 @@ export const MAX_WORKSPACE_MATERIAL_BYTES = 5 * 1024 * 1024 * 1024;
 export type TeacherMaterialContentType =
   | "application/pdf"
   | "application/msword"
-  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "image/webp";
 
 const contentTypesByExtension: Record<string, TeacherMaterialContentType> = {
   pdf: "application/pdf",
@@ -19,8 +20,12 @@ export function sanitizeMaterialFilename(value: string) {
 }
 
 export function defaultMaterialTitle(filename: string) {
-  const withoutExtension = filename.replace(/\.(pdf|docx?)$/i, "").trim();
+  const withoutExtension = filename.replace(/\.(pdf|docx?|jpe?g|png|webp)$/i, "").trim();
   return (withoutExtension || "Материал урока").slice(0, 120);
+}
+
+export function isTeacherMaterialImageFilename(filename: string) {
+  return /\.(jpe?g|png|webp)$/i.test(filename);
 }
 
 export function detectTeacherMaterial(filename: string, bytes: Uint8Array): { contentType: TeacherMaterialContentType; extension: "pdf" | "doc" | "docx" } | null {

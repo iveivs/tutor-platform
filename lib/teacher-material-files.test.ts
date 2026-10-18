@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultMaterialTitle, detectTeacherMaterial, materialContentDisposition, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
+import { defaultMaterialTitle, detectTeacherMaterial, isTeacherMaterialImageFilename, materialContentDisposition, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
 
 describe("teacher material files", () => {
   it("recognizes PDF by extension and signature", () => {
@@ -18,5 +18,11 @@ describe("teacher material files", () => {
     expect(defaultMaterialTitle("План урока.pdf")).toBe("План урока");
     expect(materialDownloadDisposition("План урока.pdf")).toContain("filename*=UTF-8''");
     expect(materialContentDisposition("План урока.pdf", "inline")).toMatch(/^inline;/);
+  });
+
+  it("recognizes supported image filenames and removes their extension from the default title", () => {
+    expect(isTeacherMaterialImageFilename("photo.JPEG")).toBe(true);
+    expect(isTeacherMaterialImageFilename("photo.gif")).toBe(false);
+    expect(defaultMaterialTitle("Упражнение.png")).toBe("Упражнение");
   });
 });

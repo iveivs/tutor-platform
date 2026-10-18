@@ -16,6 +16,7 @@ import {
   MAX_WORKSPACE_MATERIAL_BYTES,
   sanitizeMaterialFilename,
 } from "@/lib/teacher-material-files";
+import { optimizeTeacherMaterialImage } from "@/lib/teacher-material-image";
 import { parseFormMetadata, readUsage, requireTeacher } from "@/lib/teacher-material-library/shared";
 
 export async function uploadTeacherMaterial(request: Request) {
@@ -29,17 +30,20 @@ export async function uploadTeacherMaterial(request: Request) {
     if (limited) return limited;
     if (!await hasCurrentContentRulesAcceptance(auth)) return Response.json({ error: "Сначала примите правила размещения контента" }, { status: 409 });
     const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength && contentLength > MAX_TEACHER_MATERIAL_BYTES + 256 * 1024) return Response.json({ error: "Документ должен быть не больше 25 МБ" }, { status: 413 });
+    if (contentLength && contentLength > MAX_TEACHER_MATERIAL_BYTES + 256 * 1024) return Response.json({ error: "Файл должен быть не больше 25 МБ" }, { status: 413 });
     const form = await request.formData();
     const file = form.get("file");
-    if (!(file instanceof File)) return Response.json({ error: "Проверьте документ и название" }, { status: 400 });
-    if (file.size < 1 || file.size > MAX_TEACHER_MATERIAL_BYTES) return Response.json({ error: "Документ должен быть не больше 25 МБ" }, { status: 413 });
-    const filename = sanitizeMaterialFilename(file.name);
-    const metadata = parseFormMetadata(form, filename);
+    if (!(file instanceof File)) return Response.json({ error: "Проверьте файл и название" }, { status: 400 });
+    if (file.size < 1 || file.size > MAX_TEACHER_MATERIAL_BYTES) return Response.json({ error: "Файл должен быть не больше 25 МБ" }, { status: 413 });
+    const sourceFilename = sanitizeMaterialFilename(file.name);
+    const metadata = parseFormMetadata(form, sourceFilename);
     if (!metadata) return Response.json({ error: "Проверьте название, папку и теги" }, { status: 400 });
-    const body = new Uint8Array(await file.arrayBuffer());
-    const detected = detectTeacherMaterial(filename, body);
-    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC или DOCX" }, { status: 415 });
+    const sourceBody = new Uint8Array(await file.arrayBuffer());
+    const image = await optimizeTeacherMaterialImage(sourceFilename, sourceBody);
+    const detected = image ?? detectTeacherMaterial(sourceFilename, sourceBody);
+    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC, DOCX, JPEG, PNG или WebP" }, { status: 415 });
+    const body = image?.body ?? sourceBody;
+    const filename = image?.filename ?? sourceFilename;
     const contentSha256 = createHash("sha256").update(body).digest("hex");
     const resourceId = randomUUID();
     const objectKey = teacherMaterialObjectKey(auth.workspaceId, resourceId, detected.extension);
@@ -51,7 +55,7 @@ export async function uploadTeacherMaterial(request: Request) {
         readUsage(db, auth.workspaceId),
         db.query("SELECT id FROM teacher_resources WHERE workspace_id = $1 AND content_sha256 = $2 AND status = 'active' LIMIT 1", [auth.workspaceId, contentSha256]),
       ]);
-      if (duplicate.rowCount) { await db.query("ROLLBACK"); return Response.json({ error: "Такой документ уже есть в библиотеке" }, { status: 409 }); }
+      if (duplicate.rowCount) { await db.query("ROLLBACK"); return Response.json({ error: "Такой файл уже есть в библиотеке" }, { status: 409 }); }
       if (Number(limits.rows[0]?.uploads_this_month ?? 0) >= MAX_TEACHER_MATERIAL_UPLOADS_PER_MONTH) { await db.query("ROLLBACK"); return Response.json({ error: "Достигнут лимит: 50 загрузок за календарный месяц" }, { status: 429 }); }
       if (Number(limits.rows[0]?.storage_bytes ?? 0) + body.byteLength > MAX_WORKSPACE_MATERIAL_BYTES) { await db.query("ROLLBACK"); return Response.json({ error: "В библиотеке достигнут лимит хранения 5 ГБ" }, { status: 409 }); }
       await putTeacherMaterial(objectKey, body, detected.contentType, contentSha256);
@@ -74,6 +78,6 @@ export async function uploadTeacherMaterial(request: Request) {
   } catch (error) {
     if (uploadedObjectKey) await deleteTeacherMaterial(uploadedObjectKey).catch(() => undefined);
     console.error("Failed to upload teacher material", error);
-    return Response.json({ error: "Не удалось загрузить документ" }, { status: 500 });
+    return Response.json({ error: "Не удалось загрузить материал" }, { status: 500 });
   }
 }

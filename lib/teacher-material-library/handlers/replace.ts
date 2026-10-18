@@ -16,6 +16,7 @@ import {
   MAX_WORKSPACE_MATERIAL_BYTES,
   sanitizeMaterialFilename,
 } from "@/lib/teacher-material-files";
+import { optimizeTeacherMaterialImage } from "@/lib/teacher-material-image";
 import { readUsage, requireTeacher, resourceIdSchema } from "@/lib/teacher-material-library/shared";
 
 export async function replaceTeacherMaterial(request: Request) {
@@ -31,14 +32,17 @@ export async function replaceTeacherMaterial(request: Request) {
     const parsedId = resourceIdSchema.safeParse(new URL(request.url).searchParams.get("id"));
     if (!parsedId.success) return Response.json({ error: "Материал не выбран" }, { status: 400 });
     const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength && contentLength > MAX_TEACHER_MATERIAL_BYTES + 128 * 1024) return Response.json({ error: "Документ должен быть не больше 25 МБ" }, { status: 413 });
+    if (contentLength && contentLength > MAX_TEACHER_MATERIAL_BYTES + 128 * 1024) return Response.json({ error: "Файл должен быть не больше 25 МБ" }, { status: 413 });
     const form = await request.formData();
     const file = form.get("file");
-    if (!(file instanceof File) || file.size < 1 || file.size > MAX_TEACHER_MATERIAL_BYTES) return Response.json({ error: "Документ должен быть не больше 25 МБ" }, { status: 413 });
-    const filename = sanitizeMaterialFilename(file.name);
-    const body = new Uint8Array(await file.arrayBuffer());
-    const detected = detectTeacherMaterial(filename, body);
-    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC или DOCX" }, { status: 415 });
+    if (!(file instanceof File) || file.size < 1 || file.size > MAX_TEACHER_MATERIAL_BYTES) return Response.json({ error: "Файл должен быть не больше 25 МБ" }, { status: 413 });
+    const sourceFilename = sanitizeMaterialFilename(file.name);
+    const sourceBody = new Uint8Array(await file.arrayBuffer());
+    const image = await optimizeTeacherMaterialImage(sourceFilename, sourceBody);
+    const detected = image ?? detectTeacherMaterial(sourceFilename, sourceBody);
+    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC, DOCX, JPEG, PNG или WebP" }, { status: 415 });
+    const body = image?.body ?? sourceBody;
+    const filename = image?.filename ?? sourceFilename;
     const contentSha256 = createHash("sha256").update(body).digest("hex");
     const objectKey = teacherMaterialObjectKey(auth.workspaceId, randomUUID(), detected.extension);
     const db = await getPostgresPool().connect();
