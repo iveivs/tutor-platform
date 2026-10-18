@@ -94,7 +94,24 @@ export function CalendarView({ preferenceScope, lessons, students, showPastLesso
 
 function MonthGrid({ dates, cursor, currentDay, lessons, onSelect }: { dates: string[]; cursor: string; currentDay: string; lessons: Lesson[]; onSelect: (date: string) => void }) {
   const month = cursor.slice(0, 7);
-  return <><div className="grid grid-cols-7 border-b bg-slate-50">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day, index) => <div key={day} className={`p-3 text-center text-sm font-semibold text-slate-500 ${index > 4 ? "calendar-weekend-header" : ""}`}>{day}</div>)}</div><div className="grid grid-cols-7">{dates.map((date) => { const dayLessons = lessons.filter((lesson) => lesson.date === date); const currentMonth = date.startsWith(month); const weekend = [0, 6].includes(dateAtNoon(date).getUTCDay()); return <button key={date} onClick={() => onSelect(date)} className={`relative min-h-20 border-b border-r p-2 text-left transition hover:bg-indigo-50/50 md:min-h-32 md:p-3 ${date === currentDay ? "bg-indigo-50" : weekend ? "calendar-weekend" : "calendar-weekday"}`}><span className={`grid size-7 place-items-center rounded-full text-sm font-semibold ${date === currentDay ? "bg-indigo-600 text-white" : currentMonth ? weekend ? "calendar-weekend-date" : "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(-2))}</span>{dayLessons.length > 0 && <span className="absolute bottom-2 right-2 grid size-6 place-items-center rounded-full bg-teal-600 text-xs font-bold text-white md:hidden" aria-label={russianPlural(dayLessons.length, "урок", "урока", "уроков")}>{dayLessons.length}</span>}<span className="mt-2 hidden space-y-1 md:block">{dayLessons.slice(0, 2).map((lesson) => <span key={lesson.id} className={`flex items-center justify-between gap-1 overflow-hidden rounded-md px-2 text-xs ${lesson.units === 2 ? "min-h-12 py-2" : "py-1"} ${lessonStatusStyle(lesson)}`}><span className="truncate">{lesson.time} {lesson.name.split(" ")[0]}</span><span className="flex shrink-0 items-center gap-1"><LessonContentBadges lesson={lesson} compact />{lesson.units === 2 && <span className="font-bold">×2</span>}</span></span>)}</span>{dayLessons.length > 2 && <span className="mt-1 hidden text-xs text-slate-500 md:block">ещё {dayLessons.length - 2}</span>}</button>; })}</div></>;
+  return <>
+    <div className="grid grid-cols-7 border-b bg-slate-50">
+      {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day, index) => <div key={day} className={`p-3 text-center text-sm font-semibold text-slate-500 ${index > 4 ? "calendar-weekend-header" : ""}`}>{day}</div>)}
+    </div>
+    <div className="grid grid-cols-7">
+      {dates.map((date) => {
+        const dayLessons = lessons.filter((lesson) => lesson.date === date);
+        const currentMonth = date.startsWith(month);
+        const weekend = [0, 6].includes(dateAtNoon(date).getUTCDay());
+        return <button key={date} type="button" onClick={() => onSelect(date)} className={`relative flex min-h-20 flex-col items-stretch justify-start border-b border-r p-2 text-left transition hover:bg-indigo-50/50 md:min-h-32 md:p-3 ${date === currentDay ? "bg-indigo-50" : weekend ? "calendar-weekend" : "calendar-weekday"}`}>
+          <span className={`grid size-7 shrink-0 self-start place-items-center rounded-full text-sm font-semibold ${date === currentDay ? "bg-indigo-600 text-white" : currentMonth ? weekend ? "calendar-weekend-date" : "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(-2))}</span>
+          {dayLessons.length > 0 && <span className="absolute bottom-2 right-2 grid size-6 place-items-center rounded-full bg-teal-600 text-xs font-bold text-white md:hidden" aria-label={russianPlural(dayLessons.length, "урок", "урока", "уроков")}>{dayLessons.length}</span>}
+          <span className="mt-2 hidden w-full space-y-1 md:block">{dayLessons.slice(0, 2).map((lesson) => <span key={lesson.id} className={`flex items-center justify-between gap-1 overflow-hidden rounded-md px-2 text-xs ${lesson.units === 2 ? "min-h-12 py-2" : "py-1"} ${lessonStatusStyle(lesson)}`}><span className="truncate">{lesson.time} {lesson.name.split(" ")[0]}</span><span className="flex shrink-0 items-center gap-1"><LessonContentBadges lesson={lesson} compact />{lesson.units === 2 && <span className="font-bold">×2</span>}</span></span>)}</span>
+          {dayLessons.length > 2 && <span className="mt-1 hidden text-xs text-slate-500 md:block">ещё {dayLessons.length - 2}</span>}
+        </button>;
+      })}
+    </div>
+  </>;
 }
 
 function ScheduleColumns({ dates, currentDay, lessons, onSelectDate, onSelectLesson }: { dates: string[]; currentDay: string; lessons: Lesson[]; onSelectDate: (date: string) => void; onSelectLesson: (lesson: Lesson) => void }) {

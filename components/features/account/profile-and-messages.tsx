@@ -154,7 +154,7 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
 
 export function MessagesDialog({ initialPeerId, label = "Сообщения" }: { initialPeerId?: string; label?: string }) {
   const [open, setOpen] = useState(false);
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button type="button" variant="outline"><MessageCircle />{label}</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader>{open && <MessagesContent initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader>{open && <MessagesContent initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
 }
 
 export function MessagesCard() {
