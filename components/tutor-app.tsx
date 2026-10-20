@@ -3,7 +3,6 @@ import { useState } from "react";
 import { MobileHeader, MobileNav, Sidebar } from "@/components/common/app-navigation";
 import { useScheduleModelContext } from "@/components/features/app/use-schedule-model-context";
 import { useTutorAppData } from "@/components/features/app/use-tutor-app-data";
-import { HistoryView } from "@/components/features/history/history-view";
 import { CalendarView, TodayView } from "@/components/features/schedule/schedule-views";
 import { LessonMaterialsDialog } from "@/components/features/materials/lesson-materials-dialog";
 import { TeacherMaterialsView } from "@/components/features/materials/teacher-materials-view";
@@ -50,8 +49,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={lessons} students={students.filter((student) => !student.archived)} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
-        {view === "history" && <HistoryView events={historyEvents} students={students} onReversePayment={reversePayment} />}
-        {view === "requests" && <RequestsView requests={requests} onResolved={reload} />}
+        {view === "requests" && <RequestsView requests={requests} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReversePayment={reversePayment} />}
         {view === "notifications" && <NotificationsView notifications={notifications} onRead={markNotificationsRead} onOpenRequests={() => setView("requests")} />}
         {view === "materials" && <TeacherMaterialsView />}
         {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CalendarDays, FolderOpen, History as HistoryIcon, Home, LogOut, Settings, UsersRound } from "lucide-react";
+import { Bell, CalendarDays, FolderOpen, Home, LogOut, Settings, UsersRound } from "lucide-react";
 import { BrandIcon } from "@/components/brand-icon";
 import type { View } from "@/components/features/app/types";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -10,7 +10,6 @@ export function Sidebar({ view, setView, name, professionalTitle, onLogout, requ
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
     { id: "students" as View, label: "Ученики", icon: UsersRound },
-    { id: "history" as View, label: "История", icon: HistoryIcon },
     { id: "requests" as View, label: "Запросы", icon: Bell, count: requestCount },
     { id: "notifications" as View, label: "Уведомления", icon: Bell, count: notificationCount },
     { id: "materials" as View, label: "Материалы", icon: FolderOpen },
@@ -28,8 +27,8 @@ export function MobileHeader({ name, professionalTitle, notificationCount, onNot
 }
 
 export function MobileNav({ view, setView }: { view: View; setView: (view: View) => void }) {
-  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "history" as View, label: "История", icon: HistoryIcon }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "materials" as View, label: "Материалы", icon: FolderOpen }, { id: "settings" as View, label: "Настройки", icon: Settings }];
-  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-5 sm:size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
+  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "materials" as View, label: "Материалы", icon: FolderOpen }, { id: "settings" as View, label: "Настройки", icon: Settings }];
+  return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-5 sm:size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
 }
 
 
