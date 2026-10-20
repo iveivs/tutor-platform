@@ -1,17 +1,16 @@
 "use client";
 
-import { Bell, CalendarDays, FolderOpen, Home, LogOut, Settings, UsersRound } from "lucide-react";
+import { CalendarDays, FolderOpen, Home, Inbox, LogOut, Settings, UsersRound } from "lucide-react";
 import { BrandIcon } from "@/components/brand-icon";
 import type { View } from "@/components/features/app/types";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-export function Sidebar({ view, setView, name, professionalTitle, onLogout, requestCount, notificationCount }: { view: View; setView: (view: View) => void; name: string; professionalTitle: string; onLogout?: () => void; requestCount: number; notificationCount: number }) {
+export function Sidebar({ view, setView, name, professionalTitle, onLogout, activityCount }: { view: View; setView: (view: View) => void; name: string; professionalTitle: string; onLogout?: () => void; activityCount: number }) {
   const items = [
     { id: "today" as View, label: "Сегодня", icon: Home },
     { id: "calendar" as View, label: "Календарь", icon: CalendarDays },
     { id: "students" as View, label: "Ученики", icon: UsersRound },
-    { id: "requests" as View, label: "Запросы", icon: Bell, count: requestCount },
-    { id: "notifications" as View, label: "Уведомления", icon: Bell, count: notificationCount },
+    { id: "activity" as View, label: "События", icon: Inbox, count: activityCount },
     { id: "materials" as View, label: "Материалы", icon: FolderOpen },
     { id: "settings" as View, label: "Настройки", icon: Settings },
   ];
@@ -22,12 +21,12 @@ export function Sidebar({ view, setView, name, professionalTitle, onLogout, requ
   </aside>;
 }
 
-export function MobileHeader({ name, professionalTitle, notificationCount, onNotifications }: { name: string; professionalTitle: string; notificationCount: number; onNotifications: () => void }) {
-  return <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:hidden"><div className="flex min-w-0 items-center gap-2.5"><BrandIcon className="size-9" /><div className="min-w-0">{professionalTitle && <p className="truncate text-[11px] text-slate-500">{professionalTitle}</p>}<p className="truncate font-bold">{name}</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><button onClick={onNotifications} aria-label="Уведомления" className="relative grid size-10 place-items-center rounded-xl border border-slate-200"><Bell className="size-5" />{notificationCount > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-rose-500" />}</button></div></header>;
+export function MobileHeader({ name, professionalTitle, activityCount, onActivity }: { name: string; professionalTitle: string; activityCount: number; onActivity: () => void }) {
+  return <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:hidden"><div className="flex min-w-0 items-center gap-2.5"><BrandIcon className="size-9" /><div className="min-w-0">{professionalTitle && <p className="truncate text-[11px] text-slate-500">{professionalTitle}</p>}<p className="truncate font-bold">{name}</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><button onClick={onActivity} aria-label="События" className="relative grid size-10 place-items-center rounded-xl border border-slate-200"><Inbox className="size-5" />{activityCount > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-rose-500" />}</button></div></header>;
 }
 
 export function MobileNav({ view, setView }: { view: View; setView: (view: View) => void }) {
-  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "requests" as View, label: "Запросы", icon: Bell }, { id: "materials" as View, label: "Материалы", icon: FolderOpen }, { id: "settings" as View, label: "Настройки", icon: Settings }];
+  const items = [{ id: "today" as View, label: "Сегодня", icon: Home }, { id: "calendar" as View, label: "Календарь", icon: CalendarDays }, { id: "students" as View, label: "Ученики", icon: UsersRound }, { id: "activity" as View, label: "События", icon: Inbox }, { id: "materials" as View, label: "Материалы", icon: FolderOpen }, { id: "settings" as View, label: "Настройки", icon: Settings }];
   return <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Мобильная навигация">{items.map(({ id, label, icon: Icon }) => { const active = view === id || id === "students" && view === "student"; return <button key={label} onClick={() => setView(id)} aria-label={label} title={label} className={`flex min-h-14 items-center justify-center rounded-xl transition ${active ? "bg-indigo-50 text-indigo-600" : "text-slate-500 hover:bg-slate-50"}`}><Icon className="size-5 sm:size-6" /><span className="sr-only">{label}</span></button>; })}</nav>;
 }
 
