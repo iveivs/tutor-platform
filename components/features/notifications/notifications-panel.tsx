@@ -44,7 +44,7 @@ export function NotificationsPanel({
             Уведомления
           </h2>
           <p className="mt-1 text-sm text-muted">
-            {unreadIds.length} {russianPlural(unreadIds.length, "непрочитанное", "непрочитанных", "непрочитанных")}
+            {russianPlural(unreadIds.length, "непрочитанное", "непрочитанных", "непрочитанных")}
           </p>
         </div>
         <Button
@@ -73,7 +73,7 @@ export function NotificationsPanel({
               item.lessonUnits !== undefined ? { label: "Изменение баланса", value: `${item.lessonUnits < 0 ? "−" : "+"}${russianPlural(Math.abs(item.lessonUnits), "занятие", "занятия", "занятий")}` } : null,
             ].filter((detail): detail is { label: string; value: string } => Boolean(detail));
 
-            return <article key={item.id} className={`card p-5 md:p-6 ${item.read ? "opacity-70" : "border-indigo-200 bg-indigo-50/40"}`}><div className="flex gap-4"><span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-indigo-600"}`} /><div className="min-w-0 flex-1"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-bold">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.body}</p></div><time className="shrink-0 text-xs text-slate-400">{formatMoment(item.createdAt)}</time></div>{details.length > 0 && <dl className="mt-4 grid gap-x-8 gap-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 sm:grid-cols-2">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{detail.label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-800">{detail.value}</dd></div>)}</dl>}</div></div></article>;
+            return <article key={item.id} className={`card p-5 md:p-6 ${item.read ? "opacity-70" : "border-indigo-200 bg-indigo-50/40 dark:border-indigo-700 dark:bg-indigo-950/40"}`}><div className="flex gap-4"><span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-indigo-600"}`} /><div className="min-w-0 flex-1"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-bold">{item.title}</h3><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.body}</p></div><time className="shrink-0 text-xs text-slate-400">{formatMoment(item.createdAt)}</time></div>{details.length > 0 && <dl className="mt-4 grid gap-x-8 gap-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 sm:grid-cols-2 dark:border-slate-700 dark:bg-slate-900/70">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{detail.label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-800 dark:text-slate-100">{detail.value}</dd></div>)}</dl>}</div></div></article>;
           })}
         </div>
       )}
