@@ -88,8 +88,8 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     try { await saveAppData({ action: "submitStudentRequest", ...body }); await reload(); toast.success("Запрос отправлен преподавателю"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить запрос"); return false; }
   };
-  const markNotificationsRead = async () => {
-    try { await saveAppData({ action: "markNotificationsRead" }); await reload(); }
+  const markNotificationsRead = async (notificationId?: string) => {
+    try { await saveAppData({ action: "markNotificationsRead", ...(notificationId ? { notificationId } : {}) }); await reload(); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось обновить уведомления"); }
   };
   const updateProfile = async (name: string, professionalTitle: string) => {

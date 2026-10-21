@@ -5,13 +5,13 @@ import { getActivityAttentionCount, getActivityNotifications } from "../componen
 const notification = (id: string, type: string, read = false) => ({ id, type, read }) as AppNotification;
 
 describe("activity model", () => {
-  it("removes request notifications that duplicate the actionable request list", () => {
+  it("keeps request notifications available as shortcuts", () => {
     const notifications = [
       notification("request", "new_request"),
       notification("message", "new_message"),
     ];
 
-    expect(getActivityNotifications(notifications).map((item) => item.id)).toEqual(["message"]);
+    expect(getActivityNotifications(notifications).map((item) => item.id)).toEqual(["request", "message"]);
   });
 
   it("counts pending requests and unread non-request notifications once", () => {

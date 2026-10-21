@@ -20,6 +20,8 @@ describe("translateUiText", () => {
     ["1 событие требует внимания", "1 item needs attention"],
     ["3 события требуют внимания", "3 items need attention"],
     ["1 непрочитанное", "1 unread"],
+    ["Открыть сообщение", "Open message"],
+    ["Открыть запрос", "Open request"],
     ["Проверить подключение", "Check connection"],
     ["Баланс: ", "Balance: "],
     ["Баланс: 10 занятий", "Balance: 10 lessons"],

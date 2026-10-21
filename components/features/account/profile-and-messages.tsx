@@ -152,9 +152,17 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
   </div>;
 }
 
-export function MessagesDialog({ initialPeerId, label = "Сообщения" }: { initialPeerId?: string; label?: string }) {
-  const [open, setOpen] = useState(false);
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader>{open && <MessagesContent initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
+export function MessagesDialog({ initialPeerId, label = "Сообщения", open: controlledOpen, onOpenChange, showTrigger = true }: {
+  initialPeerId?: string;
+  label?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const changeOpen = onOpenChange ?? setInternalOpen;
+  return <Dialog open={open} onOpenChange={changeOpen}>{showTrigger && <DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger>}<DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader>{open && <MessagesContent key={initialPeerId} initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
 }
 
 export function MessagesCard() {

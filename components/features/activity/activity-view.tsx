@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { AppShell } from "@/components/common/app-shell";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
+import { MessagesDialog } from "@/components/features/account";
 import type { AppNotification, HistoryEvent, LessonRequest, Student } from "@/components/features/app/types";
 import { HistoryPanel } from "@/components/features/history/history-panel";
 import { NotificationsPanel } from "@/components/features/notifications/notifications-panel";
@@ -27,11 +28,12 @@ export function ActivityView({ requests, notifications, historyEvents, students,
   students: Student[];
   preferenceScope: string;
   onResolved: () => Promise<void>;
-  onReadNotifications: () => Promise<void>;
+  onReadNotifications: (notificationId?: string) => Promise<void>;
   onReversePayment: (id: string) => Promise<boolean>;
 }) {
   const [filter, setFilter] = useState<(typeof filters)[number]>("Все");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [messageStudentId, setMessageStudentId] = useState<string | null>(null);
   const visibleRequests = requests.filter((request) => filter === "Все" || filter === "Отмена" && request.kind === "cancel" || filter === "Перенос" && request.kind === "reschedule" || filter === "Новый урок" && request.kind === "new_lesson");
   const activityNotifications = getActivityNotifications(notifications);
 
@@ -49,6 +51,22 @@ export function ActivityView({ requests, notifications, historyEvents, students,
     }
   };
 
+  const openNotification = (notification: AppNotification) => {
+    if (!notification.read) void onReadNotifications(notification.id);
+    if (notification.type === "direct_message" && notification.studentId) {
+      setMessageStudentId(notification.studentId);
+      return;
+    }
+    if (notification.type === "new_request" && notification.requestId) {
+      setFilter("Все");
+      window.requestAnimationFrame(() => {
+        const requestCard = document.getElementById(`request-${notification.requestId}`);
+        requestCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+        requestCard?.focus({ preventScroll: true });
+      });
+    }
+  };
+
   const attentionCount = getActivityAttentionCount(requests, notifications);
 
   return <AppShell title="События" eyebrow={russianPlural(attentionCount, "событие требует внимания", "события требуют внимания", "событий требуют внимания")}>
@@ -58,13 +76,14 @@ export function ActivityView({ requests, notifications, historyEvents, students,
         <p className="mt-1 text-sm text-slate-500">Запросы учеников, на которые нужно ответить.</p>
       </div>
       <div className="mb-5 flex gap-2 overflow-x-auto pb-1">{filters.map((item) => <Button key={item} type="button" size="control" variant={filter === item ? "default" : "outline"} className="whitespace-nowrap" onClick={() => setFilter(item)}>{item}</Button>)}</div>
-      <div className="grid gap-4">{visibleRequests.map((request, index) => <article key={request.id} className={`card p-5 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-amber-50/40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-amber-700" : "text-indigo-600"}`}>{request.type}</p><h3 className="mt-1 text-xl font-bold">{request.name}</h3><p className="mt-1 text-slate-600">{request.detail}</p><p className="mt-2 text-sm text-slate-500">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "approved")}>{pendingId === request.id ? "Сохраняю…" : "Подтвердить"}</Button><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "declined")} variant="outline">Отклонить</Button></div></div></article>)}{visibleRequests.length === 0 && <RequestsEmpty text={requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"} />}</div>
+      <div className="grid gap-4">{visibleRequests.map((request, index) => <article id={`request-${request.id}`} tabIndex={-1} key={request.id} className={`card p-5 outline-none transition focus-visible:ring-2 focus-visible:ring-indigo-500 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-amber-50/40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-amber-700" : "text-indigo-600"}`}>{request.type}</p><h3 className="mt-1 text-xl font-bold">{request.name}</h3><p className="mt-1 text-slate-600">{request.detail}</p><p className="mt-2 text-sm text-slate-500">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "approved")}>{pendingId === request.id ? "Сохраняю…" : "Подтвердить"}</Button><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "declined")} variant="outline">Отклонить</Button></div></div></article>)}{visibleRequests.length === 0 && <RequestsEmpty text={requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"} />}</div>
     </section>
 
-    <NotificationsPanel notifications={activityNotifications} onRead={onReadNotifications} />
+    <NotificationsPanel notifications={activityNotifications} onRead={onReadNotifications} onOpenNotification={openNotification} />
 
     <CollapsibleSection scope={preferenceScope} id="activity-history" title="История" description="Уроки, оплаты и запросы" icon={History} badge={<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{historyEvents.length}</span>} className="mt-6">
       <HistoryPanel events={historyEvents} students={students} onReversePayment={onReversePayment} />
     </CollapsibleSection>
+    <MessagesDialog initialPeerId={messageStudentId ?? undefined} open={Boolean(messageStudentId)} onOpenChange={(open) => { if (!open) setMessageStudentId(null); }} showTrigger={false} />
   </AppShell>;
 }

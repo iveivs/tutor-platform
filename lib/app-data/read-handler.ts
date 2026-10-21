@@ -98,7 +98,7 @@ export async function handleGetAppData(request: Request) {
         EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed
         FROM balance_entries b
         WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?) ORDER BY b.occurred_at DESC, b.created_at DESC`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
-      loadRows(needs("notifications"), () => db.prepare(`SELECT n.id, n.type, n.title, n.body, n.read_at, n.created_at,
+      loadRows(needs("notifications"), () => db.prepare(`SELECT n.id, n.student_id, n.request_id, n.lesson_id, n.type, n.title, n.body, n.read_at, n.created_at,
         student.display_name AS student_name,
         request.type AS request_type, request.status AS request_status, request.message AS request_message,
         request.proposed_starts_at, request.proposed_ends_at,
@@ -246,6 +246,9 @@ export async function handleGetAppData(request: Request) {
       : [];
     const notifications = (notificationRows.results as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id), type: String(row.type), title: String(row.title), body: String(row.body), read: Boolean(row.read_at), createdAt: Number(row.created_at),
+      studentId: row.student_id ? String(row.student_id) : undefined,
+      requestId: row.request_id ? String(row.request_id) : undefined,
+      lessonId: row.lesson_id ? String(row.lesson_id) : undefined,
       studentName: row.student_name ? String(row.student_name) : undefined,
       requestType: row.request_type ? String(row.request_type) : undefined,
       requestStatus: row.request_status ? String(row.request_status) : undefined,

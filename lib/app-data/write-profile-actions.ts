@@ -38,6 +38,11 @@ export async function executeProfileAction({ db, body, auth }: WriteActionContex
     for (const window of windows) statements.push(db.prepare("INSERT INTO availability_windows (id, workspace_id, weekday, start_minutes, end_minutes) VALUES (?, ?, ?, ?, ?)").bind(crypto.randomUUID(), auth.workspaceId, window!.weekday, window!.startMinutes, window!.endMinutes));
     await db.batch(statements);
   } else if (body.action === "markNotificationsRead") {
-    await db.prepare("UPDATE notifications SET read_at = ? WHERE member_id = ? AND read_at IS NULL").bind(Date.now(), auth.memberId).run();
+    if (body.notificationId) {
+      await db.prepare("UPDATE notifications SET read_at = ? WHERE id = ? AND member_id = ? AND read_at IS NULL")
+        .bind(Date.now(), body.notificationId, auth.memberId).run();
+    } else {
+      await db.prepare("UPDATE notifications SET read_at = ? WHERE member_id = ? AND read_at IS NULL").bind(Date.now(), auth.memberId).run();
+    }
   }
 }

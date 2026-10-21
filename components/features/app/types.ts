@@ -14,6 +14,7 @@ export type BalanceEntry = { id: string; studentId: string; kind: string; units:
 export type HistoryEvent = { id: string; sourceId?: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; canReverse?: boolean; occurredAt: number };
 export type AppNotification = {
   id: string; type: string; title: string; body: string; read: boolean; createdAt: number;
+  studentId?: string; requestId?: string; lessonId?: string;
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
