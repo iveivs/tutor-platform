@@ -107,6 +107,8 @@ async function enqueueTelegramReminders(client) {
       E'\nПреподаватель: ' || owner_name
     FROM upcoming
     JOIN telegram_connections connection ON connection.member_id = student_id AND connection.disabled_at IS NULL
+    LEFT JOIN notification_preferences preference ON preference.member_id = student_id
+    WHERE COALESCE(preference.telegram_schedule, true)
     ON CONFLICT (dedupe_key) DO NOTHING`);
 
   const teacherDigests = await client.query(`WITH trigger_days AS (
@@ -116,7 +118,9 @@ async function enqueueTelegramReminders(client) {
       JOIN workspaces w ON w.id = l.workspace_id
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
       JOIN telegram_connections connection ON connection.member_id = owner.id AND connection.disabled_at IS NULL
+      LEFT JOIN notification_preferences preference ON preference.member_id = owner.id
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
+        AND COALESCE(preference.telegram_schedule, true)
     ), day_lessons AS (
       SELECT days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
         min(l.id) AS lesson_id, min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at,

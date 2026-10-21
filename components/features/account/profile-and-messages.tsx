@@ -123,6 +123,11 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
   }, [load]);
   useVisiblePolling(async () => { await load().catch(() => undefined); });
   useEffect(() => {
+    const refresh = () => { void load().catch(() => undefined); };
+    window.addEventListener("tyuttori:realtime", refresh);
+    return () => window.removeEventListener("tyuttori:realtime", refresh);
+  }, [load]);
+  useEffect(() => {
     if (!selectedId) return;
     void apiFetch("/api/messages", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ peerId: selectedId }) }).then(() => load()).catch(() => undefined);
   }, [selectedId, load]);

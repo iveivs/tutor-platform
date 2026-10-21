@@ -456,6 +456,15 @@ export const notifications = pgTable("notifications", {
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [index("idx_notifications_member_read_created").on(table.memberId, table.readAt, table.createdAt)]);
 
+export const notificationPreferences = pgTable("notification_preferences", {
+  memberId: text("member_id").primaryKey().references(() => members.id, { onDelete: "cascade" }),
+  soundEnabled: boolean("sound_enabled").notNull().default(true),
+  telegramSchedule: boolean("telegram_schedule").notNull().default(true),
+  telegramMessages: boolean("telegram_messages").notNull().default(false),
+  telegramMaterials: boolean("telegram_materials").notNull().default(false),
+  ...timestamps(),
+});
+
 export const telegramConnections = pgTable("telegram_connections", {
   memberId: text("member_id").primaryKey().references(() => members.id, { onDelete: "cascade" }),
   chatId: text("chat_id").notNull(),
@@ -496,7 +505,7 @@ export const telegramDeliveries = pgTable("telegram_deliveries", {
   lastError: text("last_error"),
   ...timestamps(),
 }, (table) => [
-  check("telegram_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request')`),
+  check("telegram_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material')`),
   check("telegram_deliveries_status_check", sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'cancelled')`),
   check("telegram_deliveries_attempts_check", sql`${table.attempts} >= 0`),
   uniqueIndex("telegram_deliveries_dedupe_key_unique").on(table.dedupeKey),

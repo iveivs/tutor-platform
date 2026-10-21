@@ -76,6 +76,17 @@ export async function POST(request: Request) {
         (id, workspace_id, lesson_id, uploaded_by_member_id, object_key, content_type, byte_size, width, height, expires_at)
         VALUES ($1, $2, $3, $4, $5, 'image/webp', $6, $7, $8, $9)`,
       [attachmentId, auth.workspaceId, lesson.lessonId, auth.memberId, objectKey, processed.data.byteLength, processed.info.width, processed.info.height, expiresAt]);
+      if (auth.role === "student") {
+        await db.query(`INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body)
+          SELECT $1, teacher.id, $2, $3, 'lesson_material_added', 'Добавлена фотография к уроку', 'Ученик добавил новую фотографию к материалам урока.'
+          FROM members teacher
+          WHERE teacher.workspace_id = $4 AND teacher.role = 'owner' AND teacher.status = 'active'
+          ORDER BY teacher.created_at LIMIT 1`, [randomUUID(), lesson.studentId, lesson.lessonId, auth.workspaceId]);
+      } else {
+        await db.query(`INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body)
+          VALUES ($1, $2, $2, $3, 'lesson_material_added', 'Добавлена фотография к уроку', 'Преподаватель добавил новую фотографию к материалам урока.')`,
+        [randomUUID(), lesson.studentId, lesson.lessonId]);
+      }
       await db.query("COMMIT");
       uploadedObjectKey = null;
       return Response.json({ ok: true, id: attachmentId });

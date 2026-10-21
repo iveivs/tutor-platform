@@ -73,6 +73,14 @@ export async function executeLessonContentAction({
           (id, member_id, student_id, lesson_id, type, title, body)
           VALUES ($1, $2, $2, $3, 'homework_updated', 'Новое домашнее задание', 'Преподаватель добавил или обновил домашнее задание к уроку.')`,
         [randomUUID(), lesson.studentId, lesson.lessonId]);
+      } else if (value && body.field === "student_response") {
+        await db.query(`INSERT INTO notifications
+          (id, member_id, student_id, lesson_id, type, title, body)
+          SELECT $1, teacher.id, $2, $3, 'homework_response_updated', 'Новый ответ на домашнее задание', 'Ученик добавил или обновил ответ к уроку.'
+          FROM members teacher
+          WHERE teacher.workspace_id = $4 AND teacher.role = 'owner' AND teacher.status = 'active'
+          ORDER BY teacher.created_at LIMIT 1`,
+        [randomUUID(), lesson.studentId, lesson.lessonId, auth.workspaceId]);
       }
       return Response.json({ ok: true });
     }

@@ -13,6 +13,7 @@ import type {
   HistoryEvent,
   Lesson,
   LessonRequest,
+  NotificationPreferences,
   RecurringSlot,
   Student,
   TutorProfile,
@@ -21,6 +22,7 @@ import { readAppData } from "@/lib/app-data-client";
 import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
 import { today } from "@/lib/date-time";
+import { appFetch } from "@/lib/client-fetch";
 
 type TutorAppDataOptions = {
   role: CurrentUser["role"];
@@ -55,6 +57,27 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
   const requestIdsRef = useRef(new Set<string>());
   const notificationIdsRef = useRef(new Set<string>());
   const currentDayRef = useRef(today());
+  const soundEnabledRef = useRef(true);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playNotificationSound = useCallback(() => {
+    const context = audioContextRef.current;
+    if (!soundEnabledRef.current || !context || context.state !== "running") return;
+    const now = context.currentTime;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.035, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+    gain.connect(context.destination);
+    for (const [frequency, delay] of [[660, 0], [880, 0.11]] as const) {
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, now + delay);
+      oscillator.connect(gain);
+      oscillator.start(now + delay);
+      oscillator.stop(now + delay + 0.24);
+    }
+  }, []);
 
   const applyData = useCallback((data: AppData) => {
     if (data.lessons) setLessons(data.lessons);
@@ -136,6 +159,33 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     return () => { active = false; };
   }, [applyData, preferenceScope, role]);
 
+  useEffect(() => {
+    let active = true;
+    const enableAudio = () => {
+      audioContextRef.current ??= new AudioContext();
+      if (audioContextRef.current.state === "suspended") void audioContextRef.current.resume();
+    };
+    const updatePreferences = (event: Event) => {
+      const preferences = (event as CustomEvent<NotificationPreferences>).detail;
+      if (preferences) soundEnabledRef.current = preferences.soundEnabled;
+    };
+    window.addEventListener("pointerdown", enableAudio, { once: true });
+    window.addEventListener("keydown", enableAudio, { once: true });
+    window.addEventListener("tyuttori:notification-preferences", updatePreferences);
+    void appFetch("/api/notification-preferences", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<NotificationPreferences> : Promise.reject())
+      .then((preferences) => { if (active) soundEnabledRef.current = preferences.soundEnabled; })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      window.removeEventListener("pointerdown", enableAudio);
+      window.removeEventListener("keydown", enableAudio);
+      window.removeEventListener("tyuttori:notification-preferences", updatePreferences);
+      void audioContextRef.current?.close();
+      audioContextRef.current = null;
+    };
+  }, []);
+
   const syncChanges = useCallback(async () => {
     if (syncInFlightRef.current || !navigator.onLine) return;
     syncInFlightRef.current = true;
@@ -150,14 +200,29 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
       const newRequest = data.requests?.find((request) => !requestIdsRef.current.has(request.id));
       const newNotification = data.notifications?.find((notification) => !notificationIdsRef.current.has(notification.id) && !notification.read);
       applyData(data);
-      if (newRequest && role !== "student") toast.info(`Новый запрос: ${newRequest.name}`);
-      else if (newNotification) toast.info(newNotification.title);
+      if (newRequest && role !== "student") {
+        toast.info(`Новый запрос: ${newRequest.name}`);
+        playNotificationSound();
+      } else if (newNotification) {
+        toast.info(newNotification.title);
+        playNotificationSound();
+      }
     } catch {
       // Фоновая синхронизация повторится по расписанию или при возвращении на вкладку.
     } finally {
       syncInFlightRef.current = false;
     }
-  }, [applyData, reload, role, showPastLessons]);
+  }, [applyData, playNotificationSound, reload, role, showPastLessons]);
+
+  useEffect(() => {
+    if (loading) return;
+    const source = new EventSource("/api/realtime");
+    source.onmessage = () => {
+      window.dispatchEvent(new Event("tyuttori:realtime"));
+      void syncChanges();
+    };
+    return () => source.close();
+  }, [loading, syncChanges]);
 
   useEffect(() => {
     if (loading) return;
