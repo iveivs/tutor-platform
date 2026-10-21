@@ -78,6 +78,13 @@
       "when": 1792347957552,
       "tag": "0010_outgoing_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792623687241,
+      "tag": "0011_first_jigsaw",
+      "breakpoints": true
     }
   ]
 }

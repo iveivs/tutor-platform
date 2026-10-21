@@ -6,12 +6,12 @@ CREATE TABLE "notification_preferences" (
 	"telegram_materials" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp (3) with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp (3) with time zone DEFAULT now() NOT NULL
-);--> statement-breakpoint
-ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_member_id_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."members"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE TRIGGER notification_preferences_set_updated_at BEFORE UPDATE ON notification_preferences FOR EACH ROW EXECUTE FUNCTION set_updated_at();--> statement-breakpoint
-
+);
+--> statement-breakpoint
 ALTER TABLE "telegram_deliveries" DROP CONSTRAINT "telegram_deliveries_kind_check";--> statement-breakpoint
+ALTER TABLE "notification_preferences" ADD CONSTRAINT "notification_preferences_member_id_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."members"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "telegram_deliveries" ADD CONSTRAINT "telegram_deliveries_kind_check" CHECK ("telegram_deliveries"."kind" in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material'));--> statement-breakpoint
+CREATE TRIGGER notification_preferences_set_updated_at BEFORE UPDATE ON notification_preferences FOR EACH ROW EXECUTE FUNCTION set_updated_at();--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION enqueue_telegram_notification() RETURNS trigger AS $$
 DECLARE
