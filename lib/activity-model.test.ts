@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { AppNotification, LessonRequest } from "../components/features/app/types";
 import { getActivityAttentionCount, getActivityNotifications } from "../components/features/activity/activity-model";
 
-const notification = (id: string, type: string, read = false) => ({ id, type, read }) as AppNotification;
+const notification = (id: string, type: string, read = false, extra: Partial<AppNotification> = {}) => ({ id, type, read, ...extra }) as AppNotification;
 
 describe("activity model", () => {
-  it("keeps request notifications available as shortcuts", () => {
+  it("keeps pending request notifications as shortcuts and hides resolved duplicates", () => {
     const notifications = [
-      notification("request", "new_request"),
+      notification("pending-request", "new_request", false, { requestStatus: "pending" }),
+      notification("resolved-request", "new_request", false, { requestStatus: "approved" }),
       notification("message", "new_message"),
     ];
 
-    expect(getActivityNotifications(notifications).map((item) => item.id)).toEqual(["request", "message"]);
+    expect(getActivityNotifications(notifications).map((item) => item.id)).toEqual(["pending-request", "message"]);
   });
 
   it("counts pending requests and unread non-request notifications once", () => {
