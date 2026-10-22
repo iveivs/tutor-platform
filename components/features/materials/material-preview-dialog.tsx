@@ -6,6 +6,7 @@ import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { appFetch } from "@/lib/client-fetch";
+import { shouldOpenPdfInSystemViewer } from "@/lib/material-preview";
 
 export type MaterialPreviewItem = {
   title: string;
@@ -14,6 +15,15 @@ export type MaterialPreviewItem = {
   url: string;
   downloadUrl?: string;
 };
+
+export function openMaterialPreview(item: MaterialPreviewItem, setPreview: (item: MaterialPreviewItem) => void) {
+  if (shouldOpenPdfInSystemViewer(item.contentType, navigator)) {
+    window.open(item.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  setPreview(item);
+}
 
 export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPreviewItem | null; onOpenChange: (open: boolean) => void }) {
   const docxRoot = useRef<HTMLDivElement>(null);
