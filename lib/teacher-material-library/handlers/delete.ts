@@ -16,6 +16,7 @@ export async function deleteTeacherMaterialRecord(request: Request) {
         WHERE id = $1 AND workspace_id = $2 AND status = 'active' RETURNING id`, [parsedId.data, auth.workspaceId]);
       if (!result.rowCount) { await db.query("ROLLBACK"); return Response.json({ error: "Материал не найден" }, { status: 404 }); }
       await db.query("DELETE FROM lesson_resource_links WHERE resource_id = $1 AND workspace_id = $2", [parsedId.data, auth.workspaceId]);
+      await db.query("DELETE FROM student_resource_links WHERE resource_id = $1 AND workspace_id = $2", [parsedId.data, auth.workspaceId]);
       await db.query("COMMIT");
       return Response.json({ ok: true });
     } catch (error) {

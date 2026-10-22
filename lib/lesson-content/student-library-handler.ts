@@ -8,14 +8,24 @@ export async function readStudentMaterialLibrary(request: Request) {
     if (auth.role !== "student") return Response.json({ error: "Раздел доступен только ученику" }, { status: 403 });
 
     const [documents, photos] = await Promise.all([
-      getPostgresPool().query(`SELECT resource.id, resource.title, resource.original_filename, resource.content_type,
-          resource.byte_size, resource.created_at, max(lesson.starts_at) AS lesson_starts_at
-        FROM lesson_resource_links link
-        JOIN teacher_resources resource ON resource.id = link.resource_id AND resource.workspace_id = link.workspace_id
-        JOIN lessons lesson ON lesson.id = link.lesson_id AND lesson.workspace_id = link.workspace_id
-        WHERE link.workspace_id = $1 AND lesson.student_id = $2 AND resource.status = 'active'
+      getPostgresPool().query(`WITH accessible AS (
+          SELECT link.resource_id, lesson.starts_at AS lesson_starts_at, link.created_at AS shared_at
+          FROM lesson_resource_links link
+          JOIN lessons lesson ON lesson.id = link.lesson_id AND lesson.workspace_id = link.workspace_id
+          WHERE link.workspace_id = $1 AND lesson.student_id = $2
+          UNION ALL
+          SELECT direct.resource_id, NULL::timestamptz AS lesson_starts_at, direct.created_at AS shared_at
+          FROM student_resource_links direct
+          WHERE direct.workspace_id = $1 AND direct.student_id = $2
+        )
+        SELECT resource.id, resource.title, resource.original_filename, resource.content_type,
+          resource.byte_size, resource.created_at, max(accessible.lesson_starts_at) AS lesson_starts_at,
+          max(accessible.shared_at) AS shared_at
+        FROM accessible
+        JOIN teacher_resources resource ON resource.id = accessible.resource_id AND resource.workspace_id = $1
+        WHERE resource.status = 'active'
         GROUP BY resource.id, resource.title, resource.original_filename, resource.content_type, resource.byte_size, resource.created_at
-        ORDER BY lesson_starts_at DESC, resource.title`, [auth.workspaceId, auth.memberId]),
+        ORDER BY shared_at DESC, resource.title`, [auth.workspaceId, auth.memberId]),
       getPostgresPool().query(`SELECT attachment.id, attachment.byte_size, attachment.width, attachment.height,
           attachment.expires_at, attachment.created_at, attachment.lesson_id, lesson.starts_at AS lesson_starts_at,
           author.display_name AS author_name
@@ -32,7 +42,7 @@ export async function readStudentMaterialLibrary(request: Request) {
       documents: documents.rows.map((row) => ({
         id: String(row.id), title: String(row.title), filename: String(row.original_filename),
         contentType: String(row.content_type), byteSize: Number(row.byte_size),
-        createdAt: new Date(row.created_at).getTime(), lessonStartsAt: new Date(row.lesson_starts_at).getTime(),
+        createdAt: new Date(row.created_at).getTime(), lessonStartsAt: row.lesson_starts_at ? new Date(row.lesson_starts_at).getTime() : null,
         url: `/api/teacher-materials/${encodeURIComponent(String(row.id))}`,
       })),
       photos: photos.rows.map((row) => ({

@@ -37,7 +37,7 @@ export async function readLessonMaterials(request: Request) {
         FROM lesson_resource_links link JOIN teacher_resources resource ON resource.id = link.resource_id
         WHERE link.workspace_id = $1 AND link.lesson_id = $2 AND resource.status = 'active'
         ORDER BY link.created_at`, [auth.workspaceId, lesson.lessonId]),
-      auth.role === "student" ? Promise.resolve({ rows: [] }) : getPostgresPool().query(`SELECT id, title, original_filename, content_type, byte_size, created_at
+      auth.role === "student" ? Promise.resolve({ rows: [] }) : getPostgresPool().query(`SELECT id, title, original_filename, content_type, byte_size, folder, tags, created_at
         FROM teacher_resources WHERE workspace_id = $1 AND status = 'active' ORDER BY created_at DESC`, [auth.workspaceId]),
     ]);
     return Response.json({
@@ -72,7 +72,8 @@ export async function readLessonMaterials(request: Request) {
       })),
       library: libraryResult.rows.map((row) => ({
         id: String(row.id), title: String(row.title), filename: String(row.original_filename), contentType: String(row.content_type),
-        byteSize: Number(row.byte_size), createdAt: new Date(row.created_at).getTime(),
+        byteSize: Number(row.byte_size), folder: row.folder ? String(row.folder) : null,
+        tags: Array.isArray(row.tags) ? row.tags.map(String) : [], createdAt: new Date(row.created_at).getTime(),
         url: `/api/teacher-materials/${encodeURIComponent(String(row.id))}`,
       })),
     }, { headers: { "Cache-Control": "no-store" } });

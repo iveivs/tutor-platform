@@ -365,6 +365,19 @@ export const lessonResourceLinks = pgTable("lesson_resource_links", {
   index("idx_lesson_resource_links_resource").on(table.resourceId),
 ]);
 
+export const studentResourceLinks = pgTable("student_resource_links", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  studentId: text("student_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  resourceId: text("resource_id").notNull().references(() => teacherResources.id, { onDelete: "cascade" }),
+  sharedByMemberId: text("shared_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("student_resource_links_student_resource_unique").on(table.studentId, table.resourceId),
+  index("idx_student_resource_links_workspace_student").on(table.workspaceId, table.studentId),
+  index("idx_student_resource_links_resource").on(table.resourceId),
+]);
+
 export const lessonEvents = pgTable("lesson_events", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

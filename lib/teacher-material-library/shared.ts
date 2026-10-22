@@ -46,6 +46,7 @@ export function parseFormMetadata(form: FormData, filename: string) {
 
 export function materialPayload(row: Record<string, unknown>) {
   const assignments = Array.isArray(row.assignments) ? row.assignments : [];
+  const sharedStudents = Array.isArray(row.shared_students) ? row.shared_students : [];
   return {
     id: String(row.id), title: String(row.title), filename: String(row.original_filename),
     contentType: String(row.content_type), byteSize: Number(row.byte_size),
@@ -55,6 +56,10 @@ export function materialPayload(row: Record<string, unknown>) {
     assignments: assignments.map((assignment) => {
       const item = assignment as Record<string, unknown>;
       return { lessonId: String(item.lessonId), studentId: String(item.studentId), studentName: String(item.studentName), startsAt: new Date(String(item.startsAt)).getTime() };
+    }),
+    sharedStudents: sharedStudents.map((assignment) => {
+      const item = assignment as Record<string, unknown>;
+      return { studentId: String(item.studentId), studentName: String(item.studentName), sharedAt: new Date(String(item.sharedAt)).getTime() };
     }),
     createdAt: new Date(String(row.created_at)).getTime(),
     updatedAt: new Date(String(row.updated_at)).getTime(),

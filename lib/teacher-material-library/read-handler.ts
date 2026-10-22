@@ -11,7 +11,7 @@ export async function readTeacherMaterials(request: Request) {
   try {
     const auth = await requireTeacher(request);
     if (auth instanceof Response) return auth;
-    const [accepted, resources, usage] = await Promise.all([
+    const [accepted, resources, students, usage] = await Promise.all([
       hasCurrentContentRulesAcceptance(auth),
       getPostgresPool().query(`SELECT resource.id, resource.title, resource.original_filename, resource.content_type,
           resource.byte_size, resource.folder, resource.tags, resource.version_number, resource.last_used_at,
@@ -23,10 +23,21 @@ export async function readTeacherMaterials(request: Request) {
           FROM lesson_resource_links link
           JOIN lessons lesson ON lesson.id = link.lesson_id AND lesson.workspace_id = resource.workspace_id
           JOIN members student ON student.id = lesson.student_id
-          WHERE link.resource_id = resource.id), '[]'::json) AS assignments
+          WHERE link.resource_id = resource.id), '[]'::json) AS assignments,
+          COALESCE((SELECT json_agg(json_build_object(
+            'studentId', direct.student_id, 'studentName', student.display_name,
+            'sharedAt', direct.created_at
+          ) ORDER BY student.display_name)
+          FROM student_resource_links direct
+          JOIN members student ON student.id = direct.student_id
+          WHERE direct.resource_id = resource.id AND direct.workspace_id = resource.workspace_id), '[]'::json) AS shared_students
         FROM teacher_resources resource
         WHERE resource.workspace_id = $1 AND resource.status = 'active'
         ORDER BY COALESCE(resource.last_used_at, resource.created_at) DESC`, [auth.workspaceId]),
+      getPostgresPool().query(`SELECT id, display_name
+        FROM members
+        WHERE workspace_id = $1 AND role = 'student' AND status <> 'archived' AND is_trial_contact = false
+        ORDER BY display_name`, [auth.workspaceId]),
       readUsage(getPostgresPool(), auth.workspaceId),
     ]);
     return Response.json({
@@ -37,6 +48,7 @@ export async function readTeacherMaterials(request: Request) {
       maxStorageBytes: MAX_WORKSPACE_MATERIAL_BYTES,
       uploadsThisMonth: Number(usage.rows[0]?.uploads_this_month ?? 0),
       storageBytes: Number(usage.rows[0]?.storage_bytes ?? 0),
+      students: students.rows.map((student) => ({ id: String(student.id), name: String(student.display_name) })),
       resources: resources.rows.map(materialPayload),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

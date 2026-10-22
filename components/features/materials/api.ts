@@ -21,6 +21,16 @@ export async function readTeacherMaterials() {
   return result;
 }
 
+export async function updateStudentMaterialShare(resourceId: string, studentId: string, action: "share" | "unshare") {
+  const response = await appFetch("/api/teacher-materials/share", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ resourceId, studentId, action }),
+  });
+  const result = await response.json() as { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "Не удалось изменить доступ к материалу");
+}
+
 export async function readStudentMaterials() {
   const response = await appFetch("/api/student-materials", { cache: "no-store" });
   const result = await response.json() as StudentMaterialsData & { error?: string };

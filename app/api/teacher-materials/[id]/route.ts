@@ -16,6 +16,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         AND ($3 <> 'student' OR EXISTS (
           SELECT 1 FROM lesson_resource_links link JOIN lessons lesson ON lesson.id = link.lesson_id
           WHERE link.resource_id = resource.id AND link.workspace_id = resource.workspace_id AND lesson.student_id = $4
+        ) OR EXISTS (
+          SELECT 1 FROM student_resource_links direct
+          WHERE direct.resource_id = resource.id AND direct.workspace_id = resource.workspace_id AND direct.student_id = $4
         )) LIMIT 1`, [id, auth.workspaceId, auth.role, auth.memberId]);
     const row = result.rows[0];
     if (!row) return Response.json({ error: "Материал не найден" }, { status: 404 });
