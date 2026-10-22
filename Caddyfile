@@ -4,7 +4,7 @@ www.{$APP_DOMAIN} {
 
 {$APP_DOMAIN} {
   encode zstd gzip
-  reverse_proxy app:3000
+  reverse_proxy tutor-platform-app-1:3000
 
   header {
     -Server
