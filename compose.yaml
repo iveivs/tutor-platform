@@ -17,6 +17,7 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    networks: [default, course-net]
 
   app:
     build:
@@ -176,3 +177,7 @@ volumes:
   caddy_data:
   caddy_config:
   postgres_data:
+
+networks:
+  course-net:
+    external: true

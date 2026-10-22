@@ -18,3 +18,19 @@ www.{$APP_DOMAIN} {
     format json
   }
 }
+
+course.111-88-118-32.sslip.io {
+  encode zstd gzip
+  handle_path /auth/v1/* {
+    reverse_proxy course-auth:9999
+  }
+  handle_path /rest/v1/* {
+    reverse_proxy course-rest:3000
+  }
+  handle_path /storage/v1/* {
+    reverse_proxy course-storage:5000
+  }
+  handle {
+    reverse_proxy course-app:3000
+  }
+}
