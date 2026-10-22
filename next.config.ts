@@ -55,6 +55,14 @@ const nextConfig: NextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=31536000" },
         ],
       },
+      {
+        source: "/api/teacher-materials/:id",
+        has: [{ type: "query", key: "preview", value: "1" }],
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "sandbox; frame-ancestors 'self'" },
+        ],
+      },
     ];
   },
 };

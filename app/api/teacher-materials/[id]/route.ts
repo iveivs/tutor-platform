@@ -2,6 +2,7 @@ import { getAuthMember } from "@/lib/auth";
 import { getPostgresPool } from "@/db/postgres";
 import { getTeacherMaterial } from "@/lib/lesson-materials";
 import { materialContentDisposition } from "@/lib/teacher-material-files";
+import { parseHttpByteRange } from "@/lib/http-byte-range";
 
 export const runtime = "nodejs";
 
@@ -22,18 +23,27 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         )) LIMIT 1`, [id, auth.workspaceId, auth.role, auth.memberId]);
     const row = result.rows[0];
     if (!row) return Response.json({ error: "Материал не найден" }, { status: 404 });
-    const bytes = await getTeacherMaterial(String(row.object_key));
     const contentType = String(row.content_type);
     const preview = new URL(request.url).searchParams.get("preview") === "1" && (contentType === "application/pdf" || contentType.startsWith("image/"));
+    const byteSize = Number(row.byte_size);
+    const range = preview && contentType === "application/pdf" ? parseHttpByteRange(request.headers.get("range"), byteSize) : null;
+    const commonHeaders = {
+      "Content-Type": contentType,
+      "Content-Disposition": materialContentDisposition(String(row.original_filename), preview ? "inline" : "attachment"),
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": preview ? "sandbox; frame-ancestors 'self'" : "sandbox",
+      ...(preview && contentType === "application/pdf" ? { "Accept-Ranges": "bytes" } : {}),
+    };
+    if (range === "invalid") return new Response(null, { status: 416, headers: { ...commonHeaders, "Content-Range": `bytes */${byteSize}` } });
+    const bytes = await getTeacherMaterial(String(row.object_key), range ?? undefined);
     await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [id, auth.workspaceId]);
     return new Response(Buffer.from(bytes), {
+      status: range ? 206 : 200,
       headers: {
-        "Content-Type": contentType,
+        ...commonHeaders,
         "Content-Length": String(bytes.byteLength),
-        "Content-Disposition": materialContentDisposition(String(row.original_filename), preview ? "inline" : "attachment"),
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "sandbox",
+        ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${byteSize}` } : {}),
       },
     });
   } catch (error) {

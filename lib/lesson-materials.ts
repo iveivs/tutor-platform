@@ -125,9 +125,13 @@ export async function putTeacherMaterial(objectKey: string, body: Uint8Array, co
   }));
 }
 
-export async function getTeacherMaterial(objectKey: string) {
+export async function getTeacherMaterial(objectKey: string, range?: { start: number; end: number }) {
   const storage = client();
-  const result = await storage.client.send(new GetObjectCommand({ Bucket: storage.bucket, Key: objectKey }));
+  const result = await storage.client.send(new GetObjectCommand({
+    Bucket: storage.bucket,
+    Key: objectKey,
+    Range: range ? `bytes=${range.start}-${range.end}` : undefined,
+  }));
   if (!result.Body) throw new Error("S3 object body is empty");
   return result.Body.transformToByteArray();
 }

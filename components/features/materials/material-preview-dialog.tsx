@@ -1,12 +1,11 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- protected images require the signed-in user's session cookie. */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { appFetch } from "@/lib/client-fetch";
-import { shouldUseDirectPdfPreview } from "@/lib/material-preview";
 
 export type MaterialPreviewItem = {
   title: string;
@@ -16,44 +15,13 @@ export type MaterialPreviewItem = {
   downloadUrl?: string;
 };
 
-const subscribeToStaticDevice = () => () => undefined;
-
 export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPreviewItem | null; onOpenChange: (open: boolean) => void }) {
   const docxRoot = useRef<HTMLDivElement>(null);
   const [docxResult, setDocxResult] = useState<{ url: string; state: "ready" | "error" }>({ url: "", state: "error" });
-  const [pdfResult, setPdfResult] = useState<{ sourceUrl: string; blobUrl?: string; state: "ready" | "error" }>({ sourceUrl: "", state: "error" });
   const isImage = item?.contentType.startsWith("image/") ?? false;
   const isPdf = item?.contentType === "application/pdf";
   const isDocx = item?.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const docxState = item && docxResult.url === item.url ? docxResult.state : "loading";
-  const pdfState = item && pdfResult.sourceUrl === item.url ? pdfResult.state : "loading";
-  const useDirectPdfPreview = useSyncExternalStore(
-    subscribeToStaticDevice,
-    () => Boolean(item && shouldUseDirectPdfPreview(item.contentType, navigator)),
-    () => false,
-  );
-
-  useEffect(() => {
-    if (!item || !isPdf || useDirectPdfPreview) return;
-    let active = true;
-    let blobUrl: string | undefined;
-    void (async () => {
-      try {
-        const response = await appFetch(item.url, { cache: "no-store" });
-        if (!response.ok) throw new Error("preview_failed");
-        const blob = await response.blob();
-        if (!active) return;
-        blobUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
-        setPdfResult({ sourceUrl: item.url, blobUrl, state: "ready" });
-      } catch {
-        if (active) setPdfResult({ sourceUrl: item.url, state: "error" });
-      }
-    })();
-    return () => {
-      active = false;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [isPdf, item, useDirectPdfPreview]);
 
   useEffect(() => {
     if (!item || !isDocx) return;
@@ -80,10 +48,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
     <DialogHeader className="border-b px-5 py-4 pr-14"><DialogTitle className="truncate">{item?.title ?? "Просмотр материала"}</DialogTitle><DialogDescription className="truncate">{item?.filename ?? "Материал урока"}</DialogDescription></DialogHeader>
     <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 dark:bg-slate-950 sm:p-5">
       {item && isImage && <img src={item.url} alt={item.title} className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain shadow-sm" />}
-      {item && isPdf && useDirectPdfPreview && <iframe src={item.url} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
-      {item && isPdf && !useDirectPdfPreview && pdfState === "ready" && pdfResult.blobUrl && <iframe src={pdfResult.blobUrl} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
-      {item && isPdf && !useDirectPdfPreview && pdfState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю PDF…</p>}
-      {item && isPdf && !useDirectPdfPreview && pdfState === "error" && <PreviewUnavailable kind="pdf" />}
+      {item && isPdf && <iframe src={item.url} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-white text-slate-950 shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
       {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
     </div>
