@@ -22,6 +22,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
   const isPdf = item?.contentType === "application/pdf";
   const isDocx = item?.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const docxState = item && docxResult.url === item.url ? docxResult.state : "loading";
+  const pdfUrl = item && isPdf ? `${item.url}#view=FitH` : "";
 
   useEffect(() => {
     if (!item || !isDocx) return;
@@ -48,7 +49,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
     <DialogHeader className="border-b px-5 py-4 pr-14"><DialogTitle className="truncate">{item?.title ?? "Просмотр материала"}</DialogTitle><DialogDescription className="truncate">{item?.filename ?? "Материал урока"}</DialogDescription></DialogHeader>
     <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 dark:bg-slate-950 sm:p-5">
       {item && isImage && <img src={item.url} alt={item.title} className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain shadow-sm" />}
-      {item && isPdf && <iframe src={item.url} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
+      {item && isPdf && <iframe src={pdfUrl} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-white text-slate-950 shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
       {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
     </div>
