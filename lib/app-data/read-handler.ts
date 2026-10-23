@@ -262,7 +262,7 @@ export async function handleGetAppData(request: Request) {
       lessonUnits: row.lesson_units === null || row.lesson_units === undefined ? undefined : Number(row.lesson_units),
     }));
     const dayNotes = (dayNoteRows.results as Array<Record<string, unknown>>).map((row) => ({
-      id: String(row.id), date: String(row.note_date), body: String(row.body), updatedAt: Number(row.updated_at),
+      id: String(row.id), date: row.note_date instanceof Date ? row.note_date.toISOString().slice(0, 10) : String(row.note_date), body: String(row.body), updatedAt: Number(row.updated_at),
     }));
     const payload: Record<string, unknown> = { syncCursor };
     if (needs("students")) payload.students = students;
