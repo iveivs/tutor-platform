@@ -13,7 +13,21 @@
   --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
   --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
   --calendar-lesson-upcoming: #0d9488; --calendar-lesson-past: #94a3b8; --calendar-lesson-count-text: #ffffff;
+  /* Semantic surface, text and tone tokens. Values reproduce the current look; a redesign changes values, not components. */
+  --surface: var(--color-white); --surface-subtle: var(--color-slate-50); --surface-muted: var(--color-slate-100);
+  --surface-glass-90: color-mix(in oklab, var(--color-white) 90%, transparent); --surface-glass-95: color-mix(in oklab, var(--color-white) 95%, transparent);
+  --line: var(--color-slate-200);
+  --ink-strong: var(--color-slate-950); --ink-body: var(--color-slate-700); --ink-secondary: var(--color-slate-600);
+  --ink-muted: var(--color-slate-500); --ink-subtle: var(--color-slate-400); --ink-faint: var(--color-slate-300);
+  --brand-solid: var(--color-indigo-600); --brand-solid-hover: var(--color-indigo-700); --brand-text: var(--color-indigo-600); --brand-line: var(--color-indigo-200);
+  --brand-soft: var(--color-indigo-50); --brand-soft-strong: var(--color-indigo-100); --brand-ink: var(--color-indigo-700); --brand-ink-strong: var(--color-indigo-800);
+  --brand-ring: var(--color-indigo-100); --brand-glow: var(--color-indigo-200); --brand-glow-70: color-mix(in oklab, var(--color-indigo-200) 70%, transparent);
+  --success-soft: var(--color-emerald-50); --success-ink: var(--color-emerald-700); --success-ink-strong: var(--color-emerald-800); --success-ring: var(--color-emerald-100); --success-text: var(--color-emerald-600);
+  --danger-soft: var(--color-rose-50); --danger-ink: var(--color-rose-700); --danger-ink-strong: var(--color-rose-800); --danger-ring: var(--color-rose-100); --danger-text: var(--color-rose-600);
+  --warning-soft: var(--color-amber-50); --warning-soft-40: color-mix(in oklab, var(--color-amber-50) 40%, transparent); --warning-soft-strong: var(--color-amber-100);
+  --warning-ink: var(--color-amber-700); --warning-ring: var(--color-amber-100); --warning-text: var(--color-amber-600);
 }
+/* Redesign preview: v2 token values go under :root[data-design="v2"] and :root.dark[data-design="v2"] (see components/design-provider.tsx). */
 @media (min-width: 48rem) {
   :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
 }
@@ -34,12 +48,27 @@
   --accent: #363638; --accent-foreground: #ffffff; --destructive: #ff6b7a; --border: #404043;
   --input: #4a4a4e; --ring: #8b83ff;
   --calendar-lesson-upcoming: #14b8a6; --calendar-lesson-past: #64748b; --calendar-lesson-count-text: #ffffff;
+  --surface: var(--card); --surface-subtle: #29292c; --surface-muted: #303033; --surface-glass-90: rgb(32 32 34 / 0.94); --surface-glass-95: rgb(32 32 34 / 0.94);
+  --line: var(--border);
+  --ink-strong: var(--foreground); --ink-body: #e5e5ea; --ink-secondary: #c7c7cc; --ink-muted: #98989d; --ink-subtle: #98989d; --ink-faint: #6f6f74;
+  --brand-soft: rgb(49 46 129 / 0.34); --brand-soft-strong: rgb(67 56 202 / 0.34); --brand-ink: #a5b4fc; --brand-ink-strong: #a5b4fc;
+  --brand-ring: var(--border); --brand-glow: rgb(0 0 0 / 0.24); --brand-glow-70: rgb(0 0 0 / 0.24);
+  --success-soft: rgb(6 78 59 / 0.38); --success-ink: #6ee7b7; --success-ink-strong: #6ee7b7; --success-ring: var(--border);
+  --danger-soft: rgb(136 19 55 / 0.36); --danger-ink: #fda4af; --danger-ink-strong: #fda4af; --danger-ring: var(--border);
+  --warning-soft: rgb(120 53 15 / 0.34); --warning-soft-40: rgb(120 53 15 / 0.34); --warning-soft-strong: rgb(146 64 14 / 0.42); --warning-ink: #fcd34d; --warning-ring: var(--border);
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+  --color-surface: var(--surface); --color-surface-subtle: var(--surface-subtle); --color-surface-muted: var(--surface-muted); --color-surface-glass-90: var(--surface-glass-90); --color-surface-glass-95: var(--surface-glass-95); --color-line: var(--line);
+  --color-ink-strong: var(--ink-strong); --color-ink-body: var(--ink-body); --color-ink-secondary: var(--ink-secondary); --color-ink-muted: var(--ink-muted); --color-ink-subtle: var(--ink-subtle); --color-ink-faint: var(--ink-faint);
+  --color-brand-solid: var(--brand-solid); --color-brand-solid-hover: var(--brand-solid-hover); --color-brand-text: var(--brand-text); --color-brand-line: var(--brand-line); --color-brand-soft: var(--brand-soft); --color-brand-soft-strong: var(--brand-soft-strong);
+  --color-brand-ink: var(--brand-ink); --color-brand-ink-strong: var(--brand-ink-strong); --color-brand-ring: var(--brand-ring); --color-brand-glow: var(--brand-glow); --color-brand-glow-70: var(--brand-glow-70);
+  --color-success-soft: var(--success-soft); --color-success-ink: var(--success-ink); --color-success-ink-strong: var(--success-ink-strong); --color-success-ring: var(--success-ring); --color-success-text: var(--success-text);
+  --color-danger-soft: var(--danger-soft); --color-danger-ink: var(--danger-ink); --color-danger-ink-strong: var(--danger-ink-strong); --color-danger-ring: var(--danger-ring); --color-danger-text: var(--danger-text);
+  --color-warning-soft: var(--warning-soft); --color-warning-soft-40: var(--warning-soft-40); --color-warning-soft-strong: var(--warning-soft-strong); --color-warning-ink: var(--warning-ink); --color-warning-ring: var(--warning-ring); --color-warning-text: var(--warning-text);
   --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -72,28 +101,4 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
   .mobile-time-input::-webkit-date-and-time-value, .mobile-date-input::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { min-inline-size: 0; text-align: left; }
 }
 
-/* Dark counterparts for the remaining palette utilities in the prototype. */
-.dark [class~="bg-[#f6f8fc]"] { background-color: var(--background); }
-.dark [class~="bg-white"] { background-color: var(--card); }
-.dark [class~="bg-white/90"], .dark [class~="bg-white/95"] { background-color: rgb(32 32 34 / 0.94); }
-.dark [class~="bg-slate-50"] { background-color: #29292c; }
-.dark [class~="bg-slate-100"] { background-color: #303033; }
-.dark [class~="border-slate-200"] { border-color: var(--border); }
-.dark [class~="text-slate-950"] { color: var(--foreground); }
-.dark [class~="text-slate-700"] { color: #e5e5ea; }
-.dark [class~="text-slate-600"] { color: #c7c7cc; }
-.dark [class~="text-slate-500"], .dark [class~="text-slate-400"] { color: #98989d; }
-.dark [class~="text-slate-300"] { color: #6f6f74; }
-.dark [class~="bg-indigo-50"], .dark [class~="bg-indigo-50/50"] { background-color: rgb(49 46 129 / 0.34); }
-.dark [class~="bg-indigo-100"] { background-color: rgb(67 56 202 / 0.34); }
-.dark [class~="text-indigo-700"], .dark [class~="text-indigo-800"] { color: #a5b4fc; }
-.dark [class~="bg-emerald-50"] { background-color: rgb(6 78 59 / 0.38); }
-.dark [class~="text-emerald-700"], .dark [class~="text-emerald-800"] { color: #6ee7b7; }
-.dark [class~="bg-rose-50"] { background-color: rgb(136 19 55 / 0.36); }
-.dark [class~="text-rose-700"], .dark [class~="text-rose-800"] { color: #fda4af; }
-.dark [class~="bg-amber-50"], .dark [class~="bg-amber-50/40"] { background-color: rgb(120 53 15 / 0.34); }
-.dark [class~="bg-amber-100"] { background-color: rgb(146 64 14 / 0.42); }
-.dark [class~="text-amber-700"] { color: #fcd34d; }
-.dark [class~="ring-indigo-100"], .dark [class~="ring-emerald-100"], .dark [class~="ring-rose-100"], .dark [class~="ring-amber-100"] { --tw-ring-color: var(--border); }
-.dark [class~="shadow-indigo-200"], .dark [class~="shadow-indigo-200/70"] { --tw-shadow-color: rgb(0 0 0 / 0.24); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }

@@ -1,10 +1,10 @@
 import type { Lesson } from "@/components/features/app/types";
 
 const lessonStatusStyles: Record<Lesson["status"], string> = {
-  paid: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  low: "bg-indigo-50 text-indigo-700 ring-indigo-100",
-  debt: "bg-rose-50 text-rose-700 ring-rose-100",
-  request: "bg-amber-50 text-amber-700 ring-amber-100",
+  paid: "bg-success-soft text-success-ink ring-success-ring",
+  low: "bg-brand-soft text-brand-ink ring-brand-ring",
+  debt: "bg-danger-soft text-danger-ink ring-danger-ring",
+  request: "bg-warning-soft text-warning-ink ring-warning-ring",
   trial: "bg-sky-50 text-sky-700 ring-sky-100",
 };
 

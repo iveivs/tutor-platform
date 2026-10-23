@@ -27,7 +27,7 @@ export function HistoryPanel({ events, students, onReversePayment }: { events: H
       <div className="flex gap-2 overflow-x-auto pb-1">
         {categories.map((item) => <Button key={item.value} type="button" size="control" variant={category === item.value ? "default" : "outline"} className="whitespace-nowrap" onClick={() => { setCategory(item.value); setExpanded(false); }}>{item.label}</Button>)}
       </div>
-      <Select value={studentId} onValueChange={(value) => { setStudentId(value); setExpanded(false); }}><SelectTrigger className="h-[var(--control-height)] w-full rounded-[var(--radius-control)] bg-white xl:w-72" aria-label="Ученик"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все ученики</SelectItem>{students.map((student) => <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>)}</SelectContent></Select>
+      <Select value={studentId} onValueChange={(value) => { setStudentId(value); setExpanded(false); }}><SelectTrigger className="h-[var(--control-height)] w-full rounded-[var(--radius-control)] bg-surface dark:bg-surface xl:w-72" aria-label="Ученик"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Все ученики</SelectItem>{students.map((student) => <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>)}</SelectContent></Select>
     </div>
     <HistoryTimeline events={visibleEvents} onReversePayment={onReversePayment} />
     {filteredEvents.length > 3 && <ShowMoreButton expanded={expanded} remaining={filteredEvents.length - 3} className="mt-3" onToggle={() => setExpanded((value) => !value)} />}

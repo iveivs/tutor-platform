@@ -5,7 +5,7 @@ function inline(value: string): ReactNode[] {
   return parts.filter(Boolean).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
     if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
-    if (part.startsWith("http")) return <a key={index} href={part} className="text-indigo-600 underline underline-offset-2">{part}</a>;
+    if (part.startsWith("http")) return <a key={index} href={part} className="text-brand-text underline underline-offset-2">{part}</a>;
     return part;
   });
 }

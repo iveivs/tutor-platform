@@ -95,20 +95,20 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
     <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground">
       <section className="card w-full max-w-md p-7 sm:p-9">
         <div className="mb-7 text-center">
-          {recovering ? <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200"><KeyRound className="size-7" /></span> : <BrandIcon className="mx-auto size-14 shadow-lg" />}
+          {recovering ? <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-solid text-white shadow-lg shadow-brand-glow"><KeyRound className="size-7" /></span> : <BrandIcon className="mx-auto size-14 shadow-lg" />}
           <h1 className="mt-5 text-3xl font-bold tracking-tight">{recovering ? "Восстановление пароля" : "Тьюттори"}</h1>
-          <p className="mt-2 text-slate-500">{recovering ? "Пришлём ссылку для создания нового пароля" : "Войдите в свой кабинет"}</p>
+          <p className="mt-2 text-ink-muted">{recovering ? "Пришлём ссылку для создания нового пароля" : "Войдите в свой кабинет"}</p>
         </div>
         {recovering ? recoverySent ? (
           <div className="space-y-5">
-            <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">Если аккаунт с таким email существует, письмо со ссылкой уже отправлено. Проверьте также папку «Спам».</p>
+            <p className="rounded-xl bg-success-soft px-4 py-3 text-sm font-medium text-success-ink">Если аккаунт с таким email существует, письмо со ссылкой уже отправлено. Проверьте также папку «Спам».</p>
             <Button type="button" variant="outline" onClick={() => { setRecovering(false); setRecoverySent(false); setError(""); }} className="h-12 w-full rounded-xl"><ArrowLeft />Вернуться ко входу</Button>
           </div>
         ) : (
           <form className="space-y-5" onSubmit={recover}>
             <div className="space-y-2"><Label htmlFor="recovery-email">Email</Label><Input id="recovery-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="h-12 rounded-xl" /></div>
-            {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-            <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-indigo-600 text-base"><Mail />{pending ? "Отправляем…" : "Отправить ссылку"}</Button>
+            {error && <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger-ink">{error}</p>}
+            <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-brand-solid text-base"><Mail />{pending ? "Отправляем…" : "Отправить ссылку"}</Button>
             <Button type="button" variant="ghost" onClick={() => { setRecovering(false); setError(""); }} className="h-11 w-full rounded-xl"><ArrowLeft />Вернуться ко входу</Button>
           </form>
         ) : (
@@ -116,11 +116,11 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
             <form className="space-y-5" onSubmit={submit}>
               <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="h-12 rounded-xl" /></div>
               <div className="space-y-2"><Label htmlFor="password">Пароль</Label><PasswordInput id="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required className="h-12 rounded-xl" /></div>
-              {error && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-              <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-indigo-600 text-base"><LogIn />{pending ? "Входим…" : "Войти"}</Button>
+              {error && <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger-ink">{error}</p>}
+              <Button type="submit" disabled={pending} className="h-12 w-full rounded-xl bg-brand-solid text-base"><LogIn />{pending ? "Входим…" : "Войти"}</Button>
             </form>
-            <button type="button" onClick={() => { setRecovering(true); setError(""); }} className="mt-4 w-full text-center text-sm font-medium text-indigo-600 hover:text-indigo-700">Забыли пароль?</button>
-            <p className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">Новые кабинеты преподавателей создаются только по персональному приглашению администратора.</p>
+            <button type="button" onClick={() => { setRecovering(true); setError(""); }} className="mt-4 w-full text-center text-sm font-medium text-brand-text hover:text-indigo-700">Забыли пароль?</button>
+            <p className="mt-6 rounded-xl bg-surface-subtle px-4 py-3 text-center text-sm text-ink-muted">Новые кабинеты преподавателей создаются только по персональному приглашению администратора.</p>
           </>
         )}
         <LegalLinks className="mt-7" />

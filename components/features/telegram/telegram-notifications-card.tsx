@@ -60,8 +60,8 @@ export function TelegramNotificationsCard({ compact = false, embedded = false }:
     }
   };
 
-  const preferenceRow = (key: keyof NotificationPreferences, title: string, description: string) => <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-slate-200 p-4">
-    <span className="min-w-0"><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span></span>
+  const preferenceRow = (key: keyof NotificationPreferences, title: string, description: string) => <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-line p-4">
+    <span className="min-w-0"><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{description}</span></span>
     <Switch checked={(preferences ?? defaultPreferences)[key]} disabled={pending} onCheckedChange={(checked) => void changePreference(key, checked)} aria-label={title} />
   </label>;
 
@@ -97,9 +97,9 @@ export function TelegramNotificationsCard({ compact = false, embedded = false }:
   const content = <>
     <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
       <h2 className="text-xl font-bold">{embedded ? "Каналы уведомлений" : "Уведомления"}</h2>
-      <p className="mt-1 text-sm text-slate-500">Выберите, как Тьюттори сообщит о новых событиях. Настройки индивидуальны для каждого пользователя.</p>
+      <p className="mt-1 text-sm text-ink-muted">Выберите, как Тьюттори сообщит о новых событиях. Настройки индивидуальны для каждого пользователя.</p>
       <div className="mt-5">
-        <h3 className="flex items-center gap-2 text-sm font-bold"><BellRing className="size-4 text-indigo-600" />Уведомления в кабинете</h3>
+        <h3 className="flex items-center gap-2 text-sm font-bold"><BellRing className="size-4 text-brand-text" />Уведомления в кабинете</h3>
         <div className="mt-3">{preferenceRow("soundEnabled", "Лёгкий звук", "Проигрывать короткий сигнал, когда открытый кабинет получает новое событие.")}</div>
       </div>
       <div className="mt-5">
@@ -110,14 +110,14 @@ export function TelegramNotificationsCard({ compact = false, embedded = false }:
           {preferenceRow("telegramMaterials", "Материалы и домашние задания", "Новые файлы, фотографии, задания и ответы к уроку.")}
         </div>
       </div>
-      {!status && <p className="mt-4 text-sm text-slate-500">Проверяем подключение…</p>}
-      {status && !status.configured && <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
-      {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-emerald-700">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
+      {!status && <p className="mt-4 text-sm text-ink-muted">Проверяем подключение…</p>}
+      {status && !status.configured && <p className="mt-4 rounded-2xl bg-surface-subtle p-4 text-sm text-ink-secondary">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
+      {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-success-ink">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
       {status?.configured && !status.connected && <div className="mt-5">
-        <ol className="space-y-3 text-sm text-slate-700">
+        <ol className="space-y-3 text-sm text-ink-body">
           {["Нажмите «Подключить Telegram» — откроется бот Тьюттори.", "В Telegram нажмите «Запустить» или отправьте команду /start.", "Вернитесь в Тьюттори и нажмите «Проверить подключение»."].map((step, index) => <li key={step} className="flex items-start gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">{index + 1}</span><span className="pt-0.5 leading-5">{step}</span></li>)}
         </ol>
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.</p>
+        <p className="mt-4 rounded-xl bg-surface-subtle p-3 text-xs leading-5 text-ink-muted">Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.</p>
         <div className="mt-4 grid min-w-0 gap-2"><Button type="button" className="h-auto min-h-10 w-full min-w-0 whitespace-normal bg-sky-600 text-center hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send className="shrink-0" /><span>{pending ? "Создаю ссылку…" : "Подключить Telegram"}</span></Button><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal text-center" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>
       </div>}
     </div></div>

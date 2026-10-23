@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LanguageProvider } from "@/components/language-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CookieNotice } from "@/components/cookie-notice";
+import { DesignProvider } from "@/components/design-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -43,7 +44,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className="antialiased"><ThemeProvider><LanguageProvider>{children}<CookieNotice /></LanguageProvider></ThemeProvider></body>
+      <body className="antialiased"><ThemeProvider><LanguageProvider><DesignProvider>{children}<CookieNotice /></DesignProvider></LanguageProvider></ThemeProvider></body>
     </html>
   );
 }

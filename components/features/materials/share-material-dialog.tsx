@@ -47,18 +47,18 @@ export function ShareMaterialDialog({
             searchPlaceholder="Поиск по имени ученика"
             emptyText="Ученик не найден"
           />
-          <Button type="button" className="shrink-0 bg-indigo-600" disabled={pending || !studentId} onClick={() => void share()}><Share2 />Отправить</Button>
+          <Button type="button" className="shrink-0 bg-brand-solid" disabled={pending || !studentId} onClick={() => void share()}><Share2 />Отправить</Button>
         </div>
         <section>
           <h3 className="text-sm font-bold">Прямой доступ</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Отдельные назначения ученикам, не привязанные к конкретному уроку.</p>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">Отдельные назначения ученикам, не привязанные к конкретному уроку.</p>
           {(resource.sharedStudents ?? []).length ? <ul className="mt-3 divide-y overflow-hidden rounded-2xl border">
             {(resource.sharedStudents ?? []).map((student) => <li key={student.studentId} className="flex items-center gap-3 px-4 py-3">
-              <UserRoundCheck className="size-4 shrink-0 text-indigo-600" />
+              <UserRoundCheck className="size-4 shrink-0 text-brand-text" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{student.studentName}</span>
               <Button type="button" size="icon-sm" variant="ghost" disabled={pending} aria-label={`Закрыть доступ для ${student.studentName}`} onClick={() => void onUnshare(resource, student.studentId)}><X /></Button>
             </li>)}
-          </ul> : <p className="mt-3 rounded-2xl border border-dashed p-5 text-center text-sm text-slate-500">Материал пока не отправлен напрямую ни одному ученику.</p>}
+          </ul> : <p className="mt-3 rounded-2xl border border-dashed p-5 text-center text-sm text-ink-muted">Материал пока не отправлен напрямую ни одному ученику.</p>}
         </section>
       </div>
     </DialogContent>
