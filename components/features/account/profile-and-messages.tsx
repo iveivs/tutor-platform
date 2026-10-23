@@ -2,9 +2,10 @@
 /* eslint-disable @next/next/no-img-element -- protected avatars use a session-bound API URL and are resized server-side. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, Send, Trash2, Upload, UserRound } from "lucide-react";
+import { ChevronDown, MessageCircle, Send, Trash2, Upload, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
+import { SearchableSelect } from "@/components/common/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -110,6 +111,7 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
   const [selectedId, setSelectedId] = useState(initialPeerId ?? "");
   const [body, setBody] = useState("");
   const [pending, setPending] = useState(false);
+  const [showPeers, setShowPeers] = useState(false);
   const load = useCallback(async () => {
     const response = await apiFetch("/api/messages", { cache: "no-store" });
     const result = await response.json() as MessagesData & { error?: string };
@@ -146,10 +148,9 @@ function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: s
   };
   if (!data) return <div className="grid min-h-56 place-items-center text-sm text-slate-500">Загружаю сообщения…</div>;
   if (!data.peers.length) return <div className="grid min-h-56 place-items-center text-center text-sm text-slate-500"><span><UserRound className="mx-auto mb-2 size-7" />Доступных собеседников пока нет</span></div>;
-  return <div className={compact ? "min-w-0" : "grid min-h-[420px] min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]"}>
-    {!compact && <aside className="max-h-[480px] min-w-0 space-y-1 overflow-y-auto md:border-r md:pr-3">{data.peers.map((peer) => <button key={peer.id} type="button" onClick={() => setSelectedId(peer.id)} className={`flex w-full min-w-0 items-center gap-3 rounded-xl p-2.5 text-left ${selectedId === peer.id ? "bg-indigo-50 dark:bg-indigo-950/50" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}><MemberAvatar name={peer.name} initials={peer.initials} color={peer.avatarColor} url={peer.avatarUrl} className="size-10 text-sm" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{peer.name}</strong><span className="block truncate text-xs text-slate-500">{peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель")}</span></span>{peer.unreadCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-xs font-bold text-white">{peer.unreadCount}</span>}</button>)}</aside>}
-    <section className="flex min-w-0 flex-col">
-      {compact && data.peers.length > 1 ? <Select value={selectedId} onValueChange={setSelectedId}><SelectTrigger className="mb-3 w-full"><SelectValue placeholder="Выберите преподавателя" /></SelectTrigger><SelectContent>{data.peers.map((peer) => <SelectItem key={peer.id} value={peer.id}>{peer.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong className="truncate">{selected?.name}</strong></div>}
+  return <div className="min-w-0">
+    <section className="flex min-h-[420px] min-w-0 flex-col">
+      {compact && data.peers.length > 1 ? <Select value={selectedId} onValueChange={setSelectedId}><SelectTrigger className="mb-3 w-full"><SelectValue placeholder="Выберите преподавателя" /></SelectTrigger><SelectContent>{data.peers.map((peer) => <SelectItem key={peer.id} value={peer.id}>{peer.name}</SelectItem>)}</SelectContent></Select> : <><div className="flex min-w-0 items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong className="min-w-0 flex-1 truncate">{selected?.name}</strong>{data.peers.length > 1 && <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2 sm:px-3" aria-expanded={showPeers} onClick={() => setShowPeers((current) => !current)}><span className="sm:hidden">Сменить</span><span className="hidden sm:inline">Сменить собеседника</span><ChevronDown className={`transition-transform ${showPeers ? "rotate-180" : ""}`} /></Button>}</div>{showPeers && <div className="border-b py-3"><SearchableSelect value={selectedId} onValueChange={(value) => { setSelectedId(value); setShowPeers(false); }} placeholder="Выберите собеседника" searchPlaceholder="Найти собеседника" emptyText="Собеседники не найдены" items={data.peers.map((peer) => ({ value: peer.id, label: peer.name, description: peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель") }))} /></div>}</>}
       <div className={`flex flex-1 flex-col gap-2 overflow-y-auto ${compact ? "my-3 max-h-64 min-h-40 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900/60" : "max-h-[330px] min-h-52 py-4"}`}>{thread.map((message) => <div key={message.id} className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${message.senderId === data.currentMemberId ? "ml-auto bg-indigo-600 text-white" : "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className={`mt-1 block text-right text-[10px] ${message.senderId === data.currentMemberId ? "text-indigo-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time></div>)}{!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-slate-500">Сообщений пока нет</div>}</div>
       <div className="flex min-w-0 items-end gap-2"><Textarea className="min-h-20 min-w-0 resize-none" value={body} maxLength={500} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon-control" className="shrink-0" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send /></Button></div>
       <div className="mt-1 flex items-start justify-between gap-2 text-[11px] text-slate-400"><span>Enter — отправить, Shift+Enter — новая строка</span><span className="shrink-0">{body.length}/500</span></div>
@@ -167,7 +168,7 @@ export function MessagesDialog({ initialPeerId, label = "Сообщения", op
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const changeOpen = onOpenChange ?? setInternalOpen;
-  return <Dialog open={open} onOpenChange={changeOpen}>{showTrigger && <DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger>}<DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader>{open && <MessagesContent key={initialPeerId} initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={changeOpen}>{showTrigger && <DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger>}<DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader><div className="min-h-0 overflow-y-auto">{open && <MessagesContent key={initialPeerId} initialPeerId={initialPeerId} />}</div></DialogContent></Dialog>;
 }
 
 export function MessagesCard() {

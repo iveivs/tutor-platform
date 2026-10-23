@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, LogOut, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/common/app-shell";
 import { FormField } from "@/components/common/form-field";
@@ -9,7 +9,6 @@ import type { AvailabilityWindow } from "@/components/features/app/types";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { minutesToInputTime } from "@/lib/availability";
 
 type SettingsViewProps = {
@@ -26,6 +25,7 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
   const [professionalTitle, setProfessionalTitle] = useState(profile.professionalTitle);
   const [pending, setPending] = useState(false);
   const [availabilityPending, setAvailabilityPending] = useState(false);
+  const [expandedWeekday, setExpandedWeekday] = useState<number | null>(null);
   const [windows, setWindows] = useState<Array<{ id: string; weekday: number; start: string; end: string }>>(() => availabilityWindows.map((window) => ({ id: window.id, weekday: window.weekday, start: minutesToInputTime(window.startMinutes), end: minutesToInputTime(window.endMinutes) })));
   const weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 
@@ -60,15 +60,13 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
     <section className="card min-w-0 max-w-3xl overflow-hidden p-5 md:p-8">
       <h2 className="text-xl font-bold">Рабочие часы</h2>
       <p className="mt-1 text-sm text-slate-500">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ. Можно добавить несколько интервалов на один день.</p>
-      <div className="mt-6 space-y-3">{windows.map((window) => <div key={window.id} className="grid min-w-0 gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_130px_130px_auto] sm:items-end">
-        <FormField label="День"><Select value={String(window.weekday)} onValueChange={(value) => changeWindow(window.id, { weekday: Number(value) })}><SelectTrigger className="h-11 w-full min-w-0 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{weekdays.map((day, index) => <SelectItem key={day} value={String(index + 1)}>{day}</SelectItem>)}</SelectContent></Select></FormField>
-        <FormField label="Начало"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></FormField>
-        <FormField label="Конец"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></FormField>
-        <Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /><span className="sm:sr-only">Удалить интервал</span></Button>
-        {window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-4">Интервал заканчивается на следующий день.</p>}
-      </div>)}{!windows.length && <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Рабочие часы пока не заданы. Ученики не увидят свободных слотов.</p>}</div>
+      <div className="mt-6 divide-y overflow-hidden rounded-2xl border border-slate-200">{weekdays.map((day, index) => {
+        const weekday = index + 1;
+        const dayWindows = windows.filter((window) => window.weekday === weekday);
+        const open = expandedWeekday === weekday;
+        return <section key={day}><button type="button" className="flex w-full items-center gap-3 p-4 text-left hover:bg-slate-50" aria-expanded={open} onClick={() => setExpandedWeekday(open ? null : weekday)}><span className="min-w-0 flex-1"><strong className="block">{day}</strong><span className="mt-1 block text-sm text-slate-500">{dayWindows.length ? dayWindows.map((window) => `${window.start}–${window.end}`).join(", ") : "Выходной"}</span></span><ChevronDown className={`size-5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} /></button>{open && <div className="space-y-3 border-t border-slate-200 bg-slate-50/60 p-4">{dayWindows.map((window) => <div key={window.id} className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"><FormField label="Начало"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.start} onChange={(event) => changeWindow(window.id, { start: event.target.value })} /></FormField><FormField label="Конец"><Input className="mobile-time-input h-11 rounded-xl" type="time" value={window.end} onChange={(event) => changeWindow(window.id, { end: event.target.value })} /></FormField><Button type="button" variant="outline" aria-label="Удалить интервал" onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}><Trash2 /><span className="sm:sr-only">Удалить интервал</span></Button>{window.end <= window.start && <p className="text-xs text-indigo-600 sm:col-span-3">Интервал заканчивается на следующий день.</p>}</div>)}<Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button></div>}</section>;
+      })}</div>
       <div className="mt-5 grid gap-3 pb-2 sm:flex sm:flex-wrap">
-        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWindows((current) => [...current, { id: crypto.randomUUID(), weekday: 1, start: "10:00", end: "18:00" }])}><Plus />Добавить интервал</Button>
         <Button type="button" className="w-full bg-indigo-600 sm:w-auto" disabled={availabilityPending || windows.some((window) => !window.start || !window.end || window.start === window.end)} onClick={() => void saveAvailability()}>{availabilityPending ? "Сохраняю…" : "Сохранить рабочие часы"}</Button>
       </div>
     </section>

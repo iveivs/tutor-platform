@@ -17,12 +17,26 @@ export type MaterialPreviewItem = {
 
 export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPreviewItem | null; onOpenChange: (open: boolean) => void }) {
   const docxRoot = useRef<HTMLDivElement>(null);
+  const pdfRoot = useRef<HTMLDivElement>(null);
   const [docxResult, setDocxResult] = useState<{ url: string; state: "ready" | "error" }>({ url: "", state: "error" });
+  const [iosPdfScale, setIosPdfScale] = useState(1);
   const isImage = item?.contentType.startsWith("image/") ?? false;
   const isPdf = item?.contentType === "application/pdf";
   const isDocx = item?.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const docxState = item && docxResult.url === item.url ? docxResult.state : "loading";
   const pdfUrl = item && isPdf ? `${item.url}#view=FitH` : "";
+
+  useEffect(() => {
+    if (!item || !isPdf || !pdfRoot.current) return;
+    const iosWebKit = /iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    if (!iosWebKit) return;
+    const root = pdfRoot.current;
+    const update = () => setIosPdfScale(Math.min(1, root.clientWidth / 816));
+    const frame = window.requestAnimationFrame(update);
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [isPdf, item]);
 
   useEffect(() => {
     if (!item || !isDocx) return;
@@ -49,7 +63,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
     <DialogHeader className="border-b px-5 py-4 pr-14"><DialogTitle className="truncate">{item?.title ?? "Просмотр материала"}</DialogTitle><DialogDescription className="truncate">{item?.filename ?? "Материал урока"}</DialogDescription></DialogHeader>
     <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 dark:bg-slate-950 sm:p-5">
       {item && isImage && <img src={item.url} alt={item.title} className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain shadow-sm" />}
-      {item && isPdf && <iframe src={pdfUrl} title={item.title} className="h-[72vh] min-h-[420px] w-full rounded-xl border bg-white" />}
+      {item && isPdf && <div ref={pdfRoot} className="h-[72vh] min-h-[420px] w-full overflow-hidden rounded-xl border bg-white"><iframe src={pdfUrl} title={item.title} className="block border-0 bg-white" style={iosPdfScale < 1 ? { width: `${100 / iosPdfScale}%`, height: `${100 / iosPdfScale}%`, transform: `scale(${iosPdfScale})`, transformOrigin: "top left" } : { width: "100%", height: "100%" }} /></div>}
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-white text-slate-950 shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-slate-500">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
       {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
     </div>

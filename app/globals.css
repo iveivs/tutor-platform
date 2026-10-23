@@ -12,6 +12,7 @@
   --secondary: #eef2ff; --secondary-foreground: #3730a3; --muted: #f1f5f9; --muted-foreground: #64748b;
   --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
   --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
+  --calendar-lesson-upcoming: #0d9488; --calendar-lesson-past: #94a3b8; --calendar-lesson-count-text: #ffffff;
 }
 @media (min-width: 48rem) {
   :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
@@ -32,6 +33,7 @@
   --secondary: #303033; --secondary-foreground: #f2f2f7; --muted: #2a2a2d; --muted-foreground: #a1a1a6;
   --accent: #363638; --accent-foreground: #ffffff; --destructive: #ff6b7a; --border: #404043;
   --input: #4a4a4e; --ring: #8b83ff;
+  --calendar-lesson-upcoming: #14b8a6; --calendar-lesson-past: #64748b; --calendar-lesson-count-text: #ffffff;
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
@@ -57,14 +59,17 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
 .dark .calendar-weekend { background-color: #303033; }
 .dark .calendar-weekend-header { background-color: #303033; }
 .dark .calendar-weekend-date { color: #a1a1a6; }
+.calendar-lesson-count { color: var(--calendar-lesson-count-text); }
+.calendar-lesson-count-upcoming { background-color: var(--calendar-lesson-upcoming); }
+.calendar-lesson-count-past { background-color: var(--calendar-lesson-past); }
 .student-table-row:nth-child(even) { background-color: #f8fafc; }
 .student-table-row:hover { background-color: #eef2ff; }
 .dark .student-table-row:nth-child(even) { background-color: #272729; }
 .dark .student-table-row:hover { background-color: #302e45; }
-.mobile-time-input { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
+.mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
 @supports (-webkit-touch-callout: none) {
-  .mobile-time-input { inline-size: -webkit-fill-available; }
-  .mobile-time-input::-webkit-date-and-time-value { text-align: left; }
+  .mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { inline-size: -webkit-fill-available; }
+  .mobile-time-input::-webkit-date-and-time-value, .mobile-date-input::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { min-inline-size: 0; text-align: left; }
 }
 
 /* Dark counterparts for the remaining palette utilities in the prototype. */
