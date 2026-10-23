@@ -19,6 +19,14 @@ import { groupDoubleLessonCharges, groupDoubleLessonEvents } from "@/lib/double-
 import { collectChangedSections, incrementalDataSections, type IncrementalDataSection } from "@/lib/incremental-sync";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
 
+function normalizeDateOnly(value: unknown) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const serialized = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(serialized)) return serialized;
+  if (/^\d+$/.test(serialized)) return new Date(Number(serialized)).toISOString().slice(0, 10);
+  return serialized.slice(0, 10);
+}
+
 export async function handleGetAppData(request: Request) {
   try {
     const auth = await requireMember(request);
@@ -262,7 +270,7 @@ export async function handleGetAppData(request: Request) {
       lessonUnits: row.lesson_units === null || row.lesson_units === undefined ? undefined : Number(row.lesson_units),
     }));
     const dayNotes = (dayNoteRows.results as Array<Record<string, unknown>>).map((row) => ({
-      id: String(row.id), date: row.note_date instanceof Date ? row.note_date.toISOString().slice(0, 10) : String(row.note_date), body: String(row.body), updatedAt: Number(row.updated_at),
+      id: String(row.id), date: normalizeDateOnly(row.note_date), body: String(row.body), updatedAt: Number(row.updated_at),
     }));
     const payload: Record<string, unknown> = { syncCursor };
     if (needs("students")) payload.students = students;
