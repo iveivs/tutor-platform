@@ -143,6 +143,9 @@ export function translateUiText(value: string) {
 
   let translated = core
     .replace(/^Сегодня, /, "Today, ")
+    .replace(/^Вчера, /, "Yesterday, ")
+    .replace(/^Завтра, /, "Tomorrow, ")
+    .replace(/^Расписание, /, "Schedule, ")
     .replace(/^Кабинет ученика — (.+)$/, "Student portal — $1")
     .replace(/^Пригласить (.+)$/, "Invite $1")
     .replace(/^Введите: (.+)$/, "Enter: $1")
