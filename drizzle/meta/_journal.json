@@ -134,6 +134,13 @@
       "when": 1791993279724,
       "tag": "0018_clean_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792728000000,
+      "tag": "0019_warm_day_note",
+      "breakpoints": true
     }
   ]
 }

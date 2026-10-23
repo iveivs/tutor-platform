@@ -237,6 +237,19 @@ export const lessons = pgTable("lessons", {
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);
 
+export const teacherDayNotes = pgTable("teacher_day_notes", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  authorMemberId: text("author_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  noteDate: date("note_date", { mode: "string" }).notNull(),
+  body: text("body").notNull(),
+  ...timestamps(),
+}, (table) => [
+  check("teacher_day_notes_body_length_check", sql`char_length(${table.body}) between 1 and 1000`),
+  uniqueIndex("teacher_day_notes_author_date_unique").on(table.authorMemberId, table.noteDate),
+  index("idx_teacher_day_notes_workspace_date").on(table.workspaceId, table.noteDate),
+]);
+
 export const lessonNotes = pgTable("lesson_notes", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

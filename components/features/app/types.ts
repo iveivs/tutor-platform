@@ -8,6 +8,7 @@ export type StudentDraft = { name: string; email?: string; floating: boolean; we
 export type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
 export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string };
 export type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
+export type TeacherDayNote = { id: string; date: string; body: string; updatedAt: number };
 export type AvailableSlot = { startsAt: number; endsAt: number; maxUnits: 1 | 2 };
 export type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
 export type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean };
@@ -18,7 +19,7 @@ export type AppNotification = {
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
-export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
+export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; dayNotes?: TeacherDayNote[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
 export type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 export type NotificationPreferences = { soundEnabled: boolean; telegramSchedule: boolean; telegramMessages: boolean; telegramMaterials: boolean };
 export type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };

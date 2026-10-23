@@ -26,6 +26,7 @@ export const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("submitStudentRequest"), requestType: z.enum(["cancel", "reschedule", "new_lesson"]), lessonId: id.optional(), proposedDate: date.optional(), proposedTime: time.optional(), lessonCount, message: z.string().trim().max(500).optional(), studentId: id.optional() }).strict(),
   z.object({ action: z.literal("updateProfile"), name: z.string().trim().min(2).max(80), professionalTitle: z.string().trim().max(50) }).strict(),
   z.object({ action: z.literal("replaceAvailability"), windows: z.array(z.object({ weekday: z.number().int().min(1).max(7), start: time, end: time }).strict()).max(50) }).strict(),
+  z.object({ action: z.literal("saveTeacherDayNote"), date, body: z.string().trim().max(1000) }).strict(),
   z.object({ action: z.literal("markNotificationsRead"), notificationId: id.optional() }).strict(),
   z.object({ action: z.literal("updateOwnAvatarColor"), color: avatarColor }).strict(),
   z.object({ action: z.literal("updateStudentAvatarColor"), studentId: id, color: avatarColor.nullable() }).strict(),

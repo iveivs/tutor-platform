@@ -37,6 +37,17 @@ export async function executeProfileAction({ db, body, auth }: WriteActionContex
     const statements = [db.prepare("DELETE FROM availability_windows WHERE workspace_id = ?").bind(auth.workspaceId)];
     for (const window of windows) statements.push(db.prepare("INSERT INTO availability_windows (id, workspace_id, weekday, start_minutes, end_minutes) VALUES (?, ?, ?, ?, ?)").bind(crypto.randomUUID(), auth.workspaceId, window!.weekday, window!.startMinutes, window!.endMinutes));
     await db.batch(statements);
+  } else if (body.action === "saveTeacherDayNote") {
+    const note = body.body.trim();
+    if (!note) {
+      await db.prepare("DELETE FROM teacher_day_notes WHERE workspace_id = ? AND author_member_id = ? AND note_date = ?")
+        .bind(auth.workspaceId, auth.memberId, body.date).run();
+    } else {
+      await db.prepare(`INSERT INTO teacher_day_notes (id, workspace_id, author_member_id, note_date, body, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(author_member_id, note_date) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`)
+        .bind(crypto.randomUUID(), auth.workspaceId, auth.memberId, body.date, note, Date.now(), Date.now()).run();
+    }
   } else if (body.action === "markNotificationsRead") {
     if (body.notificationId) {
       await db.prepare("UPDATE notifications SET read_at = ? WHERE id = ? AND member_id = ? AND read_at IS NULL")

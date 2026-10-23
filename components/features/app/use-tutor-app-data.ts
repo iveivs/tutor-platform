@@ -16,6 +16,7 @@ import type {
   NotificationPreferences,
   RecurringSlot,
   Student,
+  TeacherDayNote,
   TutorProfile,
 } from "@/components/features/app/types";
 import { readAppData } from "@/lib/app-data-client";
@@ -40,6 +41,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [dayNotes, setDayNotes] = useState<TeacherDayNote[]>([]);
   const [profile, setProfile] = useState<TutorProfile>({
     name: user?.name ?? "Преподаватель",
     professionalTitle: "Репетитор",
@@ -98,6 +100,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     }
     if (data.availabilityWindows) setAvailabilityWindows(data.availabilityWindows);
     if (data.availableSlots) setAvailableSlots(data.availableSlots);
+    if (data.dayNotes) setDayNotes(data.dayNotes);
     if (data.teacherName) setTeacherName(data.teacherName);
     if (data.profile) setProfile(data.profile);
     if (typeof data.syncCursor === "number") syncCursorRef.current = data.syncCursor;
@@ -262,6 +265,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     notifications,
     availabilityWindows,
     availableSlots,
+    dayNotes,
     profile,
     teacherName,
     selectedStudent,

@@ -12,6 +12,7 @@ export async function executeAppDataAction(context: WriteActionContext): Promise
     case "updateStudentAvatarColor":
     case "updateProfile":
     case "replaceAvailability":
+    case "saveTeacherDayNote":
     case "markNotificationsRead":
       return executeProfileAction(context);
     case "createLesson":

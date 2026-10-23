@@ -22,11 +22,11 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [materialsLesson, setMaterialsLesson] = useState<Lesson | null>(null);
   const {
     lessons, students, recurringSlots, requests, balanceEntries, historyEvents, notifications,
-    availabilityWindows, availableSlots, profile, teacherName, selectedStudent, setSelectedStudent,
+    availabilityWindows, availableSlots, dayNotes, profile, teacherName, selectedStudent, setSelectedStudent,
     loading, loadError, showPastLessons, pastLessonsLoading, reload, retry, changePastLessonsVisibility,
     addLesson, updateLesson, deleteLesson, stopLessonSeries, updateStudent, convertTrialContact,
     restoreStudent, deleteStudentPermanently, addStudent, createStudentInvite, addPayment, adjustBalance,
-    reversePayment, submitStudentRequest, markNotificationsRead, updateProfile, updateAvailability,
+    reversePayment, submitStudentRequest, markNotificationsRead, updateProfile, updateAvailability, saveTeacherDayNote,
   } = useTutorAppData({ role, user, preferenceScope });
 
   useScheduleModelContext({ lessons, students, reload });
@@ -46,8 +46,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       <Sidebar view={view} setView={setView} name={profile.name} professionalTitle={profile.professionalTitle} onLogout={onLogout} activityCount={activityCount} />
       <section className="min-h-screen pb-24 lg:ml-[272px] lg:pb-0">
         <MobileHeader name={profile.name} professionalTitle={profile.professionalTitle} activityCount={activityCount} onActivity={() => setView("activity")} />
-        {view === "today" && <TodayView lessons={activeLessons} students={activeStudents} requests={requests} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={lessons} students={students.filter((student) => !student.archived)} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "today" && <TodayView lessons={activeLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={lessons} students={students.filter((student) => !student.archived)} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
         {view === "activity" && <ActivityView requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}

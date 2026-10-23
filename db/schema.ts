@@ -230,6 +230,19 @@ export const lessons = sqliteTable("lessons", {
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);
 
+export const teacherDayNotes = sqliteTable("teacher_day_notes", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  authorMemberId: text("author_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  noteDate: text("note_date").notNull(),
+  body: text("body").notNull(),
+  ...timestamps,
+}, (table) => [
+  check("teacher_day_notes_body_length_check", sql`length(${table.body}) between 1 and 1000`),
+  uniqueIndex("teacher_day_notes_author_date_unique").on(table.authorMemberId, table.noteDate),
+  index("idx_teacher_day_notes_workspace_date").on(table.workspaceId, table.noteDate),
+]);
+
 /** Immutable lesson lifecycle entries preserve changes even when the lesson row is updated. */
 export const lessonEvents = sqliteTable("lesson_events", {
   id: text("id").primaryKey(),

@@ -103,6 +103,17 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     await reload();
     toast.success("Рабочие часы сохранены");
   };
+  const saveTeacherDayNote = async (date: string, body: string) => {
+    try {
+      await saveAppData({ action: "saveTeacherDayNote", date, body });
+      await reload();
+      toast.success(body.trim() ? "Заметка на день сохранена" : "Заметка на день удалена");
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить заметку");
+      return false;
+    }
+  };
   return {
     addLesson,
     updateLesson,
@@ -121,6 +132,7 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     markNotificationsRead,
     updateProfile,
     updateAvailability,
+    saveTeacherDayNote,
   };
 }
 

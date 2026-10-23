@@ -144,6 +144,8 @@ export async function handleGetAppData(request: Request) {
       loadRows(needs("availability") && availabilityAccess, () => db.prepare("SELECT id, weekday, start_minutes, end_minutes FROM availability_windows WHERE workspace_id = ? ORDER BY weekday, start_minutes").bind(auth.workspaceId).all()),
       loadRows(needs("availability") && auth.role === "student" && availabilityAccess, () => db.prepare("SELECT starts_at, ends_at FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND ends_at > ? AND starts_at < ? ORDER BY starts_at").bind(auth.workspaceId, Date.now(), availabilityHorizon).all()),
     ]);
+    const dayNoteRows = await loadRows(needs("dayNotes") && auth.role !== "student", () => db.prepare(`SELECT id, note_date, body, updated_at
+      FROM teacher_day_notes WHERE workspace_id = ? AND author_member_id = ? ORDER BY note_date`).bind(auth.workspaceId, auth.memberId).all());
 
     const seriesByStudent = new Map<string, Array<{ weekday: number; start: number }>>();
     for (const row of seriesRows.results as Array<Record<string, unknown>>) {
@@ -259,6 +261,9 @@ export async function handleGetAppData(request: Request) {
       proposedEndsAt: row.proposed_ends_at ? Number(row.proposed_ends_at) : undefined,
       lessonUnits: row.lesson_units === null || row.lesson_units === undefined ? undefined : Number(row.lesson_units),
     }));
+    const dayNotes = (dayNoteRows.results as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), date: String(row.note_date), body: String(row.body), updatedAt: Number(row.updated_at),
+    }));
     const payload: Record<string, unknown> = { syncCursor };
     if (needs("students")) payload.students = students;
     if (needs("lessons")) { payload.lessons = lessons; payload.recurringSlots = recurringSlots; }
@@ -270,6 +275,7 @@ export async function handleGetAppData(request: Request) {
       if (auth.role === "student") payload.availableSlots = availableSlots;
       else payload.availabilityWindows = availabilityWindows;
     }
+    if (needs("dayNotes") && auth.role !== "student") payload.dayNotes = dayNotes;
     if (needs("profile")) {
       payload.currentStudentId = ownStudentId;
       payload.teacherName = teacherRow?.display_name ?? "Преподаватель";
