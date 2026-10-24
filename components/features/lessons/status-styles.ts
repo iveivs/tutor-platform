@@ -1,17 +1,16 @@
 import type { Lesson } from "@/components/features/app/types";
 
+// Future lessons: "low" is not covered by prepayment yet, "debt" means the balance is already negative.
 const lessonStatusStyles: Record<Lesson["status"], string> = {
-  paid: "bg-success-soft text-success-ink ring-success-ring",
-  low: "bg-brand-soft text-brand-ink ring-brand-ring",
-  debt: "bg-danger-soft text-danger-ink ring-danger-ring",
-  request: "bg-warning-soft text-warning-ink ring-warning-ring",
-  trial: "bg-sky-50 text-sky-700 ring-sky-100",
+  paid: "bg-status-paid text-status-paid-ink ring-status-paid-ring",
+  low: "bg-status-unpaid text-status-unpaid-ink ring-status-unpaid-ring",
+  debt: "bg-status-debt text-status-debt-ink ring-status-debt-ring",
+  request: "bg-status-request text-status-request-ink ring-status-request-ring",
+  trial: "bg-status-trial text-status-trial-ink ring-status-trial-ring",
 };
 
 export function lessonStatusStyle(lesson: Pick<Lesson, "status" | "past">) {
-  if (lesson.past && lesson.status === "paid") return "bg-emerald-100 text-emerald-950 ring-emerald-300 dark:bg-emerald-950/55 dark:text-emerald-100 dark:ring-emerald-800";
-  if (lesson.past && (lesson.status === "debt" || lesson.status === "low")) return "bg-rose-100 text-rose-950 ring-rose-300 dark:bg-rose-950/55 dark:text-rose-100 dark:ring-rose-800";
-  if (!lesson.past && lesson.status === "paid") return "bg-emerald-700 text-white ring-emerald-800 dark:bg-emerald-800 dark:text-emerald-50 dark:ring-emerald-700";
-  if (!lesson.past && (lesson.status === "debt" || lesson.status === "low")) return "bg-rose-700 text-white ring-rose-800 dark:bg-rose-800 dark:text-rose-50 dark:ring-rose-700";
+  if (lesson.past && lesson.status === "paid") return "bg-status-past-paid text-status-past-paid-ink ring-status-past-paid-ring";
+  if (lesson.past && (lesson.status === "debt" || lesson.status === "low")) return "bg-status-past-debt text-status-past-debt-ink ring-status-past-debt-ring";
   return lessonStatusStyles[lesson.status];
 }

@@ -26,8 +26,17 @@
   --danger-soft: var(--color-rose-50); --danger-ink: var(--color-rose-700); --danger-ink-strong: var(--color-rose-800); --danger-ring: var(--color-rose-100); --danger-text: var(--color-rose-600);
   --warning-soft: var(--color-amber-50); --warning-soft-40: color-mix(in oklab, var(--color-amber-50) 40%, transparent); --warning-soft-strong: var(--color-amber-100);
   --warning-ink: var(--color-amber-700); --warning-ring: var(--color-amber-100); --warning-text: var(--color-amber-600);
+  /* Lesson status chips: paid and unpaid are future lessons, past-* are finished ones. */
+  --status-paid: var(--color-emerald-700); --status-paid-ink: var(--color-white); --status-paid-ring: var(--color-emerald-800);
+  --status-unpaid: var(--color-rose-700); --status-unpaid-ink: var(--color-white); --status-unpaid-ring: var(--color-rose-800);
+  --status-debt: var(--color-rose-700); --status-debt-ink: var(--color-white); --status-debt-ring: var(--color-rose-800);
+  --status-past-paid: var(--color-emerald-100); --status-past-paid-ink: var(--color-emerald-950); --status-past-paid-ring: var(--color-emerald-300);
+  --status-past-debt: var(--color-rose-100); --status-past-debt-ink: var(--color-rose-950); --status-past-debt-ring: var(--color-rose-300);
+  --status-request: var(--color-amber-50); --status-request-ink: var(--color-amber-700); --status-request-ring: var(--color-amber-100);
+  --status-trial: var(--color-sky-50); --status-trial-ink: var(--color-sky-700); --status-trial-ring: var(--color-sky-100);
+  --hero-start: var(--color-indigo-600); --hero-end: var(--color-violet-600); --hero-muted: var(--color-indigo-100);
+  --attention: var(--color-indigo-600); --attention-dot: var(--color-rose-500);
 }
-/* Redesign preview: v2 token values go under :root[data-design="v2"] and :root.dark[data-design="v2"] (see components/design-provider.tsx). */
 @media (min-width: 48rem) {
   :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
 }
@@ -56,6 +65,12 @@
   --success-soft: rgb(6 78 59 / 0.38); --success-ink: #6ee7b7; --success-ink-strong: #6ee7b7; --success-ring: var(--border);
   --danger-soft: rgb(136 19 55 / 0.36); --danger-ink: #fda4af; --danger-ink-strong: #fda4af; --danger-ring: var(--border);
   --warning-soft: rgb(120 53 15 / 0.34); --warning-soft-40: rgb(120 53 15 / 0.34); --warning-soft-strong: rgb(146 64 14 / 0.42); --warning-ink: #fcd34d; --warning-ring: var(--border);
+  --status-paid: var(--color-emerald-800); --status-paid-ink: var(--color-emerald-50); --status-paid-ring: var(--color-emerald-700);
+  --status-unpaid: var(--color-rose-800); --status-unpaid-ink: var(--color-rose-50); --status-unpaid-ring: var(--color-rose-700);
+  --status-debt: var(--color-rose-800); --status-debt-ink: var(--color-rose-50); --status-debt-ring: var(--color-rose-700);
+  --status-past-paid: color-mix(in oklab, var(--color-emerald-950) 55%, transparent); --status-past-paid-ink: var(--color-emerald-100); --status-past-paid-ring: var(--color-emerald-800);
+  --status-past-debt: color-mix(in oklab, var(--color-rose-950) 55%, transparent); --status-past-debt-ink: var(--color-rose-100); --status-past-debt-ring: var(--color-rose-800);
+  --status-request: rgb(120 53 15 / 0.34); --status-request-ink: #fcd34d; --status-request-ring: var(--border);
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
@@ -69,6 +84,14 @@
   --color-success-soft: var(--success-soft); --color-success-ink: var(--success-ink); --color-success-ink-strong: var(--success-ink-strong); --color-success-ring: var(--success-ring); --color-success-text: var(--success-text);
   --color-danger-soft: var(--danger-soft); --color-danger-ink: var(--danger-ink); --color-danger-ink-strong: var(--danger-ink-strong); --color-danger-ring: var(--danger-ring); --color-danger-text: var(--danger-text);
   --color-warning-soft: var(--warning-soft); --color-warning-soft-40: var(--warning-soft-40); --color-warning-soft-strong: var(--warning-soft-strong); --color-warning-ink: var(--warning-ink); --color-warning-ring: var(--warning-ring); --color-warning-text: var(--warning-text);
+  --color-status-paid: var(--status-paid); --color-status-paid-ink: var(--status-paid-ink); --color-status-paid-ring: var(--status-paid-ring);
+  --color-status-unpaid: var(--status-unpaid); --color-status-unpaid-ink: var(--status-unpaid-ink); --color-status-unpaid-ring: var(--status-unpaid-ring);
+  --color-status-debt: var(--status-debt); --color-status-debt-ink: var(--status-debt-ink); --color-status-debt-ring: var(--status-debt-ring);
+  --color-status-past-paid: var(--status-past-paid); --color-status-past-paid-ink: var(--status-past-paid-ink); --color-status-past-paid-ring: var(--status-past-paid-ring);
+  --color-status-past-debt: var(--status-past-debt); --color-status-past-debt-ink: var(--status-past-debt-ink); --color-status-past-debt-ring: var(--status-past-debt-ring);
+  --color-status-request: var(--status-request); --color-status-request-ink: var(--status-request-ink); --color-status-request-ring: var(--status-request-ring);
+  --color-status-trial: var(--status-trial); --color-status-trial-ink: var(--status-trial-ink); --color-status-trial-ring: var(--status-trial-ring);
+  --color-hero-start: var(--hero-start); --color-hero-end: var(--hero-end); --color-hero-muted: var(--hero-muted); --color-attention: var(--attention); --color-attention-dot: var(--attention-dot);
   --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -101,4 +124,79 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
   .mobile-time-input::-webkit-date-and-time-value, .mobile-date-input::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { min-inline-size: 0; text-align: left; }
 }
 
+/* Redesign v2 «синий и коралл» (logo palette). Enabled per device by components/design-provider.tsx via <html data-design="v2">. */
+:root[data-design="v2"] {
+  /* Remapped palette scales recolour the remaining literal indigo/slate utilities in one place. */
+  --color-indigo-50: #eef5f7; --color-indigo-100: #dcebef; --color-indigo-200: #bfdce3; --color-indigo-300: #94c0cc; --color-indigo-400: #5f98ac; --color-indigo-500: #3b7690;
+  --color-indigo-600: #285e78; --color-indigo-700: #1f4a61; --color-indigo-800: #1f3a4d; --color-indigo-900: #172c3b; --color-indigo-950: #0f1e29;
+  --color-slate-50: #f4f1eb; --color-slate-100: #efeae2; --color-slate-200: #e4ded4; --color-slate-300: #cfc8bc; --color-slate-400: #8e98a2; --color-slate-500: #6b7782;
+  --color-slate-600: #56626e; --color-slate-700: #3a4856; --color-slate-800: #24323f; --color-slate-900: #172431; --color-slate-950: #0f1a23;
+  --radius: 0.625rem; --radius-control: 0.625rem; --radius-card: 0.875rem;
+  --background: #f6f3ee; --foreground: #142433; --card: #ffffff; --card-foreground: #142433;
+  --popover: #ffffff; --popover-foreground: #142433; --primary: #1f3a4d; --primary-foreground: #ffffff;
+  --secondary: #dcebef; --secondary-foreground: #1f3a4d; --muted: #efeae2; --muted-foreground: #56626e;
+  --accent: #efeae2; --accent-foreground: #142433; --destructive: #a8231b; --border: #e4ded4;
+  --input: #d3ccc0; --ring: #3b7690;
+  --calendar-lesson-upcoming: #1f6f8b; --calendar-lesson-past: #a7a39c; --calendar-lesson-count-text: #ffffff;
+  --surface: #ffffff; --surface-subtle: #f4f1eb; --surface-muted: #efeae2; --surface-glass-90: rgb(255 255 255 / 0.9); --surface-glass-95: rgb(255 255 255 / 0.95);
+  --line: #e4ded4;
+  --ink-strong: #142433; --ink-body: #2b3a48; --ink-secondary: #3f4d5a; --ink-muted: #56626e; --ink-subtle: #6f7a85; --ink-faint: #a7a39c;
+  --brand-solid: #1f3a4d; --brand-solid-hover: #172c3b; --brand-text: #285e78; --brand-line: #bfdce3;
+  --brand-soft: #dcebef; --brand-soft-strong: #bfdce3; --brand-ink: #1f3a4d; --brand-ink-strong: #172c3b;
+  --brand-ring: #bfdce3; --brand-glow: rgb(31 58 77 / 0.18); --brand-glow-70: rgb(31 58 77 / 0.12);
+  --success-soft: #e2f1e8; --success-ink: #1e6b45; --success-ink-strong: #17573a; --success-ring: #c6e3d1; --success-text: #1e7a4e;
+  --danger-soft: #fbe4e1; --danger-ink: #a8231b; --danger-ink-strong: #8a1c15; --danger-ring: #f2c4be; --danger-text: #b42a20;
+  --warning-soft: #fbefd9; --warning-soft-40: rgb(251 239 217 / 0.5); --warning-soft-strong: #f6e0b5; --warning-ink: #8a5300; --warning-ring: #f0ddb4; --warning-text: #9a5d00;
+  --status-paid: #e2f1e8; --status-paid-ink: #1e6b45; --status-paid-ring: #c6e3d1;
+  --status-unpaid: #fbefd9; --status-unpaid-ink: #8a5300; --status-unpaid-ring: #f0ddb4;
+  --status-debt: #fbe4e1; --status-debt-ink: #a8231b; --status-debt-ring: #f2c4be;
+  --status-past-paid: #efeae2; --status-past-paid-ink: #56626e; --status-past-paid-ring: #e4ded4;
+  --status-past-debt: #efeae2; --status-past-debt-ink: #a8231b; --status-past-debt-ring: #e4ded4;
+  --status-request: #dcebef; --status-request-ink: #1f4e66; --status-request-ring: #bfdce3;
+  --status-trial: #eee8f7; --status-trial-ink: #5b3f94; --status-trial-ring: #ddd2f0;
+  --hero-start: #1f3a4d; --hero-end: #172c3b; --hero-muted: #bfdce3;
+  --attention: #e8552d; --attention-dot: #e8552d;
+}
+:root.dark[data-design="v2"] {
+  --background: #0f1a23; --foreground: #eef2f5; --card: #16232e; --card-foreground: #eef2f5;
+  --popover: #1a2835; --popover-foreground: #eef2f5; --primary: #2e6782; --primary-foreground: #ffffff;
+  --secondary: #1f3442; --secondary-foreground: #eef2f5; --muted: #1e2d3a; --muted-foreground: #9eadb9;
+  --accent: #22323f; --accent-foreground: #eef2f5; --destructive: #ff8a7d; --border: #263746;
+  --input: #2e4252; --ring: #6fb7cc;
+  --calendar-lesson-upcoming: #6fb7cc; --calendar-lesson-past: #4e5e6b; --calendar-lesson-count-text: #0f1a23;
+  --surface: #16232e; --surface-subtle: #1b2a36; --surface-muted: #22323f; --surface-glass-90: rgb(22 35 46 / 0.94); --surface-glass-95: rgb(22 35 46 / 0.94);
+  --line: #263746;
+  --ink-strong: #eef2f5; --ink-body: #dce3e9; --ink-secondary: #c3ced7; --ink-muted: #9eadb9; --ink-subtle: #8696a3; --ink-faint: #5e6f7c;
+  --brand-solid: #2e6782; --brand-solid-hover: #3a7a97; --brand-text: #8cc3d3; --brand-line: #2e4a5c;
+  --brand-soft: #1f3442; --brand-soft-strong: #26404f; --brand-ink: #bfdce3; --brand-ink-strong: #d4e8ee;
+  --brand-ring: #263746; --brand-glow: rgb(0 0 0 / 0.3); --brand-glow-70: rgb(0 0 0 / 0.3);
+  --success-soft: #143326; --success-ink: #7bd3a4; --success-ink-strong: #8fddb3; --success-ring: #1e4434; --success-text: #6cc896;
+  --danger-soft: #3e1a17; --danger-ink: #ff9c90; --danger-ink-strong: #ffb1a7; --danger-ring: #5a2722; --danger-text: #ff8a7d;
+  --warning-soft: #3a2b12; --warning-soft-40: rgb(58 43 18 / 0.6); --warning-soft-strong: #4a3714; --warning-ink: #f5c46b; --warning-ring: #5a4420; --warning-text: #f0b85a;
+  --status-paid: #143326; --status-paid-ink: #7bd3a4; --status-paid-ring: #1e4434;
+  --status-unpaid: #3a2b12; --status-unpaid-ink: #f5c46b; --status-unpaid-ring: #5a4420;
+  --status-debt: #3e1a17; --status-debt-ink: #ff9c90; --status-debt-ring: #5a2722;
+  --status-past-paid: #1b2a36; --status-past-paid-ink: #9eadb9; --status-past-paid-ring: #263746;
+  --status-past-debt: #1b2a36; --status-past-debt-ink: #ff9c90; --status-past-debt-ring: #263746;
+  --status-request: #1f3442; --status-request-ink: #a9cbd3; --status-request-ring: #2e4a5c;
+  --status-trial: #2a2340; --status-trial-ink: #c7b5f0; --status-trial-ring: #3a3157;
+  --hero-start: #1f3a4d; --hero-end: #16303f; --hero-muted: #bfdce3;
+  --attention: #ff7a4d; --attention-dot: #ff7a4d;
+}
+:root[data-design="v2"] body { font-family: "Golos Text Variable", "Golos Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+:root[data-design="v2"] ::selection { background: #dcebef; color: #142433; }
+:root[data-design="v2"] .card { box-shadow: 0 1px 2px rgba(20, 36, 51, 0.04), 0 8px 24px rgba(20, 36, 51, 0.04); }
+:root.dark[data-design="v2"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px rgba(0, 0, 0, 0.24); }
+:root[data-design="v2"] .calendar-surface, :root[data-design="v2"] .calendar-weekday { background-color: #ffffff; }
+:root[data-design="v2"] .calendar-weekend { background-color: #f7f4ef; }
+:root[data-design="v2"] .calendar-weekend-header { background-color: #f1ede6; }
+:root[data-design="v2"] .calendar-weekend-date { color: #56626e; }
+:root.dark[data-design="v2"] .calendar-surface { background-color: #16232e; border-color: #2e4252; }
+:root.dark[data-design="v2"] .calendar-weekday { background-color: #16232e; }
+:root.dark[data-design="v2"] .calendar-weekend, :root.dark[data-design="v2"] .calendar-weekend-header { background-color: #1b2a36; }
+:root.dark[data-design="v2"] .calendar-weekend-date { color: #9eadb9; }
+:root[data-design="v2"] .student-table-row:nth-child(even) { background-color: #faf8f4; }
+:root[data-design="v2"] .student-table-row:hover { background-color: #eef5f7; }
+:root.dark[data-design="v2"] .student-table-row:nth-child(even) { background-color: #192733; }
+:root.dark[data-design="v2"] .student-table-row:hover { background-color: #1f3442; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }

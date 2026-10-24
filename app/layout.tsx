@@ -3,6 +3,8 @@ import { LanguageProvider } from "@/components/language-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CookieNotice } from "@/components/cookie-notice";
 import { DesignProvider } from "@/components/design-provider";
+// Redesign font. The browser downloads the files only when html[data-design="v2"] uses the family.
+import "@fontsource-variable/golos-text";
 import "./globals.css";
 
 export const metadata: Metadata = {
