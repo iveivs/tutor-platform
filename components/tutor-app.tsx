@@ -6,6 +6,8 @@ import { ActivityView } from "@/components/features/activity/activity-view";
 import { useScheduleModelContext } from "@/components/features/app/use-schedule-model-context";
 import { useTutorAppData } from "@/components/features/app/use-tutor-app-data";
 import { CalendarView, TodayView } from "@/components/features/schedule/schedule-views";
+import { TodayViewV2 } from "@/components/features/schedule/today-view-v2";
+import { useDesign } from "@/components/design-provider";
 import { LessonMaterialsDialog } from "@/components/features/materials/lesson-materials-dialog";
 import { TeacherMaterialsView } from "@/components/features/materials/teacher-materials-view";
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
@@ -18,6 +20,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 export default function TutorApp({ role = "owner", user, onLogout }: { role?: "owner" | "teacher" | "student"; user?: CurrentUser; onLogout?: () => void }) {
   const preferenceScope = user?.email || role;
+  const { design } = useDesign();
   const [view, setView] = useState<View>("today");
   const [materialsLesson, setMaterialsLesson] = useState<Lesson | null>(null);
   const {
@@ -46,7 +49,8 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       <Sidebar view={view} setView={setView} name={profile.name} professionalTitle={profile.professionalTitle} onLogout={onLogout} activityCount={activityCount} />
       <section className="min-h-screen pb-24 lg:ml-[var(--sidebar-width)] lg:pb-0">
         <MobileHeader name={profile.name} professionalTitle={profile.professionalTitle} activityCount={activityCount} onActivity={() => setView("activity")} view={view} />
-        {view === "today" && <TodayView lessons={activeLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "today" && design === "v2" && <TodayViewV2 lessons={activeLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "today" && design !== "v2" && <TodayView lessons={activeLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={lessons} students={students.filter((student) => !student.archived)} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
