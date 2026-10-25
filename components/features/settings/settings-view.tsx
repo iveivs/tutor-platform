@@ -8,6 +8,7 @@ import { useDesign } from "@/components/design-provider";
 import { FormField } from "@/components/common/form-field";
 import type { AvailabilityWindow } from "@/components/features/app/types";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -74,6 +75,7 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
       </div>
     </section>
     <TelegramNotificationsCard />
+    {design === "v2" && <section className="card max-w-3xl p-5 md:p-8 lg:hidden"><h2 className="text-xl font-bold">Тема и язык</h2><p className="mt-1 text-sm text-ink-muted">Оформление кабинета на этом устройстве.</p><div className="mt-4 rounded-2xl border border-line p-2"><ThemeToggle /></div></section>}
     <section className="card max-w-3xl p-5 md:p-8"><h2 className="text-xl font-bold">Новый интерфейс</h2><p className="mt-1 text-sm text-ink-muted">Предварительная версия редизайна. Включается только на этом устройстве.</p><label className="mt-4 flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-line p-4"><span className="min-w-0"><strong className="block text-sm">Показывать новый интерфейс</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">Изменения появляются поэтапно. Выключите, чтобы вернуться к привычному виду.</span></span><Switch checked={design === "v2"} onCheckedChange={(checked) => setDesign(checked ? "v2" : "v1")} aria-label="Показывать новый интерфейс" /></label></section>
     {isPlatformAdmin && <section className="card max-w-3xl p-5 md:p-8"><h2 className="text-xl font-bold">Управление платформой</h2><p className="mt-1 text-sm text-ink-muted">Список кабинетов преподавателей и управление доступом.</p><Button asChild variant="outline" className="mt-4"><a href="/admin"><ShieldCheck />Открыть админку</a></Button></section>}
     {onLogout && <section className="card max-w-3xl p-5 lg:hidden"><h2 className="text-xl font-bold">Сеанс</h2><p className="mt-1 text-sm text-ink-muted">Завершить работу в кабинете на этом устройстве.</p><Button type="button" variant="outline" onClick={onLogout} className="mt-4 h-11 w-full rounded-xl text-danger-text hover:bg-rose-50 hover:text-rose-700"><LogOut />Выйти</Button></section>}

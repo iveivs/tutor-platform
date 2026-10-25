@@ -6,7 +6,7 @@
 :root {
   /* Product design tokens. Components consume these values; feature code should not invent new ones. */
   --space-page-x: 1rem; --space-page-y: 1.25rem; --space-card: 1.25rem; --space-card-comfortable: 1.5rem; --space-section: 1.25rem;
-  --control-height: 2.75rem; --control-height-lg: 3rem; --radius-control: 0.75rem; --radius-card: 1.5rem;
+  --control-height: 2.75rem; --control-height-lg: 3rem; --radius-control: 0.75rem; --radius-card: 1.5rem; --sidebar-width: 272px;
   --background: #f6f8fc; --foreground: #0f172a; --card: #ffffff; --card-foreground: #0f172a;
   --popover: #ffffff; --popover-foreground: #0f172a; --primary: #4f46e5; --primary-foreground: #ffffff;
   --secondary: #eef2ff; --secondary-foreground: #3730a3; --muted: #f1f5f9; --muted-foreground: #64748b;
@@ -131,7 +131,7 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
   --color-indigo-600: #285e78; --color-indigo-700: #1f4a61; --color-indigo-800: #1f3a4d; --color-indigo-900: #172c3b; --color-indigo-950: #0f1e29;
   --color-slate-50: #f4f1eb; --color-slate-100: #efeae2; --color-slate-200: #e4ded4; --color-slate-300: #cfc8bc; --color-slate-400: #8e98a2; --color-slate-500: #6b7782;
   --color-slate-600: #56626e; --color-slate-700: #3a4856; --color-slate-800: #24323f; --color-slate-900: #172431; --color-slate-950: #0f1a23;
-  --radius: 0.625rem; --radius-control: 0.625rem; --radius-card: 0.875rem;
+  --radius: 0.625rem; --radius-control: 0.625rem; --radius-card: 0.875rem; --sidebar-width: 248px;
   --background: #f6f3ee; --foreground: #142433; --card: #ffffff; --card-foreground: #142433;
   --popover: #ffffff; --popover-foreground: #142433; --primary: #1f3a4d; --primary-foreground: #ffffff;
   --secondary: #dcebef; --secondary-foreground: #1f3a4d; --muted: #efeae2; --muted-foreground: #56626e;
