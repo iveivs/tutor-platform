@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronLeft, ChevronRight, Clock3, NotebookPen, UserRound } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, Clock3, UserRound } from "lucide-react";
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import type { Lesson, LessonDraft, LessonRequest, Student, TeacherDayNote, View } from "@/components/features/app/types";
-import { LessonContentBadges } from "@/components/features/lessons/lesson-content-badges";
-import { lessonStatusStyle } from "@/components/features/lessons/status-styles";
+import { LessonCardV2 } from "@/components/features/schedule/lesson-card-v2";
 import { AddLessonDialog, EditLessonDialog } from "@/components/features/schedule/lesson-dialogs";
 import { TeacherDayNotePanel } from "@/components/features/schedule/schedule-views";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,6 @@ type TodayViewProps = { lessons: Lesson[]; students: Student[]; requests: Lesson
 
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const weekStart = (date: string) => shiftDate(date, -((dateAtNoon(date).getUTCDay() + 6) % 7));
-const lessonMeta = (lesson: Lesson) => lesson.lessonType === "trial" ? "Пробное занятие · бесплатно" : lesson.units === 2 ? "Двойной урок · 2 занятия" : "Барабаны · Студия";
 
 // Redesign v2 of the "Today" screen. Same data and actions as TodayView, different presentation.
 export function TodayViewV2({ lessons, students, requests, dayNotes, onSaveDayNote, onAdd, onUpdate, onDelete, onMaterials, setView, onOpenStudent }: TodayViewProps) {
@@ -69,21 +67,7 @@ export function TodayViewV2({ lessons, students, requests, dayNotes, onSaveDayNo
             <p className="text-sm text-ink-muted">{russianPlural(units, "занятие", "занятия", "занятий")}{selectedLessons.length > 0 && ` · ${selectedLessons[0].time}–${selectedLessons[selectedLessons.length - 1].end}`}</p>
             <div className="flex items-center gap-2"><Button type="button" variant="ghost" size="sm" className="hidden text-brand-text md:inline-flex" onClick={() => setView("calendar")}>Открыть календарь</Button><TeacherDayNotePanel compact key={`${selectedDate}:${dayNote?.id ?? "new"}`} date={selectedDate} note={dayNote} onSave={onSaveDayNote} /></div>
           </div>
-          {selectedLessons.length ? selectedLessons.map((lesson) => {
-            const isNext = lesson.id === nextLesson?.id;
-            return <article key={lesson.id} className="grid grid-cols-[44px_minmax(0,1fr)] gap-2.5 md:grid-cols-[56px_minmax(0,1fr)]">
-              <div className="pt-3 text-right"><span className="block text-[15px] font-bold leading-5">{lesson.time}</span><span className="block text-xs text-ink-muted">{lesson.end}</span></div>
-              <div className={`flex min-w-0 items-start gap-2 rounded-[var(--radius-card)] border bg-surface p-3 transition md:items-center md:p-4 ${isNext ? "border-attention ring-1 ring-attention" : "border-line hover:border-brand-line"}`}>
-                <button type="button" onClick={() => setEditing(lesson)} className="min-w-0 flex-1 text-left">
-                  {isNext && <span className="mb-1.5 inline-flex rounded-md bg-attention px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">Следующий</span>}
-                  <span data-no-translate className="block truncate text-base font-bold">{lesson.name}</span>
-                  <span className="block truncate text-sm text-ink-muted">{lessonMeta(lesson)}</span>
-                  <span className="mt-2 flex flex-wrap items-center gap-1.5"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${lessonStatusStyle(lesson)}`}>{lesson.label}</span><LessonContentBadges lesson={lesson} className="contents" /></span>
-                </button>
-                <Button type="button" variant="outline" aria-label="Материалы урока" className="size-10 shrink-0 p-0 md:h-9 md:w-auto md:px-3" onClick={() => onMaterials(lesson)}><NotebookPen /><span className="hidden md:inline">Материалы</span></Button>
-              </div>
-            </article>;
-          }) : <EmptyState text="На этот день уроков нет" />}
+          {selectedLessons.length ? selectedLessons.map((lesson) => <LessonCardV2 key={lesson.id} lesson={lesson} isNext={lesson.id === nextLesson?.id} onSelect={setEditing} onMaterials={onMaterials} />) : <EmptyState text="На этот день уроков нет" />}
         </section>
       </div>
 
@@ -97,7 +81,7 @@ export function TodayViewV2({ lessons, students, requests, dayNotes, onSaveDayNo
         </section>
         <section aria-label="Ближайший урок" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] bg-hero-start p-4 text-white">
           <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-hero-muted">Ближайший урок</p>{nextLesson ? <><p className="mt-0.5 truncate text-lg font-bold"><span data-no-translate>{nextLesson.name}</span> · {nextLesson.time}</p><p className="text-sm text-hero-muted">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</p></> : <p className="mt-0.5 text-sm text-hero-muted">Будущих уроков пока нет</p>}</div>
-          {nextLesson && <button type="button" onClick={() => onOpenStudent(nextLesson.studentId)} className="w-full rounded-[var(--radius-control)] bg-white/15 px-3 py-2.5 text-sm font-semibold hover:bg-white/20 sm:w-auto sm:shrink-0">Открыть карточку</button>}
+          {nextLesson && <button type="button" onClick={() => onOpenStudent(nextLesson.studentId)} className="w-full rounded-[var(--radius-control)] bg-white/15 px-3 py-2.5 text-sm font-semibold hover:bg-white/20 sm:w-auto sm:shrink-0 xl:w-full">Открыть карточку</button>}
         </section>
       </aside>
     </div>

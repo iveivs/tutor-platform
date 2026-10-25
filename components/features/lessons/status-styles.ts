@@ -9,6 +9,11 @@ const lessonStatusStyles: Record<Lesson["status"], string> = {
   trial: "bg-status-trial text-status-trial-ink ring-status-trial-ring",
 };
 
+// Redesign v2 wording: the API label "Баланс -4" (student owes four lessons) is shown as "Долг 4".
+export function lessonStatusLabelV2(lesson: Pick<Lesson, "label">) {
+  return lesson.label.replace(/^Баланс -(\d+)$/, "Долг $1");
+}
+
 export function lessonStatusStyle(lesson: Pick<Lesson, "status" | "past">) {
   if (lesson.past && lesson.status === "paid") return "bg-status-past-paid text-status-past-paid-ink ring-status-past-paid-ring";
   if (lesson.past && (lesson.status === "debt" || lesson.status === "low")) return "bg-status-past-debt text-status-past-debt-ink ring-status-past-debt-ring";

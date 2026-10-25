@@ -160,6 +160,7 @@ export function translateUiText(value: string) {
     .replace(/^Изображения \((\d+)\)$/, "Images ($1)")
     .replace(/^Цвет аватара: (.+)$/, "Avatar color: $1")
     .replace(/^Баланс (-?\d+)$/, (_, count: string) => `Balance: ${englishLessons(count)}`)
+    .replace(/^Долг (\d+)$/, (_, count: string) => `Owes ${englishLessons(count)}`)
     .replace(/^Баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance: ${englishLessons(count)}`)
     .replace(/^Баланс на момент архивации: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance when archived: ${englishLessons(count)}`)
     .replace(/^Текущий баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Current balance: ${englishLessons(count)}`)

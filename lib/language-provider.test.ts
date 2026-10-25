@@ -29,6 +29,8 @@ describe("translateUiText", () => {
     ["Баланс: 10 занятий", "Balance: 10 lessons"],
     ["Баланс: -1 занятие", "Balance: -1 lesson"],
     ["Баланс -1", "Balance: -1 lesson"],
+    ["Долг 4", "Owes 4 lessons"],
+    ["Долг 1", "Owes 1 lesson"],
     ["Необходимо оплатить 1 занятие", "Payment required for 1 lesson"],
     ["Вс 15:00", "Sun 15:00"],
     ["пн, 12 окт.", "Mon, 12 Oct"],
