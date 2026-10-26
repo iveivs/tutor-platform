@@ -30,7 +30,7 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
   }, [currentDay, selectedDate]);
 
   const selectedLessons = lessons.filter((lesson) => lesson.date === selectedDate);
-  const lessonDates = new Set(lessons.map((lesson) => lesson.date));
+  const lessonCounts = lessons.reduce<Record<string, number>>((counts, lesson) => ({ ...counts, [lesson.date]: (counts[lesson.date] ?? 0) + 1 }), {});
   const monday = weekStart(selectedDate);
   const week = weekdayLabels.map((label, index) => ({ label, date: shiftDate(monday, index) }));
   const debtCount = students.filter((student) => student.balance < 0).length;
@@ -51,10 +51,10 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
             {week.map(({ label, date }) => {
               const selected = date === selectedDate;
               const past = date < currentDay;
-              return <button key={date} type="button" aria-pressed={selected} aria-label={dateTitle(date, { weekday: "long", day: "numeric", month: "long" })} onClick={() => setSelectedDate(date)} className={`flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-control)] transition ${selected ? "bg-brand-solid text-white" : past ? "text-ink-muted hover:bg-surface-subtle" : "text-ink-strong hover:bg-surface-subtle"}`}>
+              return <button key={date} type="button" aria-pressed={selected} aria-label={dateTitle(date, { weekday: "long", day: "numeric", month: "long" })} onClick={() => setSelectedDate(date)} className={`flex h-[4.25rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-control)] transition ${selected ? "bg-brand-solid text-white" : past ? "text-ink-muted hover:bg-surface-subtle" : "text-ink-strong hover:bg-surface-subtle"}`}>
                 <span className="text-xs font-medium">{label}</span>
                 <span className={`text-base ${date === currentDay ? "font-extrabold" : "font-semibold"}`}>{dateAtNoon(date).getUTCDate()}</span>
-                <span className={`size-1.5 rounded-full ${lessonDates.has(date) ? selected ? "bg-white" : "bg-[var(--calendar-lesson-upcoming)]" : "bg-transparent"}`} />
+                {lessonCounts[date] ? <span aria-label={russianPlural(lessonCounts[date], "урок", "урока", "уроков")} className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold leading-none ${selected ? "bg-white text-brand-solid" : "calendar-lesson-count calendar-lesson-count-upcoming"}`}>{lessonCounts[date]}</span> : <span aria-hidden className="h-5" />}
               </button>;
             })}
           </div>

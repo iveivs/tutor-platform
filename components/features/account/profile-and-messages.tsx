@@ -179,7 +179,7 @@ function MessagesChat({ initialPeerId }: { initialPeerId?: string }) {
         const showDay = index === 0 || day !== messageDayLabel(thread[index - 1].createdAt);
         return <div key={message.id} className="contents">
           {showDay && <span className="my-1 self-center rounded-full bg-surface px-2.5 py-0.5 text-xs text-ink-muted">{day}</span>}
-          <div className={`flex max-w-[82%] flex-col gap-1 rounded-2xl px-3 py-2 text-[15px] leading-5 ${mine ? "self-end rounded-br-md bg-brand-solid text-white" : "self-start rounded-bl-md border border-line bg-surface"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className="self-end text-[11px] opacity-70">{messageTime.format(new Date(message.createdAt))}</time></div>
+          <div className={`flex max-w-[82%] flex-col gap-1 rounded-2xl px-3 py-2 text-[15px] leading-5 ${mine ? "self-end rounded-br-md bg-brand-solid text-white" : "self-start rounded-bl-md border border-line bg-surface"}`}><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p><time className="self-end text-[11px] opacity-70">{messageTime.format(new Date(message.createdAt))}</time></div>
         </div>;
       })}
       {!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-ink-muted">Сообщений пока нет</div>}

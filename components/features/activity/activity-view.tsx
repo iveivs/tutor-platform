@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, CalendarDays, History } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, History } from "lucide-react";
 
 import { AppShell } from "@/components/common/app-shell";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
@@ -49,17 +49,17 @@ function NotificationRow({ item, expanded, last, onToggle, onOpen }: { item: App
   const actionLabel = notificationActionLabel(item);
   const details = notificationDetails(item);
   return <div className={`${last ? "" : "border-b border-line"} ${item.read ? "" : "bg-brand-soft/40"}`}>
-    <button type="button" aria-expanded={expanded} onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-      <span aria-hidden className={`size-2 shrink-0 rounded-full ${item.read ? "bg-transparent" : "bg-attention-dot"}`} />
+    <button type="button" aria-expanded={details.length > 0 ? expanded : undefined} onClick={onToggle} className="flex w-full items-start gap-3 px-4 pb-2 pt-3 text-left">
+      <span aria-hidden className={`mt-2 size-2 shrink-0 rounded-full ${item.read ? "bg-transparent" : "bg-attention-dot"}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={`text-[15px] ${item.read ? "font-medium" : "font-bold"}`}>{item.title}</span>
         <span className={`text-sm text-ink-muted ${expanded ? "" : "truncate"}`}>{item.body}</span>
       </span>
-      <time className="shrink-0 text-xs text-ink-subtle">{shortMoment(item.createdAt)}</time>
+      <span className="flex shrink-0 flex-col items-end gap-1"><time className="text-xs text-ink-subtle">{shortMoment(item.createdAt)}</time>{details.length > 0 && <ChevronDown aria-hidden className={`size-4 text-ink-subtle transition-transform ${expanded ? "rotate-180" : ""}`} />}</span>
     </button>
-    {expanded && (details.length > 0 || actionLabel) && <div className="px-4 pb-4 pl-9">
-      {details.length > 0 && <dl className="grid grid-cols-2 gap-x-4 gap-y-2">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold text-ink-subtle">{detail.label}</dt><dd className="break-words text-sm font-medium">{detail.value}</dd></div>)}</dl>}
-      {actionLabel && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onOpen}>{actionLabel}<ArrowRight /></Button>}
+    {(actionLabel || details.length > 0) && <div className="px-4 pb-3 pl-9">
+      {expanded && details.length > 0 && <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold text-ink-subtle">{detail.label}</dt><dd className="text-sm font-medium [overflow-wrap:anywhere]">{detail.value}</dd></div>)}</dl>}
+      {actionLabel ? <Button type="button" variant="outline" size="sm" onClick={onOpen}>{actionLabel}<ArrowRight /></Button> : !expanded && <button type="button" onClick={onToggle} className="text-sm font-semibold text-brand-text hover:underline">Подробнее</button>}
     </div>}
   </div>;
 }
@@ -92,7 +92,7 @@ export function ActivityView({ requests, notifications, historyEvents, students,
           <h2 id="activity-requests-title" className="text-lg font-bold">Запросы{requests.length > 0 ? ` · ${requests.length}` : ""}</h2>
           {requests.length > 0 && <span className="text-sm text-ink-muted">ждут ответа</span>}
         </div>
-        {requests.length > 0 && <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">{activityFilters.map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)} className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold transition ${filter === item ? "bg-brand-solid text-white" : "border border-line bg-surface text-ink-muted hover:text-foreground"}`}>{item}</button>)}</div>}
+        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">{activityFilters.map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)} className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold transition ${filter === item ? "bg-brand-solid text-white" : "border border-line bg-surface text-ink-muted hover:text-foreground"}`}>{item}</button>)}</div>
         {visibleRequests.map((request) => <RequestCard key={request.id} request={request} pendingId={pendingId} onResolve={(id, decision) => void resolve(id, decision)} />)}
         {visibleRequests.length === 0 && <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarDays className="size-5 shrink-0 text-ink-faint" />{requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"}</div>}
       </section>
@@ -100,7 +100,7 @@ export function ActivityView({ requests, notifications, historyEvents, students,
       <section aria-labelledby="activity-notifications-title" className="mt-2 flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
           <h2 id="activity-notifications-title" className="text-lg font-bold">Уведомления</h2>
-          {unreadCount > 0 && <button type="button" onClick={() => void onReadNotifications()} className="text-sm font-semibold text-brand-text hover:underline">Прочитать все</button>}
+          <button type="button" disabled={unreadCount === 0} onClick={() => void onReadNotifications()} className="text-sm font-semibold text-brand-text hover:underline disabled:cursor-default disabled:text-ink-faint disabled:no-underline">Прочитать все</button>
         </div>
         {activityNotifications.length === 0
           ? <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarDays className="size-5 shrink-0 text-ink-faint" />Новых уведомлений нет</div>
