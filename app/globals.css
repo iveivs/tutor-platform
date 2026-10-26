@@ -199,4 +199,24 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
 :root[data-design="v2"] .student-table-row:hover { background-color: #eef5f7; }
 :root.dark[data-design="v2"] .student-table-row:nth-child(even) { background-color: #192733; }
 :root.dark[data-design="v2"] .student-table-row:hover { background-color: #1f3442; }
+/* v2 dialogs: a bottom sheet on phones, a soft centered panel from 640px. Full-screen dialogs opt out with data-fullscreen. */
+:root[data-design="v2"] [data-slot="dialog-overlay"] { background-color: rgb(15 26 35 / 0.45); backdrop-filter: blur(2px); }
+:root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) { border-color: var(--line); background-color: var(--surface); border-radius: 20px; box-shadow: 0 24px 64px rgb(20 36 51 / 0.18); }
+:root.dark[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) { box-shadow: 0 24px 64px rgb(0 0 0 / 0.5); }
+:root[data-design="v2"] [data-slot="dialog-close"], :root[data-design="v2"] [data-slot="sheet-content"] > [data-slot="sheet-close"] { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; top: 0.75rem; right: 0.75rem; border-radius: 0.75rem; opacity: 1; color: var(--ink-muted); }
+:root[data-design="v2"] [data-slot="dialog-close"]:hover, :root[data-design="v2"] [data-slot="sheet-content"] > [data-slot="sheet-close"]:hover { background-color: var(--surface-muted); color: var(--foreground); }
+:root[data-design="v2"] [data-slot="sheet-content"] { border-color: var(--line); background-color: var(--surface); }
+@keyframes v2-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes v2-sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@media (max-width: 639px) {
+  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) {
+    top: auto; bottom: 0; left: 0; right: 0; translate: none; width: 100%; max-width: 100%;
+    max-height: calc(100dvh - max(1.5rem, env(safe-area-inset-top)));
+    border-width: 1px 0 0; border-radius: 20px 20px 0 0;
+    /* Transparent bottom border keeps the sheet's own padding and adds the iPhone home-indicator area. */
+    border-bottom: env(safe-area-inset-bottom, 0px) solid transparent;
+  }
+  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen])[data-state="open"] { animation: v2-sheet-up 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
+  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen])[data-state="closed"] { animation: v2-sheet-down 0.18s ease-in forwards; }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
