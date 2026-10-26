@@ -5,9 +5,9 @@ import { Bell, ChevronLeft, ChevronRight, Clock3, UserRound } from "lucide-react
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import type { Lesson, LessonDraft, LessonRequest, Student, TeacherDayNote, View } from "@/components/features/app/types";
-import { LessonCardV2 } from "@/components/features/schedule/lesson-card-v2";
+import { LessonCard } from "@/components/features/schedule/lesson-card";
 import { AddLessonDialog, EditLessonDialog } from "@/components/features/schedule/lesson-dialogs";
-import { TeacherDayNotePanel } from "@/components/features/schedule/schedule-views";
+import { TeacherDayNotePanel } from "@/components/features/schedule/teacher-day-note-panel";
 import { Button } from "@/components/ui/button";
 import { dateAtNoon, dateTitle, shiftDate } from "@/lib/date-time";
 import { russianPlural } from "@/lib/russian-plural";
@@ -19,7 +19,7 @@ const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const weekStart = (date: string) => shiftDate(date, -((dateAtNoon(date).getUTCDay() + 6) % 7));
 
 // Redesign v2 of the "Today" screen. Same data and actions as TodayView, different presentation.
-export function TodayViewV2({ lessons, students, requests, dayNotes, onSaveDayNote, onAdd, onUpdate, onDelete, onMaterials, setView, onOpenStudent }: TodayViewProps) {
+export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote, onAdd, onUpdate, onDelete, onMaterials, setView, onOpenStudent }: TodayViewProps) {
   const currentDay = useCurrentDay();
   const previousDay = useRef(currentDay);
   const [selectedDate, setSelectedDate] = useState(currentDay);
@@ -67,7 +67,7 @@ export function TodayViewV2({ lessons, students, requests, dayNotes, onSaveDayNo
             <p className="text-sm text-ink-muted">{russianPlural(units, "занятие", "занятия", "занятий")}{selectedLessons.length > 0 && ` · ${selectedLessons[0].time}–${selectedLessons[selectedLessons.length - 1].end}`}</p>
             <div className="flex items-center gap-2"><Button type="button" variant="ghost" size="sm" className="hidden text-brand-text md:inline-flex" onClick={() => setView("calendar")}>Открыть календарь</Button><TeacherDayNotePanel compact key={`${selectedDate}:${dayNote?.id ?? "new"}`} date={selectedDate} note={dayNote} onSave={onSaveDayNote} /></div>
           </div>
-          {selectedLessons.length ? selectedLessons.map((lesson) => <LessonCardV2 key={lesson.id} lesson={lesson} isNext={lesson.id === nextLesson?.id} onSelect={setEditing} onMaterials={onMaterials} />) : <EmptyState text="На этот день уроков нет" />}
+          {selectedLessons.length ? selectedLessons.map((lesson) => <LessonCard key={lesson.id} lesson={lesson} isNext={lesson.id === nextLesson?.id} onSelect={setEditing} onMaterials={onMaterials} />) : <EmptyState text="На этот день уроков нет" />}
         </section>
       </div>
 

@@ -1,27 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Bell, CalendarClock, FolderOpen, History, LayoutGrid, LogOut, NotebookPen, Palette, Rows3, Send, WalletCards } from "lucide-react";
-import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
+import { useState, useSyncExternalStore } from "react";
+import { CalendarClock, ChevronRight, FolderOpen, History, LogOut, MessageCircle, NotebookPen, Palette, WalletCards } from "lucide-react";
+import { useTheme } from "next-themes";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
-import { EmptyState } from "@/components/common/empty-state";
 import { ShowMoreButton } from "@/components/common/show-more-button";
 import { BrandIcon } from "@/components/brand-icon";
-import { MemberAvatar, MessagesCard, ProfilePersonalizationCard } from "@/components/features/account";
+import { MemberAvatar, MessagesDialog, ProfilePersonalizationCard } from "@/components/features/account";
 import type { AppNotification, AvailableSlot, BalanceEntry, HistoryEvent, Lesson, LessonRequest, Student, StudentRequestDraft } from "@/components/features/app/types";
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { LessonContentBadges } from "@/components/features/lessons/lesson-content-badges";
-import { lessonStatusStyle } from "@/components/features/lessons/status-styles";
 import { StudentMaterialsCard } from "@/components/features/materials/student-materials-card";
 import { StudentRequestDialog } from "@/components/features/requests/student-request-dialog";
+import { LessonStatusChip } from "@/components/features/schedule/lesson-card";
+import { SettingsGroup, settingsRowClass } from "@/components/features/settings/settings-group";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
+import { useLanguage, type Language } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Toaster } from "@/components/ui/sonner";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { dateTitle } from "@/lib/date-time";
 import { russianPlural } from "@/lib/russian-plural";
 import { useCurrentDay } from "@/hooks/use-current-day";
+
+const INITIAL_NOTIFICATIONS = 3;
 
 type StudentPortalProps = {
   student: Student;
@@ -39,52 +41,149 @@ type StudentPortalProps = {
   onReload: () => Promise<void>;
 };
 
+const lessonDay = (lesson: Lesson) => dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" });
+
 export function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onMaterials, onBack, onReload }: StudentPortalProps) {
+  const { theme, setTheme } = useTheme();
+  const { language, setLanguage } = useLanguage();
+  const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
+  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
-  const [compactView, setCompactView] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
   const currentDay = useCurrentDay();
-  const futureLessons = lessons.filter((lesson) => lesson.date >= currentDay).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+  const futureLessons = lessons.filter((lesson) => lesson.date >= currentDay && !lesson.past).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   const recentLessons = lessons.filter((lesson) => lesson.past).sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).slice(0, 10);
-  const visibleRecentLessons = recentExpanded ? recentLessons : recentLessons.slice(0, 3);
-  const visibleHistoryEvents = historyExpanded ? historyEvents : historyEvents.slice(0, 3);
-  const visibleNotifications = notificationsExpanded ? notifications : notifications.slice(0, 3);
   const nextLesson = futureLessons[0];
+  const unreadCount = notifications.filter((item) => !item.read).length;
+  const shownNotifications = notificationsExpanded ? notifications : notifications.slice(0, INITIAL_NOTIFICATIONS);
   const paymentEntries = entries.filter((entry) => entry.kind === "payment" || entry.kind === "refund" || entry.kind === "adjustment");
+  const selectTrigger = "h-9 w-auto min-w-0 gap-1.5 border-0 bg-transparent px-2 text-sm text-ink-muted shadow-none dark:bg-transparent";
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setCompactView(readPreference(preferenceKey(student.id, "student-portal-view")) === "compact"), 0);
-    return () => window.clearTimeout(timer);
-  }, [student.id]);
+  return <main className="min-h-screen overflow-x-clip bg-background px-4 pb-16 pt-5 text-foreground md:px-8">
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-6 flex items-center gap-3">
+        <BrandIcon className="size-11 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold leading-tight tracking-tight md:text-3xl">Привет, <span data-no-translate>{student.name.split(" ")[0]}</span></h1>
+          <p className="truncate text-sm text-ink-muted">Преподаватель: <span data-no-translate>{teacherName}</span></p>
+        </div>
+        <MemberAvatar name={student.name} initials={student.initials.slice(0, 1)} color={student.ownAvatarColor} url={student.avatarUrl} className="size-11 shrink-0" />
+      </header>
 
-  const changeView = (compact: boolean) => {
-    setCompactView(compact);
-    writePreference(preferenceKey(student.id, "student-portal-view"), compact ? "compact" : "dashboard");
-  };
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,380px)]">
+        <div className="flex min-w-0 flex-col gap-5">
+          {nextLesson ? <section aria-label="Следующий урок" className="rounded-[var(--radius-card)] bg-hero-start p-5 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold text-hero-muted">Следующий урок</p>
+              <LessonStatusChip lesson={nextLesson} />
+            </div>
+            <p className="mt-2 text-xl font-bold first-letter:uppercase">{lessonDay(nextLesson)}</p>
+            <p className="mt-1 text-3xl font-bold tracking-tight">{nextLesson.time}–{nextLesson.end}</p>
+            <LessonContentBadges lesson={nextLesson} />
+            <Button type="button" variant="secondary" className="mt-4 h-11 w-full rounded-xl" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", className: "h-10 rounded-xl border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/25 dark:bg-white/10" }} />
+              <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", className: "h-10 rounded-xl border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/25 dark:bg-white/10" }} />
+            </div>
+            <p className="mt-3 text-center text-xs text-hero-muted">Отмену можно запросить до 23:59 предыдущего дня</p>
+          </section> : <section className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarClock className="size-5 shrink-0 text-ink-faint" />Следующий урок пока не назначен</section>}
 
-  return <main className="min-h-screen overflow-x-clip bg-background px-4 pb-24 pt-5 text-foreground"><div className={`mx-auto ${compactView ? "max-w-xl" : "max-w-7xl"}`}>
-    <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-semibold text-ink-muted"><LogOut className="size-4" />Выйти</button>
-    <div className="mb-4 flex justify-end"><Button type="button" size="sm" variant="outline" onClick={() => changeView(!compactView)}>{compactView ? <LayoutGrid /> : <Rows3 />}{compactView ? "Расширенный вид" : "Компактный вид"}</Button></div>
-    <div className="mb-7 flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><BrandIcon className="size-12" /><div className="min-w-0"><h1 className="truncate text-3xl font-bold">Привет, {student.name.split(" ")[0]}</h1><p className="mt-1 text-ink-muted">Ваше расписание занятий</p></div></div><div className="flex items-center gap-2"><ThemeToggle compact /><MemberAvatar name={student.name} initials={student.initials.slice(0, 1)} color={student.ownAvatarColor} url={student.avatarUrl} className="size-12" /></div></div>
-    <div className={`grid items-start gap-6 ${compactView ? "" : "lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,380px)]"}`}><div className="min-w-0">
-      <CollapsibleSection scope={student.id} id="notifications" title="Уведомления" description="Изменения расписания, материалы и важные события" icon={Bell} className="mb-5" badge={notifications.some((item) => !item.read) ? <span className="rounded-full bg-brand-solid px-2.5 py-1 text-xs font-bold text-white">{notifications.filter((item) => !item.read).length} непрочитанных</span> : undefined}>
-        <div className="space-y-3">{visibleNotifications.map((item) => <article key={item.id} className={`rounded-2xl border p-4 ${item.read ? "border-line" : "border-indigo-200 bg-brand-soft dark:border-indigo-700"}`}><strong className="block">{item.title}</strong><p className="mt-1 text-sm text-ink-secondary">{item.body}</p></article>)}{notifications.length === 0 && <p className="text-sm text-ink-muted">Уведомлений пока нет</p>}</div>
-        <div className="mt-3 flex flex-wrap gap-2">{notifications.length > 3 && <ShowMoreButton expanded={notificationsExpanded} remaining={notifications.length - 3} onToggle={() => setNotificationsExpanded((value) => !value)} />}{notifications.some((item) => !item.read) && <Button type="button" size="sm" variant="outline" onClick={() => void onReadNotifications()}>Отметить всё прочитанным</Button>}</div>
-      </CollapsibleSection>
-      {nextLesson ? <section className="card p-6"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-ink-muted">Следующий урок</p><h2 className="mt-3 text-2xl font-bold capitalize">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</h2><p className="mt-2 text-3xl font-bold">{nextLesson.time}–{nextLesson.end}</p><p className="mt-2 text-ink-muted">{teacherName}</p><LessonContentBadges lesson={nextLesson} /></div><span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${lessonStatusStyle(nextLesson)}`}>{nextLesson.label}</span></div><Button type="button" variant="outline" className="mt-5 w-full" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button><div className="mt-3 grid gap-3"><StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} /></div><p className="mt-3 text-center text-sm text-ink-muted">Отмену можно запросить до 23:59 предыдущего дня</p></section> : <section className="card"><EmptyState text="Следующий урок пока не назначен" /></section>}
-      {futureLessons.length > 1 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Дальнейшие занятия</h2><div className="card divide-y">{futureLessons.slice(1).map((lesson) => <article key={lesson.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><strong className="capitalize">{dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" })}</strong><p className="mt-1 text-sm text-ink-muted">{lesson.time}–{lesson.end}</p><LessonContentBadges lesson={lesson} /></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${lessonStatusStyle(lesson)}`}>{lesson.label}</span></div><Button type="button" size="sm" variant="outline" className="mt-3 w-full" onClick={() => onMaterials(lesson)}><NotebookPen />Материалы урока</Button><div className="mt-2 grid gap-2"><StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} /><StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} /></div></article>)}</div></section>}
-      <CollapsibleSection scope={student.id} id="materials" title="Материалы" description="Документы и фотографии со всех уроков" icon={FolderOpen} className="mt-5"><StudentMaterialsCard embedded /></CollapsibleSection>
-      {recentLessons.length > 0 && <CollapsibleSection scope={student.id} id="recent-lessons" title="Недавние уроки" description="Прошедшие занятия и их материалы" icon={CalendarClock} className="mt-5"><div className="divide-y overflow-hidden rounded-2xl border">{visibleRecentLessons.map((lesson) => <button key={lesson.id} type="button" onClick={() => onMaterials(lesson)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800/80 dark:hover:text-white"><span><strong className="block capitalize">{dateTitle(lesson.date, { day: "numeric", month: "long" })}</strong><span className="mt-1 block text-sm text-ink-muted">{lesson.time}–{lesson.end}</span><LessonContentBadges lesson={lesson} /></span><span className="flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400"><NotebookPen className="size-4" />Материалы</span></button>)}</div>{recentLessons.length > 3 && <ShowMoreButton expanded={recentExpanded} remaining={recentLessons.length - 3} className="mt-3" onToggle={() => setRecentExpanded((value) => !value)} />}</CollapsibleSection>}
-      <CollapsibleSection scope={student.id} id="history" title="История" description="События, оплаты и изменения занятий" icon={History} className="mt-5"><HistoryTimeline events={visibleHistoryEvents} showStudent={false} />{historyEvents.length > 3 && <ShowMoreButton expanded={historyExpanded} remaining={historyEvents.length - 3} className="mt-3" onToggle={() => setHistoryExpanded((value) => !value)} />}</CollapsibleSection>
-    </div><aside className={`${compactView ? "" : "order-first lg:order-none lg:sticky lg:top-5"} min-w-0 space-y-5`}>
-      <CollapsibleSection scope={student.id} id="personalization" title="Персонализация" description="Фото профиля и цвет аватара" icon={Palette}><ProfilePersonalizationCard name={student.name} initials={student.initials} avatarColor={student.ownAvatarColor} avatarUrl={student.avatarUrl} onChanged={onReload} embedded /></CollapsibleSection>
-      <MessagesCard />
-      <section className={`rounded-3xl border p-6 ${student.balance < 0 ? "border-rose-200 bg-danger-soft text-rose-950 dark:border-rose-400/30 dark:text-rose-50" : "border-emerald-200 bg-success-soft text-emerald-950 dark:border-emerald-400/30 dark:text-emerald-50"}`}><div className="flex items-center gap-3"><WalletCards className={`size-6 ${student.balance < 0 ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`} /><div><p className="font-semibold opacity-80">Баланс</p><p className="text-2xl font-bold">{russianPlural(student.balance, "занятие", "занятия", "занятий")}</p></div></div>{student.balance < 0 && <p className="mt-3 text-danger-ink-strong">Необходимо оплатить {russianPlural(Math.abs(student.balance), "занятие", "занятия", "занятий")}</p>}</section>
-      {(student.floating || student.canViewAvailability) && <AppCard><AppCardTitle>Свободные слоты</AppCardTitle><AppCardDescription>Выберите подходящее свободное время и отправьте запрос преподавателю.</AppCardDescription><div className="mt-4"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div></AppCard>}
-      {requests.length > 0 && <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Запросы на рассмотрении</h2><div className="card divide-y">{requests.map((request) => <div key={request.id} className="p-4"><strong>{request.type}</strong><p className="mt-1 text-sm text-ink-muted">{request.detail}</p></div>)}</div></section>}
-      <CollapsibleSection scope={student.id} id="telegram" title="Настройка уведомлений" description="Звук в кабинете и персональные настройки Telegram" icon={Send}><TelegramNotificationsCard compact embedded /></CollapsibleSection>
-      <section className="mt-5"><h2 className="mb-3 text-lg font-bold">Оплаты</h2><BalanceHistory entries={paymentEntries} /></section>
-    </aside></div>
-  </div><Toaster position="top-center" richColors /></main>;
+          <div className="grid grid-cols-2 gap-3 lg:hidden">
+            <BalanceTile balance={student.balance} />
+            <button type="button" onClick={() => setMessagesOpen(true)} className="flex flex-col items-start gap-1 rounded-2xl border border-line bg-surface p-4 text-left transition hover:bg-surface-subtle"><MessageCircle className="size-5 text-brand-text" /><span className="mt-1 text-base font-bold">Сообщения</span><span className="text-xs text-ink-muted">Написать преподавателю</span></button>
+          </div>
+
+          <section aria-labelledby="student-notifications-title" className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 id="student-notifications-title" className="text-lg font-bold">Уведомления</h2>
+              {unreadCount > 0 && <button type="button" onClick={() => void onReadNotifications()} className="text-sm font-semibold text-brand-text hover:underline">Прочитать все</button>}
+            </div>
+            {notifications.length === 0
+              ? <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted">Уведомлений пока нет</p>
+              : <div className="overflow-hidden rounded-2xl border border-line bg-surface">{shownNotifications.map((item, index) => <div key={item.id} className={`flex items-start gap-3 px-4 py-3 ${index < shownNotifications.length - 1 ? "border-b border-line" : ""} ${item.read ? "" : "bg-brand-soft/40"}`}>
+                <span aria-hidden className={`mt-2 size-2 shrink-0 rounded-full ${item.read ? "bg-transparent" : "bg-attention-dot"}`} />
+                <span className="flex min-w-0 flex-col gap-0.5"><span className={`text-[15px] ${item.read ? "font-medium" : "font-bold"}`}>{item.title}</span><span className="text-sm text-ink-muted">{item.body}</span></span>
+              </div>)}</div>}
+            {notifications.length > INITIAL_NOTIFICATIONS && <ShowMoreButton expanded={notificationsExpanded} remaining={notifications.length - INITIAL_NOTIFICATIONS} onToggle={() => setNotificationsExpanded((value) => !value)} />}
+          </section>
+
+          {futureLessons.length > 1 && <section aria-labelledby="student-upcoming-title" className="flex flex-col gap-3">
+            <h2 id="student-upcoming-title" className="text-lg font-bold">Дальнейшие занятия</h2>
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">{futureLessons.slice(1).map((lesson, index, list) => <article key={lesson.id} className={`px-4 py-3 ${index < list.length - 1 ? "border-b border-line" : ""}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><strong className="block first-letter:uppercase">{lessonDay(lesson)}</strong><span className="text-sm text-ink-muted">{lesson.time}–{lesson.end}</span><LessonContentBadges lesson={lesson} /></div>
+                <LessonStatusChip lesson={lesson} />
+              </div>
+              <div className="-mx-2 mt-1 grid grid-cols-3 gap-1 sm:flex">
+                <Button type="button" size="sm" variant="ghost" className="text-brand-text" onClick={() => onMaterials(lesson)}>Материалы</Button>
+                <StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", variant: "ghost" }} />
+                <StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", variant: "ghost", className: "text-danger-text" }} />
+              </div>
+            </article>)}</div>
+          </section>}
+
+          <CollapsibleSection scope={student.id} id="materials" title="Материалы" description="Документы и фотографии со всех уроков" icon={FolderOpen}><StudentMaterialsCard embedded /></CollapsibleSection>
+          {recentLessons.length > 0 && <CollapsibleSection scope={student.id} id="recent-lessons" title="Недавние уроки" description="Прошедшие занятия и их материалы" icon={CalendarClock}>
+            <div className="overflow-hidden rounded-2xl border border-line">{(recentExpanded ? recentLessons : recentLessons.slice(0, 3)).map((lesson, index, list) => <button key={lesson.id} type="button" onClick={() => onMaterials(lesson)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-surface-subtle ${index < list.length - 1 ? "border-b border-line" : ""}`}><span className="min-w-0"><strong className="block first-letter:uppercase">{dateTitle(lesson.date, { day: "numeric", month: "long" })}</strong><span className="text-sm text-ink-muted">{lesson.time}–{lesson.end}</span><LessonContentBadges lesson={lesson} /></span><span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-text">Материалы<ChevronRight className="size-4" /></span></button>)}</div>
+            {recentLessons.length > 3 && <ShowMoreButton expanded={recentExpanded} remaining={recentLessons.length - 3} className="mt-3" onToggle={() => setRecentExpanded((value) => !value)} />}
+          </CollapsibleSection>}
+          <CollapsibleSection scope={student.id} id="history" title="История" description="События, оплаты и изменения занятий" icon={History}>
+            <HistoryTimeline events={historyExpanded ? historyEvents : historyEvents.slice(0, 3)} showStudent={false} />
+            {historyEvents.length > 3 && <ShowMoreButton expanded={historyExpanded} remaining={historyEvents.length - 3} className="mt-3" onToggle={() => setHistoryExpanded((value) => !value)} />}
+          </CollapsibleSection>
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-5">
+          <div className="hidden flex-col gap-3 lg:flex">
+            <BalanceTile balance={student.balance} />
+            <Button type="button" variant="outline" className="h-11 justify-start rounded-xl bg-surface" onClick={() => setMessagesOpen(true)}><MessageCircle />Написать преподавателю</Button>
+          </div>
+
+          {(student.floating || student.canViewAvailability) && <section className="rounded-2xl border border-line bg-surface p-4">
+            <h2 className="text-base font-bold">Свободное время</h2>
+            <p className="mt-1 text-sm text-ink-muted">Выберите подходящее время и отправьте запрос преподавателю.</p>
+            <div className="mt-3"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div>
+          </section>}
+
+          {requests.length > 0 && <SettingsGroup title="Запросы на рассмотрении">
+            {requests.map((request) => <div key={request.id} className={`${settingsRowClass} flex-col items-start gap-0.5`}><strong className="text-[15px]">{request.type}</strong><span className="text-sm text-ink-muted">{request.detail}</span></div>)}
+          </SettingsGroup>}
+
+          <section className="flex flex-col gap-2">
+            <h2 className="px-1 pt-2 text-[13px] font-bold uppercase tracking-wide text-ink-muted">Оплаты</h2>
+            <BalanceHistory entries={paymentEntries} />
+          </section>
+
+          <TelegramNotificationsCard grouped />
+
+          <SettingsGroup title="Оформление">
+            <div className={settingsRowClass}>
+              <span className="text-[15px]">Тема</span>
+              <Select value={mounted ? theme ?? "system" : "system"} onValueChange={setTheme}><SelectTrigger size="sm" aria-label="Тема" className={selectTrigger}><SelectValue /></SelectTrigger><SelectContent align="end"><SelectItem value="system">Как в системе</SelectItem><SelectItem value="light">Светлая</SelectItem><SelectItem value="dark">Тёмная</SelectItem></SelectContent></Select>
+            </div>
+            <div className={settingsRowClass}>
+              <span className="text-[15px]">Язык</span>
+              <Select value={language} onValueChange={(value) => setLanguage(value as Language)}><SelectTrigger size="sm" aria-label="Язык" className={selectTrigger} data-no-translate><SelectValue /></SelectTrigger><SelectContent align="end" data-no-translate><SelectItem value="ru">Русский</SelectItem><SelectItem value="en">English</SelectItem></SelectContent></Select>
+            </div>
+          </SettingsGroup>
+
+          <CollapsibleSection scope={student.id} id="personalization" title="Персонализация" description="Фото профиля и цвет аватара" icon={Palette}><ProfilePersonalizationCard name={student.name} initials={student.initials} avatarColor={student.ownAvatarColor} avatarUrl={student.avatarUrl} onChanged={onReload} embedded /></CollapsibleSection>
+
+          <Button type="button" variant="outline" onClick={onBack} className="mt-2 h-12 w-full rounded-xl bg-surface text-[15px] text-danger-text"><LogOut />Выйти</Button>
+        </aside>
+      </div>
+    </div>
+    <MessagesDialog open={messagesOpen} onOpenChange={setMessagesOpen} showTrigger={false} />
+    <Toaster position="top-center" richColors />
+  </main>;
+}
+
+function BalanceTile({ balance }: { balance: number }) {
+  const debt = balance < 0;
+  return <div className={`flex flex-col items-start gap-1 rounded-2xl border p-4 ${debt ? "border-danger-ring bg-danger-soft" : "border-line bg-surface"}`}>
+    <WalletCards className={`size-5 ${debt ? "text-danger-text" : "text-success-text"}`} />
+    <span className="mt-1 text-xs font-semibold text-ink-muted">Баланс</span>
+    <span className={`text-base font-bold ${debt ? "text-danger-ink" : ""}`}>{debt ? `Долг ${Math.abs(balance)}` : russianPlural(balance, "занятие", "занятия", "занятий")}</span>
+  </div>;
 }

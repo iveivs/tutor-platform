@@ -10,7 +10,7 @@ const lessonStatusStyles: Record<Lesson["status"], string> = {
 };
 
 // Redesign v2 wording: the API label "Баланс -4" (student owes four lessons) is shown as "Долг 4".
-export function lessonStatusLabelV2(lesson: Pick<Lesson, "label">) {
+export function lessonStatusLabel(lesson: Pick<Lesson, "label">) {
   return lesson.label.replace(/^Баланс -(\d+)$/, "Долг $1");
 }
 

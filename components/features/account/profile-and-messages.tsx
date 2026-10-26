@@ -6,10 +6,8 @@ import { ChevronDown, MessageCircle, Send, Trash2, Upload, UserRound, X } from "
 import { toast } from "sonner";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
 import { SearchableSelect } from "@/components/common/searchable-select";
-import { useDesign } from "@/components/design-provider";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { appFetch as apiFetch } from "@/lib/client-fetch";
@@ -150,21 +148,6 @@ function useMessages(initialPeerId?: string) {
   return { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send };
 }
 
-function MessagesContent({ initialPeerId, compact = false }: { initialPeerId?: string; compact?: boolean }) {
-  const [showPeers, setShowPeers] = useState(false);
-  const { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send } = useMessages(initialPeerId);
-  if (!data) return <div className="grid min-h-56 place-items-center text-sm text-ink-muted">Загружаю сообщения…</div>;
-  if (!data.peers.length) return <div className="grid min-h-56 place-items-center text-center text-sm text-ink-muted"><span><UserRound className="mx-auto mb-2 size-7" />Доступных собеседников пока нет</span></div>;
-  return <div className="min-w-0">
-    <section className="flex min-h-[420px] min-w-0 flex-col">
-      {compact && data.peers.length > 1 ? <Select value={selectedId} onValueChange={setSelectedId}><SelectTrigger className="mb-3 w-full"><SelectValue placeholder="Выберите преподавателя" /></SelectTrigger><SelectContent>{data.peers.map((peer) => <SelectItem key={peer.id} value={peer.id}>{peer.name}</SelectItem>)}</SelectContent></Select> : <><div className="flex min-w-0 items-center gap-3 border-b pb-3">{selected && <MemberAvatar name={selected.name} initials={selected.initials} color={selected.avatarColor} url={selected.avatarUrl} className="size-10 text-sm" />}<strong className="min-w-0 flex-1 truncate">{selected?.name}</strong>{data.peers.length > 1 && <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2 sm:px-3" aria-expanded={showPeers} onClick={() => setShowPeers((current) => !current)}><span className="sm:hidden">Сменить</span><span className="hidden sm:inline">Сменить собеседника</span><ChevronDown className={`transition-transform ${showPeers ? "rotate-180" : ""}`} /></Button>}</div>{showPeers && <div className="border-b py-3"><SearchableSelect value={selectedId} onValueChange={(value) => { setSelectedId(value); setShowPeers(false); }} placeholder="Выберите собеседника" searchPlaceholder="Найти собеседника" emptyText="Собеседники не найдены" items={data.peers.map((peer) => ({ value: peer.id, label: peer.name, description: peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель") }))} /></div>}</>}
-      <div className={`flex flex-1 flex-col gap-2 overflow-y-auto ${compact ? "my-3 max-h-64 min-h-40 rounded-2xl bg-surface-subtle p-3" : "max-h-[330px] min-h-52 py-4"}`}>{thread.map((message) => <div key={message.id} className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm ${message.senderId === data.currentMemberId ? "ml-auto bg-brand-solid text-white" : "bg-surface text-slate-900 shadow-sm dark:text-slate-100"}`}><p className="whitespace-pre-wrap break-words">{message.body}</p><time className={`mt-1 block text-right text-[10px] ${message.senderId === data.currentMemberId ? "text-indigo-100" : "text-ink-subtle"}`}>{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time></div>)}{!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-ink-muted">Сообщений пока нет</div>}</div>
-      <div className="flex min-w-0 items-end gap-2"><Textarea className="min-h-20 min-w-0 resize-none" value={body} maxLength={500} rows={2} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon-control" className="shrink-0" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send /></Button></div>
-      <div className="mt-1 flex items-start justify-between gap-2 text-[11px] text-ink-subtle"><span>Enter — отправить, Shift+Enter — новая строка</span><span className="shrink-0">{body.length}/500</span></div>
-    </section>
-  </div>;
-}
-
 const messageTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const messageDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
 const messageDayLabel = (value: number) => {
@@ -174,7 +157,7 @@ const messageDayLabel = (value: number) => {
   return day;
 };
 
-function MessagesChatV2({ initialPeerId }: { initialPeerId?: string }) {
+function MessagesChat({ initialPeerId }: { initialPeerId?: string }) {
   const { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send } = useMessages(initialPeerId);
   const [showPeers, setShowPeers] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -220,12 +203,6 @@ export function MessagesDialog({ initialPeerId, label = "Сообщения", op
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const changeOpen = onOpenChange ?? setInternalOpen;
-  const { design } = useDesign();
   const trigger = showTrigger && <DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger>;
-  if (design === "v2") return <Dialog open={open} onOpenChange={changeOpen}>{trigger}<DialogContent data-fullscreen="" showCloseButton={false} className="inset-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-surface p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[min(720px,calc(100dvh-4rem))] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border"><DialogTitle className="sr-only">Сообщения</DialogTitle><DialogDescription className="sr-only">Короткие личные сообщения между учеником и преподавателем.</DialogDescription>{open && <MessagesChatV2 key={initialPeerId} initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
-  return <Dialog open={open} onOpenChange={changeOpen}>{showTrigger && <DialogTrigger asChild><Button type="button" size="control" variant="outline"><MessageCircle />{label}</Button></DialogTrigger>}<DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden sm:max-w-3xl"><DialogHeader><DialogTitle>Сообщения</DialogTitle><DialogDescription>Короткие личные сообщения между учеником и преподавателем.</DialogDescription></DialogHeader><div className="min-h-0 overflow-y-auto">{open && <MessagesContent key={initialPeerId} initialPeerId={initialPeerId} />}</div></DialogContent></Dialog>;
-}
-
-export function MessagesCard() {
-  return <AppCard className="overflow-hidden"><div className="mb-4 flex min-w-0 items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-indigo-600 dark:text-indigo-300"><MessageCircle className="size-5" /></span><div className="min-w-0"><AppCardTitle>Сообщения</AppCardTitle><AppCardDescription>Связь с преподавателем внутри кабинета</AppCardDescription></div></div><MessagesContent compact /></AppCard>;
+  return <Dialog open={open} onOpenChange={changeOpen}>{trigger}<DialogContent data-fullscreen="" showCloseButton={false} className="inset-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-surface p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[min(720px,calc(100dvh-4rem))] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border"><DialogTitle className="sr-only">Сообщения</DialogTitle><DialogDescription className="sr-only">Короткие личные сообщения между учеником и преподавателем.</DialogDescription>{open && <MessagesChat key={initialPeerId} initialPeerId={initialPeerId} />}</DialogContent></Dialog>;
 }

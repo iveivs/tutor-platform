@@ -1,19 +1,67 @@
 "use client";
 
-import { Bell, CalendarDays, Clock3, History, Plus } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, CalendarDays, History } from "lucide-react";
 
 import { AppShell } from "@/components/common/app-shell";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
+import { ShowMoreButton } from "@/components/common/show-more-button";
 import { MessagesDialog } from "@/components/features/account";
 import type { AppNotification, HistoryEvent, LessonRequest, Student } from "@/components/features/app/types";
 import { HistoryPanel } from "@/components/features/history/history-panel";
-import { NotificationsPanel } from "@/components/features/notifications/notifications-panel";
+import { notificationActionLabel, notificationDetails } from "@/components/features/notifications/notification-details";
 import { Button } from "@/components/ui/button";
 import { russianPlural } from "@/lib/russian-plural";
-import { activityFilters as filters, useActivityActions } from "./use-activity-actions";
+import { activityFilters, useActivityActions } from "./use-activity-actions";
 
-function RequestsEmpty({ text }: { text: string }) {
-  return <div className="grid min-h-36 place-items-center p-6 text-center text-ink-muted"><div><CalendarDays className="mx-auto mb-3 size-7 text-ink-faint" /><p>{text}</p></div></div>;
+const INITIAL_NOTIFICATIONS = 5;
+const requestKindLabels: Record<string, string> = { cancel: "Отмена", reschedule: "Перенос", new_lesson: "Новый урок" };
+const timeLabel = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
+const dayLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "Europe/Moscow" });
+const dateKey = (value: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date(value));
+
+// Short time for the notification row: time today, "вчера", otherwise the date.
+function shortMoment(value: number) {
+  const now = Date.now();
+  if (dateKey(value) === dateKey(now)) return timeLabel.format(new Date(value));
+  if (dateKey(value) === dateKey(now - 86_400_000)) return "вчера";
+  return dayLabel.format(new Date(value));
+}
+
+function RequestCard({ request, pendingId, onResolve }: { request: LessonRequest; pendingId: string | null; onResolve: (id: string, decision: "approved" | "declined") => void }) {
+  const cancel = request.kind === "cancel";
+  const comment = request.note && request.note !== "Без комментария" ? request.note : "";
+  return <article id={`request-${request.id}`} tabIndex={-1} className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface p-4 outline-none transition focus-visible:ring-2 focus-visible:ring-brand-solid">
+    <div className="flex items-center justify-between gap-2">
+      <h3 className="min-w-0 truncate text-base font-bold">{request.name}</h3>
+      <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold ${cancel ? "bg-warning-soft-strong text-warning-ink" : "bg-status-request text-status-request-ink"}`}>{requestKindLabels[request.kind] ?? request.type}</span>
+    </div>
+    <p className="text-sm text-ink-secondary">{request.detail}</p>
+    {comment && <p className="rounded-xl bg-surface-muted px-3 py-2 text-sm text-ink-muted">«{comment}»</p>}
+    <div className="mt-1 grid grid-cols-2 gap-2 md:ml-auto md:w-80">
+      <Button disabled={pendingId !== null} onClick={() => onResolve(request.id, "approved")}>{pendingId === request.id ? "Сохраняю…" : "Подтвердить"}</Button>
+      <Button disabled={pendingId !== null} variant="outline" onClick={() => onResolve(request.id, "declined")}>Отклонить</Button>
+    </div>
+  </article>;
+}
+
+function NotificationRow({ item, expanded, last, onToggle, onOpen }: { item: AppNotification; expanded: boolean; last: boolean; onToggle: () => void; onOpen: () => void }) {
+  const actionLabel = notificationActionLabel(item);
+  const details = notificationDetails(item);
+  return <div className={`${last ? "" : "border-b border-line"} ${item.read ? "" : "bg-brand-soft/40"}`}>
+    <button type="button" aria-expanded={expanded} onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+      <span aria-hidden className={`size-2 shrink-0 rounded-full ${item.read ? "bg-transparent" : "bg-attention-dot"}`} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={`text-[15px] ${item.read ? "font-medium" : "font-bold"}`}>{item.title}</span>
+        <span className={`text-sm text-ink-muted ${expanded ? "" : "truncate"}`}>{item.body}</span>
+      </span>
+      <time className="shrink-0 text-xs text-ink-subtle">{shortMoment(item.createdAt)}</time>
+    </button>
+    {expanded && (details.length > 0 || actionLabel) && <div className="px-4 pb-4 pl-9">
+      {details.length > 0 && <dl className="grid grid-cols-2 gap-x-4 gap-y-2">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold text-ink-subtle">{detail.label}</dt><dd className="break-words text-sm font-medium">{detail.value}</dd></div>)}</dl>}
+      {actionLabel && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onOpen}>{actionLabel}<ArrowRight /></Button>}
+    </div>}
+  </div>;
 }
 
 export function ActivityView({ requests, notifications, historyEvents, students, preferenceScope, onResolved, onReadNotifications, onReversePayment }: {
@@ -27,22 +75,43 @@ export function ActivityView({ requests, notifications, historyEvents, students,
   onReversePayment: (id: string) => Promise<boolean>;
 }) {
   const { filter, setFilter, pendingId, messageStudentId, setMessageStudentId, visibleRequests, activityNotifications, resolve, openNotification, attentionCount } = useActivityActions({ requests, notifications, onResolved, onReadNotifications });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const unreadCount = activityNotifications.filter((item) => !item.read).length;
+  const shownNotifications = showAll ? activityNotifications : activityNotifications.slice(0, INITIAL_NOTIFICATIONS);
+
+  const toggleNotification = (item: AppNotification) => {
+    setExpandedId((current) => current === item.id ? null : item.id);
+    if (!item.read) void onReadNotifications(item.id);
+  };
 
   return <AppShell title="События" eyebrow={russianPlural(attentionCount, "событие требует внимания", "события требуют внимания", "событий требуют внимания")}>
-    <section aria-labelledby="activity-requests-title">
-      <div className="mb-5">
-        <h2 id="activity-requests-title" className="text-xl font-bold">Требуют решения</h2>
-        <p className="mt-1 text-sm text-ink-muted">Запросы учеников, на которые нужно ответить.</p>
-      </div>
-      <div className="mb-5 flex gap-2 overflow-x-auto pb-1">{filters.map((item) => <Button key={item} type="button" size="control" variant={filter === item ? "default" : "outline"} className="whitespace-nowrap" onClick={() => setFilter(item)}>{item}</Button>)}</div>
-      <div className="grid gap-4">{visibleRequests.map((request, index) => <article id={`request-${request.id}`} tabIndex={-1} key={request.id} className={`card p-5 outline-none transition focus-visible:ring-2 focus-visible:ring-indigo-500 md:p-6 ${request.kind === "cancel" ? "border-amber-300 bg-warning-soft-40" : ""}`}><div className="flex flex-col gap-5 md:flex-row md:items-center"><span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${request.kind === "cancel" ? "bg-warning-soft-strong text-warning-ink" : "bg-brand-soft text-brand-text"}`}>{request.kind === "cancel" ? <Bell className="size-5" /> : index === 1 ? <Clock3 className="size-5" /> : <Plus className="size-5" />}</span><div className="min-w-0 flex-1"><p className={`text-sm font-bold ${request.kind === "cancel" ? "text-warning-ink" : "text-brand-text"}`}>{request.type}</p><h3 className="mt-1 text-xl font-bold">{request.name}</h3><p className="mt-1 text-ink-secondary">{request.detail}</p><p className="mt-2 text-sm text-ink-muted">{request.note}</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "approved")}>{pendingId === request.id ? "Сохраняю…" : "Подтвердить"}</Button><Button disabled={pendingId !== null} onClick={() => void resolve(request.id, "declined")} variant="outline">Отклонить</Button></div></div></article>)}{visibleRequests.length === 0 && <RequestsEmpty text={requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"} />}</div>
-    </section>
+    <div className="flex max-w-3xl flex-col gap-3.5">
+      <section aria-labelledby="activity-requests-title" className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="activity-requests-title" className="text-lg font-bold">Запросы{requests.length > 0 ? ` · ${requests.length}` : ""}</h2>
+          {requests.length > 0 && <span className="text-sm text-ink-muted">ждут ответа</span>}
+        </div>
+        {requests.length > 0 && <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">{activityFilters.map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)} className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold transition ${filter === item ? "bg-brand-solid text-white" : "border border-line bg-surface text-ink-muted hover:text-foreground"}`}>{item}</button>)}</div>}
+        {visibleRequests.map((request) => <RequestCard key={request.id} request={request} pendingId={pendingId} onResolve={(id, decision) => void resolve(id, decision)} />)}
+        {visibleRequests.length === 0 && <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarDays className="size-5 shrink-0 text-ink-faint" />{requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"}</div>}
+      </section>
 
-    <NotificationsPanel notifications={activityNotifications} onRead={onReadNotifications} onOpenNotification={openNotification} />
+      <section aria-labelledby="activity-notifications-title" className="mt-2 flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="activity-notifications-title" className="text-lg font-bold">Уведомления</h2>
+          {unreadCount > 0 && <button type="button" onClick={() => void onReadNotifications()} className="text-sm font-semibold text-brand-text hover:underline">Прочитать все</button>}
+        </div>
+        {activityNotifications.length === 0
+          ? <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarDays className="size-5 shrink-0 text-ink-faint" />Новых уведомлений нет</div>
+          : <div className="overflow-hidden rounded-2xl border border-line bg-surface">{shownNotifications.map((item, index) => <NotificationRow key={item.id} item={item} expanded={expandedId === item.id} last={index === shownNotifications.length - 1} onToggle={() => toggleNotification(item)} onOpen={() => openNotification(item)} />)}</div>}
+        {activityNotifications.length > INITIAL_NOTIFICATIONS && <ShowMoreButton expanded={showAll} onToggle={() => setShowAll((value) => !value)} remaining={activityNotifications.length - INITIAL_NOTIFICATIONS} />}
+      </section>
 
-    <CollapsibleSection scope={preferenceScope} id="activity-history" title="История" description="Уроки, оплаты и запросы" icon={History} badge={<span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-secondary">{historyEvents.length}</span>} className="mt-6">
-      <HistoryPanel events={historyEvents} students={students} onReversePayment={onReversePayment} />
-    </CollapsibleSection>
+      <CollapsibleSection scope={preferenceScope} id="activity-history" title="История" description="Уроки, оплаты и запросы" icon={History} badge={<span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-secondary">{historyEvents.length}</span>} className="mt-2">
+        <HistoryPanel events={historyEvents} students={students} onReversePayment={onReversePayment} />
+      </CollapsibleSection>
+    </div>
     <MessagesDialog initialPeerId={messageStudentId ?? undefined} open={Boolean(messageStudentId)} onOpenChange={(open) => { if (!open) setMessageStudentId(null); }} showTrigger={false} />
   </AppShell>;
 }

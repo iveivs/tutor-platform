@@ -4,134 +4,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Product design tokens. Components consume these values; feature code should not invent new ones. */
+  /* Layout tokens. */
   --space-page-x: 1rem; --space-page-y: 1.25rem; --space-card: 1.25rem; --space-card-comfortable: 1.5rem; --space-section: 1.25rem;
-  --control-height: 2.75rem; --control-height-lg: 3rem; --radius-control: 0.75rem; --radius-card: 1.5rem; --sidebar-width: 272px;
-  --background: #f6f8fc; --foreground: #0f172a; --card: #ffffff; --card-foreground: #0f172a;
-  --popover: #ffffff; --popover-foreground: #0f172a; --primary: #4f46e5; --primary-foreground: #ffffff;
-  --secondary: #eef2ff; --secondary-foreground: #3730a3; --muted: #f1f5f9; --muted-foreground: #64748b;
-  --accent: #eef2ff; --accent-foreground: #3730a3; --destructive: #e11d48; --border: #e2e8f0;
-  --input: #cbd5e1; --ring: #6366f1; --radius: 0.75rem;
-  --calendar-lesson-upcoming: #0d9488; --calendar-lesson-past: #94a3b8; --calendar-lesson-count-text: #ffffff;
-  /* Semantic surface, text and tone tokens. Values reproduce the current look; a redesign changes values, not components. */
-  --surface: var(--color-white); --surface-subtle: var(--color-slate-50); --surface-muted: var(--color-slate-100);
-  --surface-glass-90: color-mix(in oklab, var(--color-white) 90%, transparent); --surface-glass-95: color-mix(in oklab, var(--color-white) 95%, transparent);
-  --line: var(--color-slate-200);
-  --ink-strong: var(--color-slate-950); --ink-body: var(--color-slate-700); --ink-secondary: var(--color-slate-600);
-  --ink-muted: var(--color-slate-500); --ink-subtle: var(--color-slate-400); --ink-faint: var(--color-slate-300);
-  --brand-solid: var(--color-indigo-600); --brand-solid-hover: var(--color-indigo-700); --brand-text: var(--color-indigo-600); --brand-line: var(--color-indigo-200);
-  --brand-soft: var(--color-indigo-50); --brand-soft-strong: var(--color-indigo-100); --brand-ink: var(--color-indigo-700); --brand-ink-strong: var(--color-indigo-800);
-  --brand-ring: var(--color-indigo-100); --brand-glow: var(--color-indigo-200); --brand-glow-70: color-mix(in oklab, var(--color-indigo-200) 70%, transparent);
-  --success-soft: var(--color-emerald-50); --success-ink: var(--color-emerald-700); --success-ink-strong: var(--color-emerald-800); --success-ring: var(--color-emerald-100); --success-text: var(--color-emerald-600);
-  --danger-soft: var(--color-rose-50); --danger-ink: var(--color-rose-700); --danger-ink-strong: var(--color-rose-800); --danger-ring: var(--color-rose-100); --danger-text: var(--color-rose-600);
-  --warning-soft: var(--color-amber-50); --warning-soft-40: color-mix(in oklab, var(--color-amber-50) 40%, transparent); --warning-soft-strong: var(--color-amber-100);
-  --warning-ink: var(--color-amber-700); --warning-ring: var(--color-amber-100); --warning-text: var(--color-amber-600);
-  /* Lesson status chips: paid and unpaid are future lessons, past-* are finished ones. */
-  --status-paid: var(--color-emerald-700); --status-paid-ink: var(--color-white); --status-paid-ring: var(--color-emerald-800);
-  --status-unpaid: var(--color-rose-700); --status-unpaid-ink: var(--color-white); --status-unpaid-ring: var(--color-rose-800);
-  --status-debt: var(--color-rose-700); --status-debt-ink: var(--color-white); --status-debt-ring: var(--color-rose-800);
-  --status-past-paid: var(--color-emerald-100); --status-past-paid-ink: var(--color-emerald-950); --status-past-paid-ring: var(--color-emerald-300);
-  --status-past-debt: var(--color-rose-100); --status-past-debt-ink: var(--color-rose-950); --status-past-debt-ring: var(--color-rose-300);
-  --status-request: var(--color-amber-50); --status-request-ink: var(--color-amber-700); --status-request-ring: var(--color-amber-100);
-  --status-trial: var(--color-sky-50); --status-trial-ink: var(--color-sky-700); --status-trial-ring: var(--color-sky-100);
-  --hero-start: var(--color-indigo-600); --hero-end: var(--color-violet-600); --hero-muted: var(--color-indigo-100);
-  --attention: var(--color-indigo-600); --attention-dot: var(--color-rose-500);
-}
-@media (min-width: 48rem) {
-  :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
-}
+  --control-height: 2.75rem; --control-height-lg: 3rem; --radius: 0.625rem; --radius-control: 0.625rem; --radius-card: 0.875rem; --sidebar-width: 248px;
 
-.legal-document { @apply mt-8 rounded-2xl border border-border bg-card p-5 leading-7 shadow-sm sm:p-8; }
-.legal-document h1 { @apply mb-6 text-2xl font-bold tracking-tight sm:text-3xl; }
-.legal-document h2 { @apply mb-3 mt-8 text-xl font-bold; }
-.legal-document h3 { @apply mb-2 mt-6 text-lg font-semibold; }
-.legal-document p { @apply my-3; }
-.legal-document ul { @apply my-3 list-disc space-y-1 pl-6; }
-.legal-document blockquote { @apply my-4 border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 italic text-slate-700; }
-.legal-document code { @apply rounded bg-slate-100 px-1 py-0.5 text-sm; }
-.dark {
-  color-scheme: dark;
-  --background: #1c1c1e; --foreground: #f2f2f7; --card: #202022; --card-foreground: #f2f2f7;
-  --popover: #252527; --popover-foreground: #f2f2f7; --primary: #8b83ff; --primary-foreground: #ffffff;
-  --secondary: #303033; --secondary-foreground: #f2f2f7; --muted: #2a2a2d; --muted-foreground: #a1a1a6;
-  --accent: #363638; --accent-foreground: #ffffff; --destructive: #ff6b7a; --border: #404043;
-  --input: #4a4a4e; --ring: #8b83ff;
-  --calendar-lesson-upcoming: #14b8a6; --calendar-lesson-past: #64748b; --calendar-lesson-count-text: #ffffff;
-  --surface: var(--card); --surface-subtle: #29292c; --surface-muted: #303033; --surface-glass-90: rgb(32 32 34 / 0.94); --surface-glass-95: rgb(32 32 34 / 0.94);
-  --line: var(--border);
-  --ink-strong: var(--foreground); --ink-body: #e5e5ea; --ink-secondary: #c7c7cc; --ink-muted: #98989d; --ink-subtle: #98989d; --ink-faint: #6f6f74;
-  --brand-soft: rgb(49 46 129 / 0.34); --brand-soft-strong: rgb(67 56 202 / 0.34); --brand-ink: #a5b4fc; --brand-ink-strong: #a5b4fc;
-  --brand-ring: var(--border); --brand-glow: rgb(0 0 0 / 0.24); --brand-glow-70: rgb(0 0 0 / 0.24);
-  --success-soft: rgb(6 78 59 / 0.38); --success-ink: #6ee7b7; --success-ink-strong: #6ee7b7; --success-ring: var(--border);
-  --danger-soft: rgb(136 19 55 / 0.36); --danger-ink: #fda4af; --danger-ink-strong: #fda4af; --danger-ring: var(--border);
-  --warning-soft: rgb(120 53 15 / 0.34); --warning-soft-40: rgb(120 53 15 / 0.34); --warning-soft-strong: rgb(146 64 14 / 0.42); --warning-ink: #fcd34d; --warning-ring: var(--border);
-  --status-paid: var(--color-emerald-800); --status-paid-ink: var(--color-emerald-50); --status-paid-ring: var(--color-emerald-700);
-  --status-unpaid: var(--color-rose-800); --status-unpaid-ink: var(--color-rose-50); --status-unpaid-ring: var(--color-rose-700);
-  --status-debt: var(--color-rose-800); --status-debt-ink: var(--color-rose-50); --status-debt-ring: var(--color-rose-700);
-  --status-past-paid: color-mix(in oklab, var(--color-emerald-950) 55%, transparent); --status-past-paid-ink: var(--color-emerald-100); --status-past-paid-ring: var(--color-emerald-800);
-  --status-past-debt: color-mix(in oklab, var(--color-rose-950) 55%, transparent); --status-past-debt-ink: var(--color-rose-100); --status-past-debt-ring: var(--color-rose-800);
-  --status-request: rgb(120 53 15 / 0.34); --status-request-ink: #fcd34d; --status-request-ring: var(--border);
-}
-@theme inline {
-  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
-  --color-surface: var(--surface); --color-surface-subtle: var(--surface-subtle); --color-surface-muted: var(--surface-muted); --color-surface-glass-90: var(--surface-glass-90); --color-surface-glass-95: var(--surface-glass-95); --color-line: var(--line);
-  --color-ink-strong: var(--ink-strong); --color-ink-body: var(--ink-body); --color-ink-secondary: var(--ink-secondary); --color-ink-muted: var(--ink-muted); --color-ink-subtle: var(--ink-subtle); --color-ink-faint: var(--ink-faint);
-  --color-brand-solid: var(--brand-solid); --color-brand-solid-hover: var(--brand-solid-hover); --color-brand-text: var(--brand-text); --color-brand-line: var(--brand-line); --color-brand-soft: var(--brand-soft); --color-brand-soft-strong: var(--brand-soft-strong);
-  --color-brand-ink: var(--brand-ink); --color-brand-ink-strong: var(--brand-ink-strong); --color-brand-ring: var(--brand-ring); --color-brand-glow: var(--brand-glow); --color-brand-glow-70: var(--brand-glow-70);
-  --color-success-soft: var(--success-soft); --color-success-ink: var(--success-ink); --color-success-ink-strong: var(--success-ink-strong); --color-success-ring: var(--success-ring); --color-success-text: var(--success-text);
-  --color-danger-soft: var(--danger-soft); --color-danger-ink: var(--danger-ink); --color-danger-ink-strong: var(--danger-ink-strong); --color-danger-ring: var(--danger-ring); --color-danger-text: var(--danger-text);
-  --color-warning-soft: var(--warning-soft); --color-warning-soft-40: var(--warning-soft-40); --color-warning-soft-strong: var(--warning-soft-strong); --color-warning-ink: var(--warning-ink); --color-warning-ring: var(--warning-ring); --color-warning-text: var(--warning-text);
-  --color-status-paid: var(--status-paid); --color-status-paid-ink: var(--status-paid-ink); --color-status-paid-ring: var(--status-paid-ring);
-  --color-status-unpaid: var(--status-unpaid); --color-status-unpaid-ink: var(--status-unpaid-ink); --color-status-unpaid-ring: var(--status-unpaid-ring);
-  --color-status-debt: var(--status-debt); --color-status-debt-ink: var(--status-debt-ink); --color-status-debt-ring: var(--status-debt-ring);
-  --color-status-past-paid: var(--status-past-paid); --color-status-past-paid-ink: var(--status-past-paid-ink); --color-status-past-paid-ring: var(--status-past-paid-ring);
-  --color-status-past-debt: var(--status-past-debt); --color-status-past-debt-ink: var(--status-past-debt-ink); --color-status-past-debt-ring: var(--status-past-debt-ring);
-  --color-status-request: var(--status-request); --color-status-request-ink: var(--status-request-ink); --color-status-request-ring: var(--status-request-ring);
-  --color-status-trial: var(--status-trial); --color-status-trial-ink: var(--status-trial-ink); --color-status-trial-ring: var(--status-trial-ring);
-  --color-hero-start: var(--hero-start); --color-hero-end: var(--hero-end); --color-hero-muted: var(--hero-muted); --color-attention: var(--attention); --color-attention-dot: var(--attention-dot);
-  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-* { border-color: var(--border); }
-html { background: var(--background); }
-body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
-button, input { font: inherit; } button { cursor: pointer; } ::selection { background: #c7d2fe; color: #1e1b4b; }
-.card { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); color: var(--card-foreground); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.04); }
-.dark .card { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22); }
-.calendar-surface { background-color: #ffffff; }
-.calendar-weekday { background-color: #ffffff; }
-.calendar-weekend { background-color: #f2f4f7; }
-.calendar-weekend-header { background-color: #edf0f4; }
-.calendar-weekend-date { color: #64748b; }
-.dark .calendar-surface { background-color: #252527; border-color: #48484c; }
-.dark .calendar-weekday { background-color: #222224; }
-.dark .calendar-weekend { background-color: #303033; }
-.dark .calendar-weekend-header { background-color: #303033; }
-.dark .calendar-weekend-date { color: #a1a1a6; }
-.calendar-lesson-count { color: var(--calendar-lesson-count-text); }
-.calendar-lesson-count-upcoming { background-color: var(--calendar-lesson-upcoming); }
-.calendar-lesson-count-past { background-color: var(--calendar-lesson-past); }
-.student-table-row:nth-child(even) { background-color: #f8fafc; }
-.student-table-row:hover { background-color: #eef2ff; }
-.dark .student-table-row:nth-child(even) { background-color: #272729; }
-.dark .student-table-row:hover { background-color: #302e45; }
-.mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
-@supports (-webkit-touch-callout: none) {
-  .mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { inline-size: -webkit-fill-available; }
-  .mobile-time-input::-webkit-date-and-time-value, .mobile-date-input::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { min-inline-size: 0; text-align: left; }
-}
-
-/* Redesign v2 «синий и коралл» (logo palette). Enabled per device by components/design-provider.tsx via <html data-design="v2">. */
-:root[data-design="v2"] {
-  /* Remapped palette scales recolour the remaining literal indigo/slate utilities in one place. */
-  --color-indigo-50: #eef5f7; --color-indigo-100: #dcebef; --color-indigo-200: #bfdce3; --color-indigo-300: #94c0cc; --color-indigo-400: #5f98ac; --color-indigo-500: #3b7690;
-  --color-indigo-600: #285e78; --color-indigo-700: #1f4a61; --color-indigo-800: #1f3a4d; --color-indigo-900: #172c3b; --color-indigo-950: #0f1e29;
-  --color-slate-50: #f4f1eb; --color-slate-100: #efeae2; --color-slate-200: #e4ded4; --color-slate-300: #cfc8bc; --color-slate-400: #8e98a2; --color-slate-500: #6b7782;
-  --color-slate-600: #56626e; --color-slate-700: #3a4856; --color-slate-800: #24323f; --color-slate-900: #172431; --color-slate-950: #0f1a23;
-  --radius: 0.625rem; --radius-control: 0.625rem; --radius-card: 0.875rem; --sidebar-width: 248px;
+  /* Colour palette, light theme («синий и коралл» from the logo). To change the colour scheme, edit this block
+     and the .dark block below; components only use these tokens (see docs/FRONTEND_ARCHITECTURE.md). */
   --background: #f6f3ee; --foreground: #142433; --card: #ffffff; --card-foreground: #142433;
   --popover: #ffffff; --popover-foreground: #142433; --primary: #1f3a4d; --primary-foreground: #ffffff;
   --secondary: #dcebef; --secondary-foreground: #1f3a4d; --muted: #efeae2; --muted-foreground: #56626e;
@@ -156,8 +34,34 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
   --status-trial: #eee8f7; --status-trial-ink: #5b3f94; --status-trial-ring: #ddd2f0;
   --hero-start: #1f3a4d; --hero-end: #172c3b; --hero-muted: #bfdce3;
   --attention: #e8552d; --attention-dot: #e8552d;
+  --selection: #dcebef; --selection-ink: #142433;
+  --calendar-line: var(--border); --calendar-weekend: #f7f4ef; --calendar-weekend-header: #f1ede6; --calendar-weekend-date: #56626e;
+  --table-row-alt: #faf8f4; --table-row-hover: #eef5f7;
+  --overlay: rgb(15 26 35 / 0.45);
+  --shadow-card: 0 1px 2px rgba(20, 36, 51, 0.04), 0 8px 24px rgba(20, 36, 51, 0.04); --shadow-dialog: 0 24px 64px rgb(20 36 51 / 0.18);
+
+  /* Tailwind indigo/slate scales follow the palette, so the few remaining literal indigo and slate classes recolour with it.
+     New code should use the semantic tokens above instead of palette classes. */
+  --color-indigo-50: #eef5f7; --color-indigo-100: #dcebef; --color-indigo-200: #bfdce3; --color-indigo-300: #94c0cc; --color-indigo-400: #5f98ac; --color-indigo-500: #3b7690;
+  --color-indigo-600: #285e78; --color-indigo-700: #1f4a61; --color-indigo-800: #1f3a4d; --color-indigo-900: #172c3b; --color-indigo-950: #0f1e29;
+  --color-slate-50: #f4f1eb; --color-slate-100: #efeae2; --color-slate-200: #e4ded4; --color-slate-300: #cfc8bc; --color-slate-400: #8e98a2; --color-slate-500: #6b7782;
+  --color-slate-600: #56626e; --color-slate-700: #3a4856; --color-slate-800: #24323f; --color-slate-900: #172431; --color-slate-950: #0f1a23;
 }
-:root.dark[data-design="v2"] {
+@media (min-width: 48rem) {
+  :root { --space-card: 1.5rem; --space-card-comfortable: 2rem; }
+}
+
+.legal-document { @apply mt-8 rounded-2xl border border-border bg-card p-5 leading-7 shadow-sm sm:p-8; }
+.legal-document h1 { @apply mb-6 text-2xl font-bold tracking-tight sm:text-3xl; }
+.legal-document h2 { @apply mb-3 mt-8 text-xl font-bold; }
+.legal-document h3 { @apply mb-2 mt-6 text-lg font-semibold; }
+.legal-document p { @apply my-3; }
+.legal-document ul { @apply my-3 list-disc space-y-1 pl-6; }
+.legal-document blockquote { @apply my-4 border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 italic text-slate-700; }
+.legal-document code { @apply rounded bg-slate-100 px-1 py-0.5 text-sm; }
+/* Colour palette, dark theme. */
+.dark {
+  color-scheme: dark;
   --background: #0f1a23; --foreground: #eef2f5; --card: #16232e; --card-foreground: #eef2f5;
   --popover: #1a2835; --popover-foreground: #eef2f5; --primary: #2e6782; --primary-foreground: #ffffff;
   --secondary: #1f3442; --secondary-foreground: #eef2f5; --muted: #1e2d3a; --muted-foreground: #9eadb9;
@@ -182,41 +86,73 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
   --status-trial: #2a2340; --status-trial-ink: #c7b5f0; --status-trial-ring: #3a3157;
   --hero-start: #1f3a4d; --hero-end: #16303f; --hero-muted: #bfdce3;
   --attention: #ff7a4d; --attention-dot: #ff7a4d;
+  --selection: #26404f; --selection-ink: #eef2f5;
+  --calendar-line: #2e4252; --calendar-weekend: #1b2a36; --calendar-weekend-header: #1b2a36; --calendar-weekend-date: #9eadb9;
+  --table-row-alt: #192733; --table-row-hover: #1f3442;
+  --overlay: rgb(15 26 35 / 0.45);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px rgba(0, 0, 0, 0.24); --shadow-dialog: 0 24px 64px rgb(0 0 0 / 0.5);
 }
-:root[data-design="v2"] body { font-family: "Golos Text Variable", "Golos Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-:root[data-design="v2"] ::selection { background: #dcebef; color: #142433; }
-:root[data-design="v2"] .card { box-shadow: 0 1px 2px rgba(20, 36, 51, 0.04), 0 8px 24px rgba(20, 36, 51, 0.04); }
-:root.dark[data-design="v2"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px rgba(0, 0, 0, 0.24); }
-:root[data-design="v2"] .calendar-surface, :root[data-design="v2"] .calendar-weekday { background-color: #ffffff; }
-:root[data-design="v2"] .calendar-weekend { background-color: #f7f4ef; }
-:root[data-design="v2"] .calendar-weekend-header { background-color: #f1ede6; }
-:root[data-design="v2"] .calendar-weekend-date { color: #56626e; }
-:root.dark[data-design="v2"] .calendar-surface { background-color: #16232e; border-color: #2e4252; }
-:root.dark[data-design="v2"] .calendar-weekday { background-color: #16232e; }
-:root.dark[data-design="v2"] .calendar-weekend, :root.dark[data-design="v2"] .calendar-weekend-header { background-color: #1b2a36; }
-:root.dark[data-design="v2"] .calendar-weekend-date { color: #9eadb9; }
-:root[data-design="v2"] .student-table-row:nth-child(even) { background-color: #faf8f4; }
-:root[data-design="v2"] .student-table-row:hover { background-color: #eef5f7; }
-:root.dark[data-design="v2"] .student-table-row:nth-child(even) { background-color: #192733; }
-:root.dark[data-design="v2"] .student-table-row:hover { background-color: #1f3442; }
-/* v2 dialogs: a bottom sheet on phones, a soft centered panel from 640px. Full-screen dialogs opt out with data-fullscreen. */
-:root[data-design="v2"] [data-slot="dialog-overlay"] { background-color: rgb(15 26 35 / 0.45); backdrop-filter: blur(2px); }
-:root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) { border-color: var(--line); background-color: var(--surface); border-radius: 20px; box-shadow: 0 24px 64px rgb(20 36 51 / 0.18); }
-:root.dark[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) { box-shadow: 0 24px 64px rgb(0 0 0 / 0.5); }
-:root[data-design="v2"] [data-slot="dialog-close"], :root[data-design="v2"] [data-slot="sheet-content"] > [data-slot="sheet-close"] { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; top: 0.75rem; right: 0.75rem; border-radius: 0.75rem; opacity: 1; color: var(--ink-muted); }
-:root[data-design="v2"] [data-slot="dialog-close"]:hover, :root[data-design="v2"] [data-slot="sheet-content"] > [data-slot="sheet-close"]:hover { background-color: var(--surface-muted); color: var(--foreground); }
-:root[data-design="v2"] [data-slot="sheet-content"] { border-color: var(--line); background-color: var(--surface); }
-@keyframes v2-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-@keyframes v2-sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@theme inline {
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+  --color-surface: var(--surface); --color-surface-subtle: var(--surface-subtle); --color-surface-muted: var(--surface-muted); --color-surface-glass-90: var(--surface-glass-90); --color-surface-glass-95: var(--surface-glass-95); --color-line: var(--line);
+  --color-ink-strong: var(--ink-strong); --color-ink-body: var(--ink-body); --color-ink-secondary: var(--ink-secondary); --color-ink-muted: var(--ink-muted); --color-ink-subtle: var(--ink-subtle); --color-ink-faint: var(--ink-faint);
+  --color-brand-solid: var(--brand-solid); --color-brand-solid-hover: var(--brand-solid-hover); --color-brand-text: var(--brand-text); --color-brand-line: var(--brand-line); --color-brand-soft: var(--brand-soft); --color-brand-soft-strong: var(--brand-soft-strong);
+  --color-brand-ink: var(--brand-ink); --color-brand-ink-strong: var(--brand-ink-strong); --color-brand-ring: var(--brand-ring); --color-brand-glow: var(--brand-glow); --color-brand-glow-70: var(--brand-glow-70);
+  --color-success-soft: var(--success-soft); --color-success-ink: var(--success-ink); --color-success-ink-strong: var(--success-ink-strong); --color-success-ring: var(--success-ring); --color-success-text: var(--success-text);
+  --color-danger-soft: var(--danger-soft); --color-danger-ink: var(--danger-ink); --color-danger-ink-strong: var(--danger-ink-strong); --color-danger-ring: var(--danger-ring); --color-danger-text: var(--danger-text);
+  --color-warning-soft: var(--warning-soft); --color-warning-soft-40: var(--warning-soft-40); --color-warning-soft-strong: var(--warning-soft-strong); --color-warning-ink: var(--warning-ink); --color-warning-ring: var(--warning-ring); --color-warning-text: var(--warning-text);
+  --color-status-paid: var(--status-paid); --color-status-paid-ink: var(--status-paid-ink); --color-status-paid-ring: var(--status-paid-ring);
+  --color-status-unpaid: var(--status-unpaid); --color-status-unpaid-ink: var(--status-unpaid-ink); --color-status-unpaid-ring: var(--status-unpaid-ring);
+  --color-status-debt: var(--status-debt); --color-status-debt-ink: var(--status-debt-ink); --color-status-debt-ring: var(--status-debt-ring);
+  --color-status-past-paid: var(--status-past-paid); --color-status-past-paid-ink: var(--status-past-paid-ink); --color-status-past-paid-ring: var(--status-past-paid-ring);
+  --color-status-past-debt: var(--status-past-debt); --color-status-past-debt-ink: var(--status-past-debt-ink); --color-status-past-debt-ring: var(--status-past-debt-ring);
+  --color-status-request: var(--status-request); --color-status-request-ink: var(--status-request-ink); --color-status-request-ring: var(--status-request-ring);
+  --color-status-trial: var(--status-trial); --color-status-trial-ink: var(--status-trial-ink); --color-status-trial-ring: var(--status-trial-ring);
+  --color-calendar-line: var(--calendar-line); --color-hero-start: var(--hero-start); --color-hero-end: var(--hero-end); --color-hero-muted: var(--hero-muted); --color-attention: var(--attention); --color-attention-dot: var(--attention-dot);
+  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Golos Text Variable", "Golos Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { border-color: var(--border); }
+html { background: var(--background); }
+body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
+button, input { font: inherit; } button { cursor: pointer; } ::selection { background: var(--selection); color: var(--selection-ink); }
+.card { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); color: var(--card-foreground); box-shadow: var(--shadow-card); }
+.calendar-surface, .calendar-weekday { background-color: var(--surface); }
+.calendar-surface { border-color: var(--calendar-line); }
+.calendar-weekend { background-color: var(--calendar-weekend); }
+.calendar-weekend-header { background-color: var(--calendar-weekend-header); }
+.calendar-weekend-date { color: var(--calendar-weekend-date); }
+.calendar-lesson-count { color: var(--calendar-lesson-count-text); }
+.calendar-lesson-count-upcoming { background-color: var(--calendar-lesson-upcoming); }
+.calendar-lesson-count-past { background-color: var(--calendar-lesson-past); }
+.student-table-row:nth-child(even) { background-color: var(--table-row-alt); }
+.student-table-row:hover { background-color: var(--table-row-hover); }
+.mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
+@supports (-webkit-touch-callout: none) {
+  .mobile-time-input, .mobile-date-input, input[type="date"], input[type="time"] { inline-size: -webkit-fill-available; }
+  .mobile-time-input::-webkit-date-and-time-value, .mobile-date-input::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-date-and-time-value { min-inline-size: 0; text-align: left; }
+}
+
+/* Dialogs: a bottom sheet on phones, a soft centered panel from 640px. Full-screen dialogs opt out with data-fullscreen. */
+[data-slot="dialog-overlay"] { background-color: var(--overlay); backdrop-filter: blur(2px); }
+[data-slot="dialog-content"]:not([data-fullscreen]) { border-color: var(--line); background-color: var(--surface); border-radius: 20px; box-shadow: var(--shadow-dialog); }
+[data-slot="dialog-close"], [data-slot="sheet-content"] > [data-slot="sheet-close"] { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; top: 0.75rem; right: 0.75rem; border-radius: 0.75rem; opacity: 1; color: var(--ink-muted); }
+[data-slot="dialog-close"]:hover, [data-slot="sheet-content"] > [data-slot="sheet-close"]:hover { background-color: var(--surface-muted); color: var(--foreground); }
+[data-slot="sheet-content"] { border-color: var(--line); background-color: var(--surface); }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
 @media (max-width: 639px) {
-  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen]) {
+  [data-slot="dialog-content"]:not([data-fullscreen]) {
     top: auto; bottom: 0; left: 0; right: 0; translate: none; width: 100%; max-width: 100%;
     max-height: calc(100dvh - max(1.5rem, env(safe-area-inset-top)));
     border-width: 1px 0 0; border-radius: 20px 20px 0 0;
     /* Transparent bottom border keeps the sheet's own padding and adds the iPhone home-indicator area. */
     border-bottom: env(safe-area-inset-bottom, 0px) solid transparent;
   }
-  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen])[data-state="open"] { animation: v2-sheet-up 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
-  :root[data-design="v2"] [data-slot="dialog-content"]:not([data-fullscreen])[data-state="closed"] { animation: v2-sheet-down 0.18s ease-in forwards; }
+  [data-slot="dialog-content"]:not([data-fullscreen])[data-state="open"] { animation: sheet-up 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
+  [data-slot="dialog-content"]:not([data-fullscreen])[data-state="closed"] { animation: sheet-down 0.18s ease-in forwards; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }

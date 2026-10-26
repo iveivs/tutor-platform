@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { LanguageProvider } from "@/components/language-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CookieNotice } from "@/components/cookie-notice";
-import { DesignProvider } from "@/components/design-provider";
-// Redesign font. The browser downloads the files only when html[data-design="v2"] uses the family.
+// Interface font (Golos Text, variable).
 import "@fontsource-variable/golos-text";
 import "./globals.css";
 
@@ -45,10 +44,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" data-design="v2" suppressHydrationWarning>
-      {/* Applies a stored "old interface" choice before paint, so it does not flash the new design first. */}
-      <head><script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('tutor-platform-design')==='v1')document.documentElement.dataset.design='v1'}catch(e){}" }} /></head>
-      <body className="antialiased"><ThemeProvider><LanguageProvider><DesignProvider>{children}<CookieNotice /></DesignProvider></LanguageProvider></ThemeProvider></body>
+    <html lang="ru" suppressHydrationWarning>
+      <body className="antialiased"><ThemeProvider><LanguageProvider>{children}<CookieNotice /></LanguageProvider></ThemeProvider></body>
     </html>
   );
 }

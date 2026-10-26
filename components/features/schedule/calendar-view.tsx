@@ -7,9 +7,9 @@ import { EmptyState } from "@/components/common/empty-state";
 import type { Lesson, LessonDraft, Student, TeacherDayNote } from "@/components/features/app/types";
 import { LessonContentBadges } from "@/components/features/lessons/lesson-content-badges";
 import { lessonStatusStyle } from "@/components/features/lessons/status-styles";
-import { LessonCardV2, LessonStatusChip } from "@/components/features/schedule/lesson-card-v2";
+import { LessonCard, LessonStatusChip } from "@/components/features/schedule/lesson-card";
 import { AddLessonDialog, EditLessonDialog } from "@/components/features/schedule/lesson-dialogs";
-import { TeacherDayNotePanel } from "@/components/features/schedule/schedule-views";
+import { TeacherDayNotePanel } from "@/components/features/schedule/teacher-day-note-panel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -26,7 +26,7 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
 const unitsLabel = (lessons: Lesson[]) => russianPlural(lessons.reduce((sum, lesson) => sum + lesson.units, 0), "занятие", "занятия", "занятий");
 
 // Redesign v2 of the calendar. Same data and actions as CalendarView; the month grid only has the weeks the month needs.
-export function CalendarViewV2({ preferenceScope, lessons, students, dayNotes, onSaveDayNote, showPastLessons, pastLessonsLoading, onShowPastLessonsChange, onAdd, onUpdate, onDelete, onMaterials, onConvertTrial, onOpenStudent }: CalendarViewProps) {
+export function CalendarView({ preferenceScope, lessons, students, dayNotes, onSaveDayNote, showPastLessons, pastLessonsLoading, onShowPastLessonsChange, onAdd, onUpdate, onDelete, onMaterials, onConvertTrial, onOpenStudent }: CalendarViewProps) {
   const currentDay = useCurrentDay();
   const [mode, setMode] = useState<Mode>(() => {
     const savedMode = readPreference(preferenceKey(preferenceScope, "calendar-mode"));
@@ -78,12 +78,12 @@ export function CalendarViewV2({ preferenceScope, lessons, students, dayNotes, o
 
       {mode === "month"
         ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-          <MonthGridV2 dates={monthDays} cursor={cursor} currentDay={currentDay} selectedDay={selectedDay} lessonsOn={lessonsOn} noteOn={noteOn} onSelect={setSelectedDay} />
+          <MonthGrid dates={monthDays} cursor={cursor} currentDay={currentDay} selectedDay={selectedDay} lessonsOn={lessonsOn} noteOn={noteOn} onSelect={setSelectedDay} />
           <section aria-label="Выбранный день" className="space-y-3 xl:rounded-[var(--radius-card)] xl:border xl:border-line xl:bg-surface xl:p-4">
             <DayPanel date={selectedDay} lessons={lessonsOn(selectedDay)} note={noteOn(selectedDay)} {...dayPanelProps} />
           </section>
         </div>
-        : <ScheduleColumnsV2 dates={visibleDates} currentDay={currentDay} lessonsOn={lessonsOn} noteOn={noteOn} onSelectDate={setDialogDate} onSelectLesson={setEditing} />}
+        : <ScheduleColumns dates={visibleDates} currentDay={currentDay} lessonsOn={lessonsOn} noteOn={noteOn} onSelectDate={setDialogDate} onSelectLesson={setEditing} />}
     </div>
 
     <Dialog open={dialogDate !== null} onOpenChange={(open) => !open && setDialogDate(null)}><DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-3xl p-0 sm:max-w-2xl"><DialogHeader className="border-b p-5 pr-14 sm:p-6"><DialogTitle className="text-2xl capitalize">{dialogDate && dateTitle(dialogDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</DialogTitle><DialogDescription>{dialogDate ? unitsLabel(lessonsOn(dialogDate)) : ""}</DialogDescription></DialogHeader><div className="min-h-0 overflow-y-auto p-4 sm:p-6">{dialogDate && <DayPanel date={dialogDate} lessons={lessonsOn(dialogDate)} note={noteOn(dialogDate)} {...dayPanelProps} onSelect={(lesson) => { setDialogDate(null); setEditing(lesson); }} hideHeader />}</div><DialogFooter className="border-t bg-background p-4 sm:p-5"><DialogClose asChild><Button variant="outline">Закрыть</Button></DialogClose>{dialogDate && <AddLessonDialog students={students} defaultDate={dialogDate} onAdd={onAdd} compact />}</DialogFooter></DialogContent></Dialog>
@@ -98,11 +98,11 @@ function DayPanel({ date, lessons, note, students, onAdd, onSaveDayNote, onSelec
       <AddLessonDialog iconOnly students={students} defaultDate={date} onAdd={onAdd} />
     </div>}
     <div className="flex flex-wrap items-center gap-2"><TeacherDayNotePanel compact key={`${date}:${note?.id ?? "new"}`} date={date} note={note} onSave={onSaveDayNote} /></div>
-    {lessons.length ? <div className="space-y-2.5">{lessons.map((lesson) => <LessonCardV2 key={lesson.id} compact lesson={lesson} onSelect={onSelect} onMaterials={onMaterials} onConvertTrial={onConvertTrial} />)}</div> : <EmptyState text="На этот день уроков нет" />}
+    {lessons.length ? <div className="space-y-2.5">{lessons.map((lesson) => <LessonCard key={lesson.id} compact lesson={lesson} onSelect={onSelect} onMaterials={onMaterials} onConvertTrial={onConvertTrial} />)}</div> : <EmptyState text="На этот день уроков нет" />}
   </>;
 }
 
-function MonthGridV2({ dates, cursor, currentDay, selectedDay, lessonsOn, noteOn, onSelect }: { dates: string[]; cursor: string; currentDay: string; selectedDay: string; lessonsOn: (date: string) => Lesson[]; noteOn: (date: string) => TeacherDayNote | undefined; onSelect: (date: string) => void }) {
+function MonthGrid({ dates, cursor, currentDay, selectedDay, lessonsOn, noteOn, onSelect }: { dates: string[]; cursor: string; currentDay: string; selectedDay: string; lessonsOn: (date: string) => Lesson[]; noteOn: (date: string) => TeacherDayNote | undefined; onSelect: (date: string) => void }) {
   const month = cursor.slice(0, 7);
   return <section aria-label="Месяц" className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
     <div className="grid grid-cols-7 border-b border-line">{weekdayLabels.map((day, index) => <div key={day} className={`py-2.5 text-center text-xs font-semibold text-ink-muted md:text-sm ${index > 4 ? "calendar-weekend-header" : ""}`}>{day}</div>)}</div>
@@ -125,7 +125,7 @@ function MonthGridV2({ dates, cursor, currentDay, selectedDay, lessonsOn, noteOn
   </section>;
 }
 
-function ScheduleColumnsV2({ dates, currentDay, lessonsOn, noteOn, onSelectDate, onSelectLesson }: { dates: string[]; currentDay: string; lessonsOn: (date: string) => Lesson[]; noteOn: (date: string) => TeacherDayNote | undefined; onSelectDate: (date: string) => void; onSelectLesson: (lesson: Lesson) => void }) {
+function ScheduleColumns({ dates, currentDay, lessonsOn, noteOn, onSelectDate, onSelectLesson }: { dates: string[]; currentDay: string; lessonsOn: (date: string) => Lesson[]; noteOn: (date: string) => TeacherDayNote | undefined; onSelectDate: (date: string) => void; onSelectLesson: (lesson: Lesson) => void }) {
   return <div className={`overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface ${dates.length === 1 ? "" : "divide-y divide-line md:grid md:grid-cols-7 md:divide-x md:divide-y-0"}`}>{dates.map((date) => {
     const dayLessons = lessonsOn(date);
     const weekend = [0, 6].includes(dateAtNoon(date).getUTCDay());

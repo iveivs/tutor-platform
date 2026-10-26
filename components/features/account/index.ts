@@ -1,7 +1,6 @@
 export {
   AvatarColorPicker,
   MemberAvatar,
-  MessagesCard,
   MessagesDialog,
   ProfilePersonalizationCard,
   StudentAvatarPreferenceCard,
