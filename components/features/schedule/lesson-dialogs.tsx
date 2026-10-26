@@ -14,7 +14,7 @@ import { today } from "@/lib/date-time";
 
 const studentItems = (students: Student[]) => students.map((student) => ({ value: student.id, label: student.name, description: student.archived ? "В архиве" : undefined }));
 
-export function AddLessonDialog({ students, defaultDate, onAdd, compact = false, iconOnMobile = false, iconOnly = false }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => Promise<boolean>; compact?: boolean; iconOnMobile?: boolean; iconOnly?: boolean }) {
+export function AddLessonDialog({ students, defaultDate, onAdd, compact = false, iconOnMobile = false, iconOnly = false, triggerLabel = "Добавить урок" }: { students: Student[]; defaultDate: string; onAdd: (lesson: LessonDraft) => Promise<boolean>; compact?: boolean; iconOnMobile?: boolean; iconOnly?: boolean; triggerLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState(students.find((student) => !student.archived && student.trialEligible)?.id ?? students[0]?.id ?? "");
   const [date, setDate] = useState(defaultDate);
@@ -44,7 +44,7 @@ export function AddLessonDialog({ students, defaultDate, onAdd, compact = false,
   const trialStudents = students.filter((student) => !student.archived && student.trialEligible);
   const trigger = iconOnMobile || iconOnly
     ? <DialogTrigger asChild><Button disabled={!students.length && lessonType !== "trial"} aria-label="Добавить урок" className={`size-11 shrink-0 rounded-[var(--radius-control)] bg-brand-solid p-0 text-base hover:bg-brand-solid-hover ${iconOnly ? "" : "sm:w-auto sm:px-5"}`}><Plus className="size-5" /><span className={iconOnly ? "hidden" : "hidden sm:inline"}>Добавить урок</span></Button></DialogTrigger>
-    : <DialogTrigger asChild><Button size={compact ? "default" : "lg"} disabled={!students.length && lessonType !== "trial"} className="h-11 rounded-xl bg-brand-solid px-5 text-base shadow-lg shadow-brand-glow hover:bg-brand-solid-hover"><Plus />Добавить урок</Button></DialogTrigger>;
+    : <DialogTrigger asChild><Button size={compact ? "default" : "lg"} disabled={!students.length && lessonType !== "trial"} className="h-11 rounded-xl bg-brand-solid px-5 text-base shadow-lg shadow-brand-glow hover:bg-brand-solid-hover"><Plus />{triggerLabel}</Button></DialogTrigger>;
 
   if (lessonType === "trial") return <Dialog open={open} onOpenChange={changeOpen}>{trigger}<LessonDialogFrame title="Пробное занятие" description="Бесплатное разовое занятие на один час." footer={<><Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Отмена</Button><Button className="bg-brand-solid" disabled={pending || !date || !time || trialTarget === "guest" && !guestName.trim() || trialTarget === "student" && !studentId} onClick={() => void submit()}>{pending ? "Сохраняю…" : "Сохранить пробное занятие"}</Button></>}>
     <FormField label="Тип занятия"><LessonTypeSelect value={lessonType} onChange={(value) => setLessonType(value)} /></FormField>
