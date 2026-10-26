@@ -52,7 +52,7 @@ export function TeacherInviteAccept({ token }: { token: string }) {
     finally { setPending(false); }
   };
 
-  return <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground"><section className="card w-full max-w-md p-7 sm:p-9">
+  return <main className="grid min-h-screen place-items-center bg-background px-4 pb-8 pt-20 text-foreground sm:py-8"><section className="card w-full max-w-md p-7 sm:p-9">
     <div className="mb-7 text-center"><BrandIcon className="mx-auto size-14 shadow-lg" /><h1 className="mt-5 text-3xl font-bold tracking-tight">Приглашение преподавателя</h1>{name && <p className="mt-2 text-ink-muted">{professionalTitle || "Преподаватель"} · {name}</p>}</div>
     {!ready ? <p className="text-center text-ink-muted">Проверяем приглашение…</p> : done ? <div className="text-center"><CheckCircle2 className="mx-auto size-12 text-success-text" /><h2 className="mt-4 text-xl font-bold">Кабинет готов</h2><p className="mt-2 text-ink-muted">Теперь войдите с email <strong>{email}</strong> и созданным паролем.</p><Link href="/" className="mt-6 inline-flex h-12 items-center justify-center rounded-xl bg-brand-solid px-5 font-semibold text-white">Перейти ко входу</Link></div> : error && !email ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger-ink">{error}</p> : <form className="space-y-5" onSubmit={submit}>
       <div className="space-y-2"><Label>Email</Label><Input value={email} disabled className="h-12 rounded-xl opacity-80" /></div>

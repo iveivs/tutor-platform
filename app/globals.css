@@ -57,8 +57,8 @@
 .legal-document h3 { @apply mb-2 mt-6 text-lg font-semibold; }
 .legal-document p { @apply my-3; }
 .legal-document ul { @apply my-3 list-disc space-y-1 pl-6; }
-.legal-document blockquote { @apply my-4 border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 italic text-slate-700; }
-.legal-document code { @apply rounded bg-slate-100 px-1 py-0.5 text-sm; }
+.legal-document blockquote { @apply my-4 border-l-4 border-brand-line bg-brand-soft px-4 py-3 italic text-ink-body; }
+.legal-document code { @apply rounded bg-surface-muted px-1 py-0.5 text-sm text-ink-body; }
 /* Colour palette, dark theme. */
 .dark {
   color-scheme: dark;

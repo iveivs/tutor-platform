@@ -4,7 +4,7 @@ import { BrandIcon } from "@/components/brand-icon";
 import { legalDocuments } from "@/lib/legal-documents";
 
 export default function LegalIndexPage() {
-  return <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+  return <main className="min-h-screen bg-background px-4 pb-10 pt-20 text-foreground sm:pt-10">
     <section className="mx-auto max-w-3xl">
       <Link href="/" className="inline-flex items-center gap-3"><BrandIcon className="size-11" /><span className="text-xl font-bold">Тьюттори</span></Link>
       <h1 className="mt-10 text-3xl font-bold">Юридические документы</h1>

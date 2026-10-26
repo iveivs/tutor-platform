@@ -92,7 +92,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
     finally { setPending(false); }
   };
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground">
+    <main className="grid min-h-screen place-items-center bg-background px-4 pb-8 pt-20 text-foreground sm:py-8">
       <section className="card w-full max-w-md p-7 sm:p-9">
         <div className="mb-7 text-center">
           {recovering ? <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-solid text-white shadow-lg shadow-brand-glow"><KeyRound className="size-7" /></span> : <BrandIcon className="mx-auto size-14 shadow-lg" />}
