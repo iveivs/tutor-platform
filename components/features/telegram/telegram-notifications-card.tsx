@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { NotificationPreferences, TelegramStatus } from "@/components/features/app/types";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { SettingsGroup, settingsRowClass } from "@/components/features/settings/settings-group";
 import { appFetch } from "@/lib/client-fetch";
 
 const defaultPreferences: NotificationPreferences = {
@@ -15,7 +16,7 @@ const defaultPreferences: NotificationPreferences = {
   telegramMaterials: false,
 };
 
-export function TelegramNotificationsCard({ compact = false, embedded = false }: { compact?: boolean; embedded?: boolean }) {
+export function TelegramNotificationsCard({ compact = false, embedded = false, grouped = false }: { compact?: boolean; embedded?: boolean; grouped?: boolean }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [pending, setPending] = useState(false);
@@ -93,6 +94,28 @@ export function TelegramNotificationsCard({ compact = false, embedded = false }:
       setPending(false);
     }
   };
+
+  if (grouped) {
+    const groupedRow = (key: keyof NotificationPreferences, title: string) => <label className={`${settingsRowClass} cursor-pointer`}>
+      <span className="min-w-0 text-[15px]">{title}</span>
+      <Switch checked={(preferences ?? defaultPreferences)[key]} disabled={pending} onCheckedChange={(checked) => void changePreference(key, checked)} aria-label={title} />
+    </label>;
+    return <>
+      <SettingsGroup title="Уведомления">
+        {groupedRow("soundEnabled", "Звук в кабинете")}
+        {groupedRow("telegramSchedule", "Telegram: расписание и запросы")}
+        {groupedRow("telegramMessages", "Telegram: новые сообщения")}
+        {groupedRow("telegramMaterials", "Telegram: материалы и домашние задания")}
+        <div className={settingsRowClass}>
+          <span className="flex min-w-0 items-center gap-3"><Send className="size-5 shrink-0 text-sky-600" /><span className="flex min-w-0 flex-col"><span className="text-[15px]">Telegram</span><span className="truncate text-xs text-ink-muted">{!status ? "Проверяем подключение…" : !status.configured ? "Бот ещё настраивается" : status.connected ? `Подключён${status.username ? ` · @${status.username}` : ""}` : "Не подключён"}</span></span></span>
+          {status?.configured && (status.connected
+            ? <Button type="button" size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button>
+            : <Button type="button" size="sm" className="shrink-0 bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}>{pending ? "Создаю ссылку…" : "Подключить"}</Button>)}
+        </div>
+      </SettingsGroup>
+      {status?.configured && !status.connected && <p className="px-1 text-xs leading-5 text-ink-muted">Откроется бот Тьюттори: нажмите «Запустить», затем вернитесь и <button type="button" className="font-semibold text-brand-text underline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>проверьте подключение</button>. Бот не получает доступ к вашим перепискам и контактам.</p>}
+    </>;
+  }
 
   const content = <>
     <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">

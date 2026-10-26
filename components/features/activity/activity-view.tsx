@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { Bell, CalendarDays, Clock3, History, Plus } from "lucide-react";
-import { toast } from "sonner";
 
 import { AppShell } from "@/components/common/app-shell";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
@@ -11,11 +9,8 @@ import type { AppNotification, HistoryEvent, LessonRequest, Student } from "@/co
 import { HistoryPanel } from "@/components/features/history/history-panel";
 import { NotificationsPanel } from "@/components/features/notifications/notifications-panel";
 import { Button } from "@/components/ui/button";
-import { saveAppData } from "@/lib/app-data-client";
 import { russianPlural } from "@/lib/russian-plural";
-import { getActivityAttentionCount, getActivityNotifications } from "./activity-model";
-
-const filters = ["Все", "Отмена", "Перенос", "Новый урок"] as const;
+import { activityFilters as filters, useActivityActions } from "./use-activity-actions";
 
 function RequestsEmpty({ text }: { text: string }) {
   return <div className="grid min-h-36 place-items-center p-6 text-center text-ink-muted"><div><CalendarDays className="mx-auto mb-3 size-7 text-ink-faint" /><p>{text}</p></div></div>;
@@ -31,43 +26,7 @@ export function ActivityView({ requests, notifications, historyEvents, students,
   onReadNotifications: (notificationId?: string) => Promise<void>;
   onReversePayment: (id: string) => Promise<boolean>;
 }) {
-  const [filter, setFilter] = useState<(typeof filters)[number]>("Все");
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [messageStudentId, setMessageStudentId] = useState<string | null>(null);
-  const visibleRequests = requests.filter((request) => filter === "Все" || filter === "Отмена" && request.kind === "cancel" || filter === "Перенос" && request.kind === "reschedule" || filter === "Новый урок" && request.kind === "new_lesson");
-  const activityNotifications = getActivityNotifications(notifications);
-
-  const resolve = async (id: string, decision: "approved" | "declined") => {
-    setPendingId(id);
-    try {
-      const result = await saveAppData({ action: "resolveRequest", requestId: id, decision });
-      await onResolved();
-      if (result.expired) toast.info("Запрос уже неактуален и закрыт");
-      else toast.success(decision === "approved" ? "Запрос подтверждён" : "Запрос отклонён");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось обработать запрос");
-    } finally {
-      setPendingId(null);
-    }
-  };
-
-  const openNotification = (notification: AppNotification) => {
-    if (!notification.read) void onReadNotifications(notification.id);
-    if (notification.type === "direct_message" && notification.studentId) {
-      setMessageStudentId(notification.studentId);
-      return;
-    }
-    if (notification.type === "new_request" && notification.requestId) {
-      setFilter("Все");
-      window.requestAnimationFrame(() => {
-        const requestCard = document.getElementById(`request-${notification.requestId}`);
-        requestCard?.scrollIntoView({ behavior: "smooth", block: "center" });
-        requestCard?.focus({ preventScroll: true });
-      });
-    }
-  };
-
-  const attentionCount = getActivityAttentionCount(requests, notifications);
+  const { filter, setFilter, pendingId, messageStudentId, setMessageStudentId, visibleRequests, activityNotifications, resolve, openNotification, attentionCount } = useActivityActions({ requests, notifications, onResolved, onReadNotifications });
 
   return <AppShell title="События" eyebrow={russianPlural(attentionCount, "событие требует внимания", "события требуют внимания", "событий требуют внимания")}>
     <section aria-labelledby="activity-requests-title">

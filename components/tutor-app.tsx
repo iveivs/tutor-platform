@@ -3,6 +3,7 @@ import { useState } from "react";
 import { MobileHeader, MobileNav, Sidebar } from "@/components/common/app-navigation";
 import { getActivityAttentionCount } from "@/components/features/activity/activity-model";
 import { ActivityView } from "@/components/features/activity/activity-view";
+import { ActivityViewV2 } from "@/components/features/activity/activity-view-v2";
 import { useScheduleModelContext } from "@/components/features/app/use-schedule-model-context";
 import { useTutorAppData } from "@/components/features/app/use-tutor-app-data";
 import { CalendarView, TodayView } from "@/components/features/schedule/schedule-views";
@@ -13,6 +14,7 @@ import { LessonMaterialsDialog } from "@/components/features/materials/lesson-ma
 import { TeacherMaterialsView } from "@/components/features/materials/teacher-materials-view";
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
 import { SettingsView } from "@/components/features/settings/settings-view";
+import { SettingsViewV2 } from "@/components/features/settings/settings-view-v2";
 import { StudentsView, StudentView } from "@/components/features/students/student-views";
 import { StudentsViewV2, StudentViewV2 } from "@/components/features/students/student-views-v2";
 import type { CurrentUser, Lesson, View } from "@/components/features/app/types";
@@ -59,9 +61,11 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "students" && design !== "v2" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && design === "v2" && <StudentViewV2 student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
         {view === "student" && students.length > 0 && design !== "v2" && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
-        {view === "activity" && <ActivityView requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}
+        {view === "activity" && design === "v2" && <ActivityViewV2 requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}
+        {view === "activity" && design !== "v2" && <ActivityView requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}
         {view === "materials" && <TeacherMaterialsView />}
-        {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
+        {view === "settings" && design === "v2" && <SettingsViewV2 profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
+        {view === "settings" && design !== "v2" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
       </section>
       <MobileNav view={view} setView={setView} />
       <LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} />

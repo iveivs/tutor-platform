@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, Clock3, Search } from "lucide-rea
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import { InfoCard } from "@/components/common/info-card";
-import type { BalanceEntry, HistoryEvent, Lesson, LessonDraft, RecurringSlot, Student, StudentDraft } from "@/components/features/app/types";
+import type { Student, StudentDraft } from "@/components/features/app/types";
 import { MemberAvatar, MessagesDialog, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { LessonCardV2 } from "@/components/features/schedule/lesson-card-v2";

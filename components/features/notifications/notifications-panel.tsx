@@ -14,6 +14,26 @@ const requestStatuses: Record<string, string> = { pending: "Ожидает ре�
 const formatMoment = (value: number) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(value));
 const formatLesson = (startsAt: number, endsAt?: number) => `${formatMoment(startsAt)}${endsAt ? `–${new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" }).format(new Date(endsAt))}` : ""}`;
 
+export function notificationActionLabel(item: AppNotification) {
+  return item.type === "direct_message" && item.studentId
+    ? "Открыть сообщение"
+    : item.type === "new_request" && item.requestId && item.requestStatus === "pending"
+      ? "Открыть запрос"
+      : null;
+}
+
+export function notificationDetails(item: AppNotification) {
+  return [
+    item.studentName ? { label: "Ученик", value: item.studentName } : null,
+    item.requestType ? { label: "Запрос", value: requestTypes[item.requestType] ?? item.requestType } : null,
+    item.requestStatus ? { label: "Статус", value: requestStatuses[item.requestStatus] ?? item.requestStatus } : null,
+    item.lessonStartsAt ? { label: "Урок", value: formatLesson(item.lessonStartsAt, item.lessonEndsAt) } : null,
+    item.proposedStartsAt ? { label: item.requestType === "reschedule" ? "Предложенное время" : "Время занятия", value: formatLesson(item.proposedStartsAt, item.proposedEndsAt) } : null,
+    item.requestType ? { label: "Комментарий", value: item.requestMessage ?? "Без комментария" } : null,
+    item.lessonUnits !== undefined ? { label: "Изменение баланса", value: `${item.lessonUnits < 0 ? "−" : "+"}${russianPlural(Math.abs(item.lessonUnits), "занятие", "занятия", "занятий")}` } : null,
+  ].filter((detail): detail is { label: string; value: string } => Boolean(detail));
+}
+
 function NotificationsEmpty() {
   return (
     <div className="card flex min-h-48 flex-col items-center justify-center gap-3 text-center text-muted">
@@ -65,20 +85,8 @@ export function NotificationsPanel({
       ) : (
         <div className="grid gap-4">
           {visibleNotifications.map((item) => {
-            const actionLabel = item.type === "direct_message" && item.studentId
-              ? "Открыть сообщение"
-              : item.type === "new_request" && item.requestId && item.requestStatus === "pending"
-                ? "Открыть запрос"
-                : null;
-            const details = [
-              item.studentName ? { label: "Ученик", value: item.studentName } : null,
-              item.requestType ? { label: "Запрос", value: requestTypes[item.requestType] ?? item.requestType } : null,
-              item.requestStatus ? { label: "Статус", value: requestStatuses[item.requestStatus] ?? item.requestStatus } : null,
-              item.lessonStartsAt ? { label: "Урок", value: formatLesson(item.lessonStartsAt, item.lessonEndsAt) } : null,
-              item.proposedStartsAt ? { label: item.requestType === "reschedule" ? "Предложенное время" : "Время занятия", value: formatLesson(item.proposedStartsAt, item.proposedEndsAt) } : null,
-              item.requestType ? { label: "Комментарий", value: item.requestMessage ?? "Без комментария" } : null,
-              item.lessonUnits !== undefined ? { label: "Изменение баланса", value: `${item.lessonUnits < 0 ? "−" : "+"}${russianPlural(Math.abs(item.lessonUnits), "занятие", "занятия", "занятий")}` } : null,
-            ].filter((detail): detail is { label: string; value: string } => Boolean(detail));
+            const actionLabel = notificationActionLabel(item);
+            const details = notificationDetails(item);
 
             return <article key={item.id} className={`card p-5 md:p-6 ${item.read ? "opacity-70" : "border-indigo-200 bg-indigo-50/40 dark:border-indigo-700 dark:bg-indigo-950/40"}`}><div className="flex gap-4"><span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${item.read ? "bg-slate-300" : "bg-brand-solid"}`} /><div className="min-w-0 flex-1"><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-bold">{item.title}</h3><p className="mt-1 text-sm text-ink-secondary">{item.body}</p></div><time className="shrink-0 text-xs text-ink-subtle">{formatMoment(item.createdAt)}</time></div>{details.length > 0 && <dl className="mt-4 grid gap-x-8 gap-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 sm:grid-cols-2 dark:border-slate-700 dark:bg-slate-900/70">{details.map((detail) => <div key={detail.label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">{detail.label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-800 dark:text-slate-100">{detail.value}</dd></div>)}</dl>}{actionLabel && <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => onOpenNotification(item)}>{actionLabel}<ArrowRight /></Button>}</div></div></article>;
           })}
