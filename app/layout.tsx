@@ -45,7 +45,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang="ru" data-design="v2" suppressHydrationWarning>
+      {/* Applies a stored "old interface" choice before paint, so it does not flash the new design first. */}
+      <head><script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('tutor-platform-design')==='v1')document.documentElement.dataset.design='v1'}catch(e){}" }} /></head>
       <body className="antialiased"><ThemeProvider><LanguageProvider><DesignProvider>{children}<CookieNotice /></DesignProvider></LanguageProvider></ThemeProvider></body>
     </html>
   );

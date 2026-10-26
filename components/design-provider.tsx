@@ -2,9 +2,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 
-// Interface redesign switch. "v2" is enabled per device and exposed as <html data-design="v2">,
-// so new token values and V2 components can ship to production without affecting other users.
-// Teachers toggle it in settings; ?design=v2 or ?design=v1 sets it on any page (e.g. the student portal).
+// Interface redesign switch, exposed as <html data-design>. "v2" is the default for everyone;
+// "v1" (the old interface) is kept per device until the old components are removed.
+// It is toggled in settings; ?design=v2 or ?design=v1 sets it on any page.
 export type DesignVersion = "v1" | "v2";
 
 type DesignContextValue = {
@@ -12,7 +12,7 @@ type DesignContextValue = {
   setDesign: (design: DesignVersion) => void;
 };
 
-const DesignContext = createContext<DesignContextValue>({ design: "v1", setDesign: () => undefined });
+const DesignContext = createContext<DesignContextValue>({ design: "v2", setDesign: () => undefined });
 const STORAGE_KEY = "tutor-platform-design";
 const DESIGN_EVENT = "tutor-platform-design-change";
 
@@ -23,9 +23,9 @@ const subscribeToDesign = (onStoreChange: () => void) => {
   return () => { window.removeEventListener("storage", onStorage); window.removeEventListener(DESIGN_EVENT, onStoreChange); };
 };
 const readDesign = (): DesignVersion => {
-  try { return window.localStorage.getItem(STORAGE_KEY) === "v2" ? "v2" : "v1"; } catch { return "v1"; }
+  try { return window.localStorage.getItem(STORAGE_KEY) === "v1" ? "v1" : "v2"; } catch { return "v2"; }
 };
-const readServerDesign = (): DesignVersion => "v1";
+const readServerDesign = (): DesignVersion => "v2";
 const storeDesign = (design: DesignVersion) => {
   try { window.localStorage.setItem(STORAGE_KEY, design); } catch { /* Storage unavailable: the switch stays at its default. */ }
   window.dispatchEvent(new Event(DESIGN_EVENT));
