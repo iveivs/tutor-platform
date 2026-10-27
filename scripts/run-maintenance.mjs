@@ -93,7 +93,8 @@ async function enqueueTelegramReminders(client) {
   await client.query(`WITH upcoming AS (
       SELECT min(l.id) AS lesson_id, COALESCE(l.group_id, l.id) AS lesson_key, l.workspace_id, l.student_id,
         min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at, w.timezone,
-        owner.display_name AS owner_name
+        owner.display_name AS owner_name,
+        COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = l.student_id), 0)::int AS balance
       FROM lessons l
       JOIN workspaces w ON w.id = l.workspace_id
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
@@ -104,7 +105,12 @@ async function enqueueTelegramReminders(client) {
     SELECT student_id, lesson_id, 'lesson_reminder',
       'lesson-reminder:' || lesson_key || ':' || student_id,
       'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
-      E'\nПреподаватель: ' || owner_name
+      E'\nПреподаватель: ' || owner_name ||
+      -- Same balance as in the student portal: sum of the student's balance entries at reminder time.
+      E'\nБаланс: ' || CASE WHEN balance < 0 THEN 'долг ' ELSE '' END || abs(balance) || ' ' ||
+      CASE WHEN abs(balance) % 10 = 1 AND abs(balance) % 100 <> 11 THEN 'занятие'
+        WHEN abs(balance) % 10 BETWEEN 2 AND 4 AND abs(balance) % 100 NOT BETWEEN 12 AND 14 THEN 'занятия'
+        ELSE 'занятий' END
     FROM upcoming
     JOIN telegram_connections connection ON connection.member_id = student_id AND connection.disabled_at IS NULL
     LEFT JOIN notification_preferences preference ON preference.member_id = student_id
