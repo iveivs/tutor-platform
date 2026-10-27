@@ -30,7 +30,7 @@ export function StudentAvailabilityAccessCard({ student, onUpdate }: { student: 
         <AppCardTitle>Доступ к свободным слотам</AppCardTitle>
         <AppCardDescription className="leading-6">Ученик сможет открыть список свободных рабочих часов и отправить запрос на выбранное время.</AppCardDescription>
       </div>
-      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${student.canViewAvailability ? "bg-emerald-100 text-success-ink-strong dark:bg-emerald-950" : "bg-surface-muted text-ink-secondary"}`}>
+      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${student.canViewAvailability ? "bg-success-soft text-success-ink" : "bg-surface-muted text-ink-secondary"}`}>
         {student.canViewAvailability ? "Разрешён" : "Запрещён"}
       </span>
     </div>

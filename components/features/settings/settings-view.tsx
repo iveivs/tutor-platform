@@ -103,7 +103,7 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
     </div>}
     <p className="px-1 text-xs leading-5 text-ink-muted">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ.</p>
 
-    <TelegramNotificationsCard grouped />
+    <TelegramNotificationsCard />
 
     <SettingsGroup title="Оформление">
       <div className={settingsRowClass}>

@@ -35,7 +35,7 @@
   --hero-start: #1f3a4d; --hero-end: #172c3b; --hero-muted: #bfdce3;
   --attention: #e8552d; --attention-dot: #e8552d;
   --selection: #dcebef; --selection-ink: #142433;
-  --calendar-line: var(--border); --calendar-weekend: #f7f4ef; --calendar-weekend-header: #f1ede6; --calendar-weekend-date: #56626e;
+  --calendar-line: var(--border); --calendar-header: #f1ede6; --calendar-weekend: #f7f4ef; --calendar-weekend-header: #e8e2d8; --calendar-weekend-date: #56626e;
   --table-row-alt: #faf8f4; --table-row-hover: #eef5f7;
   --overlay: rgb(15 26 35 / 0.45);
   --shadow-card: 0 1px 2px rgba(20, 36, 51, 0.04), 0 8px 24px rgba(20, 36, 51, 0.04); --shadow-dialog: 0 24px 64px rgb(20 36 51 / 0.18);
@@ -87,7 +87,7 @@
   --hero-start: #1f3a4d; --hero-end: #16303f; --hero-muted: #bfdce3;
   --attention: #ff7a4d; --attention-dot: #ff7a4d;
   --selection: #26404f; --selection-ink: #eef2f5;
-  --calendar-line: #2e4252; --calendar-weekend: #1b2a36; --calendar-weekend-header: #1b2a36; --calendar-weekend-date: #9eadb9;
+  --calendar-line: #2e4252; --calendar-header: #1e2d3a; --calendar-weekend: #1b2a36; --calendar-weekend-header: #263746; --calendar-weekend-date: #9eadb9;
   --table-row-alt: #192733; --table-row-hover: #1f3442;
   --overlay: rgb(15 26 35 / 0.45);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px rgba(0, 0, 0, 0.24); --shadow-dialog: 0 24px 64px rgb(0 0 0 / 0.5);
@@ -123,6 +123,7 @@ button, input { font: inherit; } button { cursor: pointer; } ::selection { backg
 .calendar-surface, .calendar-weekday { background-color: var(--surface); }
 .calendar-surface { border-color: var(--calendar-line); }
 .calendar-weekend { background-color: var(--calendar-weekend); }
+.calendar-header { background-color: var(--calendar-header); }
 .calendar-weekend-header { background-color: var(--calendar-weekend-header); }
 .calendar-weekend-date { color: var(--calendar-weekend-date); }
 .calendar-lesson-count { color: var(--calendar-lesson-count-text); }

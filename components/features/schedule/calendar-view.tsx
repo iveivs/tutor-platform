@@ -105,7 +105,7 @@ function DayPanel({ date, lessons, note, students, onAdd, onSaveDayNote, onSelec
 function MonthGrid({ dates, cursor, currentDay, selectedDay, lessonsOn, noteOn, onSelect }: { dates: string[]; cursor: string; currentDay: string; selectedDay: string; lessonsOn: (date: string) => Lesson[]; noteOn: (date: string) => TeacherDayNote | undefined; onSelect: (date: string) => void }) {
   const month = cursor.slice(0, 7);
   return <section aria-label="Месяц" className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
-    <div className="grid grid-cols-7 border-b border-line">{weekdayLabels.map((day, index) => <div key={day} className={`py-2.5 text-center text-xs font-semibold text-ink-muted md:text-sm ${index > 4 ? "calendar-weekend-header" : ""}`}>{day}</div>)}</div>
+    <div className="grid grid-cols-7 border-b border-line">{weekdayLabels.map((day, index) => <div key={day} className={`border-r border-line py-2.5 text-center text-xs font-semibold text-ink-muted md:text-sm ${index > 4 ? "calendar-weekend-header" : "calendar-header"}`}>{day}</div>)}</div>
     <div className="grid grid-cols-7">
       {dates.map((date) => {
         const dayLessons = lessonsOn(date);

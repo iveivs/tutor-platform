@@ -155,7 +155,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             <BalanceHistory entries={paymentEntries} />
           </section>
 
-          <TelegramNotificationsCard grouped />
+          <TelegramNotificationsCard />
 
           <SettingsGroup title="Оформление">
             <div className={settingsRowClass}>

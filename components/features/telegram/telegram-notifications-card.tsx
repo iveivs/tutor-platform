@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BellRing, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { toast } from "sonner";
 import type { NotificationPreferences, TelegramStatus } from "@/components/features/app/types";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,8 @@ const defaultPreferences: NotificationPreferences = {
   telegramMaterials: false,
 };
 
-export function TelegramNotificationsCard({ compact = false, embedded = false, grouped = false }: { compact?: boolean; embedded?: boolean; grouped?: boolean }) {
+// Notification preferences and the Telegram connection, as a settings group.
+export function TelegramNotificationsCard() {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [pending, setPending] = useState(false);
@@ -61,11 +62,6 @@ export function TelegramNotificationsCard({ compact = false, embedded = false, g
     }
   };
 
-  const preferenceRow = (key: keyof NotificationPreferences, title: string, description: string) => <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-line p-4">
-    <span className="min-w-0"><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs leading-5 text-ink-muted">{description}</span></span>
-    <Switch checked={(preferences ?? defaultPreferences)[key]} disabled={pending} onCheckedChange={(checked) => void changePreference(key, checked)} aria-label={title} />
-  </label>;
-
   const connect = async () => {
     setPending(true);
     try {
@@ -95,55 +91,23 @@ export function TelegramNotificationsCard({ compact = false, embedded = false, g
     }
   };
 
-  if (grouped) {
-    const groupedRow = (key: keyof NotificationPreferences, title: string) => <label className={`${settingsRowClass} cursor-pointer`}>
-      <span className="min-w-0 text-[15px]">{title}</span>
-      <Switch checked={(preferences ?? defaultPreferences)[key]} disabled={pending} onCheckedChange={(checked) => void changePreference(key, checked)} aria-label={title} />
-    </label>;
-    return <>
-      <SettingsGroup title="Уведомления">
-        {groupedRow("soundEnabled", "Звук в кабинете")}
-        {groupedRow("telegramSchedule", "Telegram: расписание и запросы")}
-        {groupedRow("telegramMessages", "Telegram: новые сообщения")}
-        {groupedRow("telegramMaterials", "Telegram: материалы и домашние задания")}
-        <div className={settingsRowClass}>
-          <span className="flex min-w-0 items-center gap-3"><Send className="size-5 shrink-0 text-sky-600" /><span className="flex min-w-0 flex-col"><span className="text-[15px]">Telegram</span><span className="truncate text-xs text-ink-muted">{!status ? "Проверяем подключение…" : !status.configured ? "Бот ещё настраивается" : status.connected ? `Подключён${status.username ? ` · @${status.username}` : ""}` : "Не подключён"}</span></span></span>
-          {status?.configured && (status.connected
-            ? <Button type="button" size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button>
-            : <Button type="button" size="sm" className="shrink-0 bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}>{pending ? "Создаю ссылку…" : "Подключить"}</Button>)}
-        </div>
-      </SettingsGroup>
-      {status?.configured && !status.connected && <p className="px-1 text-xs leading-5 text-ink-muted">Откроется бот Тьюттори: нажмите «Запустить», затем вернитесь и <button type="button" className="font-semibold text-brand-text underline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>проверьте подключение</button>. Бот не получает доступ к вашим перепискам и контактам.</p>}
-    </>;
-  }
-
-  const content = <>
-    <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Send className="size-5" /></span><div className="min-w-0 flex-1">
-      <h2 className="text-xl font-bold">{embedded ? "Каналы уведомлений" : "Уведомления"}</h2>
-      <p className="mt-1 text-sm text-ink-muted">Выберите, как Тьюттори сообщит о новых событиях. Настройки индивидуальны для каждого пользователя.</p>
-      <div className="mt-5">
-        <h3 className="flex items-center gap-2 text-sm font-bold"><BellRing className="size-4 text-brand-text" />Уведомления в кабинете</h3>
-        <div className="mt-3">{preferenceRow("soundEnabled", "Лёгкий звук", "Проигрывать короткий сигнал, когда открытый кабинет получает новое событие.")}</div>
+  const groupedRow = (key: keyof NotificationPreferences, title: string) => <label className={`${settingsRowClass} cursor-pointer`}>
+    <span className="min-w-0 text-[15px]">{title}</span>
+    <Switch checked={(preferences ?? defaultPreferences)[key]} disabled={pending} onCheckedChange={(checked) => void changePreference(key, checked)} aria-label={title} />
+  </label>;
+  return <>
+    <SettingsGroup title="Уведомления">
+      {groupedRow("soundEnabled", "Звук в кабинете")}
+      {groupedRow("telegramSchedule", "Telegram: расписание и запросы")}
+      {groupedRow("telegramMessages", "Telegram: новые сообщения")}
+      {groupedRow("telegramMaterials", "Telegram: материалы и домашние задания")}
+      <div className={settingsRowClass}>
+        <span className="flex min-w-0 items-center gap-3"><Send className="size-5 shrink-0 text-sky-600" /><span className="flex min-w-0 flex-col"><span className="text-[15px]">Telegram</span><span className="truncate text-xs text-ink-muted">{!status ? "Проверяем подключение…" : !status.configured ? "Бот ещё настраивается" : status.connected ? `Подключён${status.username ? ` · @${status.username}` : ""}` : "Не подключён"}</span></span></span>
+        {status?.configured && (status.connected
+          ? <Button type="button" size="sm" variant="outline" className="shrink-0" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button>
+          : <Button type="button" size="sm" className="shrink-0 bg-sky-600 hover:bg-sky-700" disabled={pending} onClick={() => void connect()}>{pending ? "Создаю ссылку…" : "Подключить"}</Button>)}
       </div>
-      <div className="mt-5">
-        <h3 className="text-sm font-bold">Что отправлять в Telegram</h3>
-        <div className="mt-3 grid gap-2">
-          {preferenceRow("telegramSchedule", "Расписание и запросы", "Напоминания, отмены, переносы и запросы на изменение урока.")}
-          {preferenceRow("telegramMessages", "Новые сообщения", "Только факт нового сообщения — без его текста.")}
-          {preferenceRow("telegramMaterials", "Материалы и домашние задания", "Новые файлы, фотографии, задания и ответы к уроку.")}
-        </div>
-      </div>
-      {!status && <p className="mt-4 text-sm text-ink-muted">Проверяем подключение…</p>}
-      {status && !status.configured && <p className="mt-4 rounded-2xl bg-surface-subtle p-4 text-sm text-ink-secondary">Telegram-бот ещё настраивается. Здесь появится кнопка подключения, когда он будет готов.</p>}
-      {status?.configured && status.connected && <><p className="mt-4 text-sm font-semibold text-success-ink">Telegram подключён{status.username ? ` · @${status.username}` : ""}</p><Button type="button" variant="outline" className="mt-4" disabled={pending} onClick={() => void disconnect()}>{pending ? "Отключаю…" : "Отключить"}</Button></>}
-      {status?.configured && !status.connected && <div className="mt-5">
-        <ol className="space-y-3 text-sm text-ink-body">
-          {["Нажмите «Подключить Telegram» — откроется бот Тьюттори.", "В Telegram нажмите «Запустить» или отправьте команду /start.", "Вернитесь в Тьюттори и нажмите «Проверить подключение»."].map((step, index) => <li key={step} className="flex items-start gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700">{index + 1}</span><span className="pt-0.5 leading-5">{step}</span></li>)}
-        </ol>
-        <p className="mt-4 rounded-xl bg-surface-subtle p-3 text-xs leading-5 text-ink-muted">Одноразовая ссылка действует 15 минут. Бот не получает доступ к вашим перепискам и контактам. Подключение можно отключить в любой момент.</p>
-        <div className="mt-4 grid min-w-0 gap-2"><Button type="button" className="h-auto min-h-10 w-full min-w-0 whitespace-normal bg-sky-600 text-center hover:bg-sky-700" disabled={pending} onClick={() => void connect()}><Send className="shrink-0" /><span>{pending ? "Создаю ссылку…" : "Подключить Telegram"}</span></Button><Button type="button" variant="outline" className="h-auto min-h-10 w-full min-w-0 whitespace-normal text-center" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>Проверить подключение</Button></div>
-      </div>}
-    </div></div>
+    </SettingsGroup>
+    {status?.configured && !status.connected && <p className="px-1 text-xs leading-5 text-ink-muted">Откроется бот Тьюттори: нажмите «Запустить», затем вернитесь и <button type="button" className="font-semibold text-brand-text underline" disabled={pending} onClick={() => void load().catch(() => toast.error("Не удалось проверить подключение"))}>проверьте подключение</button>. Бот не получает доступ к вашим перепискам и контактам.</p>}
   </>;
-  return embedded ? <div className="min-w-0">{content}</div> : <section className={`card min-w-0 overflow-hidden p-5 md:p-8 ${compact ? "max-w-none" : "max-w-3xl"}`}>{content}</section>;
 }

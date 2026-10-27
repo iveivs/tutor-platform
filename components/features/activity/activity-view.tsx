@@ -5,6 +5,7 @@ import { ArrowRight, CalendarDays, ChevronDown, History } from "lucide-react";
 
 import { AppShell } from "@/components/common/app-shell";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
+import { FilterChips } from "@/components/common/filter-chips";
 import { ShowMoreButton } from "@/components/common/show-more-button";
 import { MessagesDialog } from "@/components/features/account";
 import type { AppNotification, HistoryEvent, LessonRequest, Student } from "@/components/features/app/types";
@@ -92,7 +93,7 @@ export function ActivityView({ requests, notifications, historyEvents, students,
           <h2 id="activity-requests-title" className="text-lg font-bold">Запросы{requests.length > 0 ? ` · ${requests.length}` : ""}</h2>
           {requests.length > 0 && <span className="text-sm text-ink-muted">ждут ответа</span>}
         </div>
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">{activityFilters.map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)} className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold transition ${filter === item ? "bg-brand-solid text-white" : "border border-line bg-surface text-ink-muted hover:text-foreground"}`}>{item}</button>)}</div>
+        <FilterChips label="Тип запроса" items={activityFilters.map((item) => ({ value: item, label: item }))} value={filter} onChange={setFilter} />
         {visibleRequests.map((request) => <RequestCard key={request.id} request={request} pendingId={pendingId} onResolve={(id, decision) => void resolve(id, decision)} />)}
         {visibleRequests.length === 0 && <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarDays className="size-5 shrink-0 text-ink-faint" />{requests.length === 0 ? "Все запросы обработаны" : "В этой категории запросов нет"}</div>}
       </section>

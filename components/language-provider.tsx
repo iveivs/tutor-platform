@@ -100,6 +100,8 @@ const translations: Record<string, string> = {
   "ждут ответа": "awaiting reply", "Прочитать все": "Mark all read", "Закрыть добавление": "Close upload", "Недавние": "Recent", "Сортировка": "Sort", "выходной": "day off", "Отменить": "Cancel", "Оформление": "Appearance", "Тема": "Theme", "Язык": "Language", "Как в системе": "System", "Светлая": "Light", "Тёмная": "Dark", "Платформа": "Platform", "Открыть админку": "Open admin panel", "Звук в кабинете": "Sound in the app", "Telegram: расписание и запросы": "Telegram: schedule and requests", "Telegram: новые сообщения": "Telegram: new messages", "Telegram: материалы и домашние задания": "Telegram: materials and homework", "Бот ещё настраивается": "The bot is being set up", "Не подключён": "Not connected", "Подключён": "Connected", "Подключить": "Connect", "Откроется бот Тьюттори: нажмите «Запустить», затем вернитесь и": "The Tyuttori bot will open: tap “Start”, then come back and", "проверьте подключение": "check the connection", ". Бот не получает доступ к вашим перепискам и контактам.": ". The bot has no access to your chats or contacts.", "Сообщения видны только вам двоим": "Only the two of you can see these messages", "Сообщение": "Message", "вчера": "yesterday", "Загружаю библиотеку…": "Loading library…", "Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ.": "These intervals are used to show free time to students you have given access.", "Только на этом устройстве. Выключите, чтобы вернуться к привычному виду.": "On this device only. Turn off to return to the familiar look.", "не назначен": "not assigned",
   "Преподаватель:": "Teacher:", "Написать преподавателю": "Message your teacher", "Свободное время": "Free time", "Выберите подходящее время и отправьте запрос преподавателю.": "Pick a convenient time and send a request to your teacher.",
   "Подробнее": "Details",
+  "Режим календаря": "Calendar view", "Выбранный день": "Selected day",
+  "Тип запроса": "Request type", "Формат": "Format",
   "Тема и язык": "Theme and language","Оформление кабинета на этом устройстве.": "Appearance on this device.", "Новый интерфейс": "New interface","Предварительная версия редизайна. Включается только на этом устройстве.": "Redesign preview. Applies to this device only.", "Показывать новый интерфейс": "Show the new interface", "Изменения появляются поэтапно. Выключите, чтобы вернуться к привычному виду.": "Changes arrive step by step. Turn it off to return to the familiar look.",
   "Управление платформой": "Platform management", "Список кабинетов преподавателей и управление доступом.": "Tutor accounts and access management.", "Преподаватель": "Tutor", "Создан": "Created", "Доступ": "Access", "Активен": "Active", "Заблокирован": "Blocked", "Заблокировать": "Block", "Разблокировать": "Unblock",
   "Персональная ссылка": "Personal link", "Ссылка на кабинет": "Portal link", "Готовим ссылку…": "Preparing link…", "Скопировать ссылку": "Copy link", "Отправить": "Send", "Пригласить ученика": "Invite student", "Отправить ссылку на кабинет": "Send portal link", "Ссылка действует 14 дней. Создание новой ссылки отключит предыдущую.": "The link is valid for 14 days. Creating a new link disables the previous one.", "Это обычная ссылка на вход, она не меняет пароль и не создаёт новое приглашение.": "This is a regular sign-in link. It does not change the password or create a new invitation.",
@@ -132,6 +134,7 @@ const translations: Record<string, string> = {
 };
 
 const months: Record<string, string> = { января: "January", февраля: "February", марта: "March", апреля: "April", мая: "May", июня: "June", июля: "July", августа: "August", сентября: "September", октября: "October", ноября: "November", декабря: "December" };
+const standaloneMonths: Record<string, string> = { январь: "January", февраль: "February", март: "March", апрель: "April", май: "May", июнь: "June", июль: "July", август: "August", сентябрь: "September", октябрь: "October", ноябрь: "November", декабрь: "December" };
 const shortMonths: Record<string, string> = { "янв.": "Jan", "февр.": "Feb", "мар.": "Mar", "апр.": "Apr", мая: "May", "июн.": "Jun", "июл.": "Jul", "авг.": "Aug", "сент.": "Sep", "окт.": "Oct", "нояб.": "Nov", "дек.": "Dec" };
 const weekdays: Record<string, string> = { понедельник: "Monday", вторник: "Tuesday", среда: "Wednesday", четверг: "Thursday", пятница: "Friday", суббота: "Saturday", воскресенье: "Sunday" };
 const shortWeekdays: Record<string, string> = { Пн: "Mon", Вт: "Tue", Ср: "Wed", Чт: "Thu", Пт: "Fri", Сб: "Sat", Вс: "Sun" };
@@ -181,6 +184,7 @@ export function translateUiText(value: string) {
     .replace(/^(\d+) (?:файл|файла|файлов)$/, (_, count: string) => `${count} ${Number(count) === 1 ? "file" : "files"}`)
     .replace(/^Подключён · (@.+)$/, "Connected · $1")
     .replace(/^Ещё: (.+)$/, "More: $1")
+    .replace(/, (\d+) (?:урок|урока|уроков)$/, (_, count: string) => `, ${count} ${Number(count) === 1 ? "lesson" : "lessons"}`)
     .replace(/^Открыть (.+)$/, "Open $1")
     .replace(/^([\d.,]+) (КБ|МБ) · /, (_, amount: string, unit: string) => `${amount} ${unit === "КБ" ? "KB" : "MB"} · `)
     .replace(/ · (\d+) (?:урок|урока|уроков)$/, (_, count: string) => ` · ${count} ${Number(count) === 1 ? "lesson" : "lessons"}`)
@@ -214,6 +218,7 @@ export function translateUiText(value: string) {
     .replace(/\s+г\.\s+в\s+/g, " at ")
     .replace(/ г\.$/, "");
   for (const [month, english] of Object.entries(months)) translated = translated.replace(new RegExp(month, "gi"), english);
+  for (const [month, english] of Object.entries(standaloneMonths)) translated = translated.replace(new RegExp(`(?<![а-яё])${month}(?![а-яё])`, "gi"), english);
   for (const [month, english] of Object.entries(shortMonths)) translated = translated.replace(new RegExp(month.replace(".", "\\."), "gi"), english);
   for (const [weekday, english] of Object.entries(weekdays)) translated = translated.replace(new RegExp(weekday, "gi"), english);
   for (const [weekday, english] of Object.entries(shortWeekdays)) translated = translated.replace(new RegExp(`(^|\\s)${weekday}(?=[\\s,.]|$)`, "gi"), `$1${english}`);
