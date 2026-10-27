@@ -114,7 +114,7 @@ function MonthGrid({ dates, cursor, currentDay, selectedDay, lessonsOn, noteOn, 
         const selected = date === selectedDay;
         const today = date === currentDay;
         return <button key={date} type="button" aria-pressed={selected} aria-label={`${dateTitle(date, { weekday: "long", day: "numeric", month: "long" })}, ${russianPlural(dayLessons.length, "урок", "урока", "уроков")}`} onClick={() => onSelect(date)} className={`relative flex min-h-16 flex-col items-center gap-1 border-b border-r border-line p-1.5 text-left transition md:min-h-28 md:items-stretch md:p-2 ${selected ? "bg-brand-soft shadow-[inset_0_0_0_2px_var(--brand-solid)]" : weekend ? "calendar-weekend hover:bg-surface-subtle" : "calendar-weekday hover:bg-surface-subtle"}`}>
-          <span className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-semibold md:self-start ${today ? "bg-brand-solid text-white" : currentMonth ? weekend ? "calendar-weekend-date" : "text-ink-body" : "text-ink-faint"}`}>{Number(date.slice(-2))}</span>
+          <span className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-semibold md:self-start ${today ? "bg-coral text-white" : currentMonth ? weekend ? "calendar-weekend-date" : "text-ink-body" : "text-ink-faint"}`}>{Number(date.slice(-2))}</span>
           {noteOn(date) && <StickyNote className="absolute right-0.5 top-0.5 size-3 text-warning-text md:right-1.5 md:top-1.5 md:size-3.5" aria-label="Есть личная заметка" />}
           {dayLessons.length > 0 && <span className={`calendar-lesson-count grid size-5 place-items-center rounded-full text-[11px] font-bold md:hidden ${date < currentDay ? "calendar-lesson-count-past" : "calendar-lesson-count-upcoming"}`}>{dayLessons.length}</span>}
           <span className="hidden w-full space-y-1 md:block">{dayLessons.slice(0, 2).map((lesson) => <span key={lesson.id} className={`flex items-center justify-between gap-1 overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${lessonStatusStyle(lesson)}`}><span data-no-translate className="truncate">{lesson.time} {lesson.name.split(" ")[0]}</span>{lesson.units === 2 && <span className="font-bold">×2</span>}</span>)}</span>
@@ -132,7 +132,7 @@ function ScheduleColumns({ dates, currentDay, lessonsOn, noteOn, onSelectDate, o
     return <section key={date} className={`p-3 md:min-h-64 ${weekend ? "calendar-weekend" : ""}`}>
       <button type="button" onClick={() => onSelectDate(date)} className="mb-2 w-full rounded-[var(--radius-control)] p-2 text-center transition hover:bg-surface-subtle md:mb-3">
         <span className="block text-xs uppercase text-ink-muted">{dateTitle(date, { weekday: "short" })}</span>
-        <strong className={date === currentDay ? "text-brand-text" : weekend ? "calendar-weekend-date" : ""}>{dateTitle(date)}</strong>
+        <strong className={date === currentDay ? "text-coral-text" : weekend ? "calendar-weekend-date" : ""}>{dateTitle(date)}</strong>
         {noteOn(date) && <span className="mt-1 flex items-center justify-center gap-1 text-xs font-medium text-warning-text"><StickyNote className="size-3" />Заметка</span>}
       </button>
       <div className="space-y-2">{dayLessons.map((lesson) => <button key={lesson.id} type="button" disabled={lesson.past} onClick={() => !lesson.past && onSelectLesson(lesson)} className={`w-full rounded-[var(--radius-control)] border border-line bg-surface p-3 text-left text-sm transition ${lesson.units === 2 ? "min-h-28" : ""} ${lesson.past ? "cursor-default opacity-70" : "hover:border-brand-line"}`}>

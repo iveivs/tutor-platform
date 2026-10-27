@@ -75,7 +75,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
         <div className="flex min-w-0 flex-col gap-5">
           {nextLesson ? <section aria-label="Следующий урок" className="rounded-[var(--radius-card)] bg-hero-start p-5 text-white">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-semibold text-hero-muted">Следующий урок</p>
+              <p className="text-sm font-semibold text-coral">Следующий урок</p>
               <LessonStatusChip lesson={nextLesson} />
             </div>
             <p className="mt-2 text-xl font-bold first-letter:uppercase">{lessonDay(nextLesson)}</p>

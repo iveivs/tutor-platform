@@ -34,6 +34,8 @@
   --status-trial: #eee8f7; --status-trial-ink: #5b3f94; --status-trial-ring: #ddd2f0;
   --hero-start: #1f3a4d; --hero-end: #172c3b; --hero-muted: #bfdce3;
   --attention: #e8552d; --attention-dot: #e8552d;
+  /* Brand coral from the logo: «today», «now» and the active place. coral-text is the readable variant for text. */
+  --coral: #e8552d; --coral-text: #c2461f; --coral-soft: #fdeae3;
   --selection: #dcebef; --selection-ink: #142433;
   --calendar-line: var(--border); --calendar-header: #f1ede6; --calendar-weekend: #f7f4ef; --calendar-weekend-header: #e8e2d8; --calendar-weekend-date: #56626e;
   --table-row-alt: #faf8f4; --table-row-hover: #eef5f7;
@@ -86,6 +88,7 @@
   --status-trial: #2a2340; --status-trial-ink: #c7b5f0; --status-trial-ring: #3a3157;
   --hero-start: #1f3a4d; --hero-end: #16303f; --hero-muted: #bfdce3;
   --attention: #ff7a4d; --attention-dot: #ff7a4d;
+  --coral: #ff7a4d; --coral-text: #ff9a74; --coral-soft: #3a1f16;
   --selection: #26404f; --selection-ink: #eef2f5;
   --calendar-line: #2e4252; --calendar-header: #1e2d3a; --calendar-weekend: #1b2a36; --calendar-weekend-header: #263746; --calendar-weekend-date: #9eadb9;
   --table-row-alt: #192733; --table-row-hover: #1f3442;
@@ -111,7 +114,7 @@
   --color-status-past-debt: var(--status-past-debt); --color-status-past-debt-ink: var(--status-past-debt-ink); --color-status-past-debt-ring: var(--status-past-debt-ring);
   --color-status-request: var(--status-request); --color-status-request-ink: var(--status-request-ink); --color-status-request-ring: var(--status-request-ring);
   --color-status-trial: var(--status-trial); --color-status-trial-ink: var(--status-trial-ink); --color-status-trial-ring: var(--status-trial-ring);
-  --color-calendar-line: var(--calendar-line); --color-hero-start: var(--hero-start); --color-hero-end: var(--hero-end); --color-hero-muted: var(--hero-muted); --color-attention: var(--attention); --color-attention-dot: var(--attention-dot);
+  --color-calendar-line: var(--calendar-line); --color-hero-start: var(--hero-start); --color-hero-end: var(--hero-end); --color-hero-muted: var(--hero-muted); --color-attention: var(--attention); --color-attention-dot: var(--attention-dot); --color-coral: var(--coral); --color-coral-text: var(--coral-text); --color-coral-soft: var(--coral-soft);
   --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
   --font-sans: "Golos Text Variable", "Golos Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }

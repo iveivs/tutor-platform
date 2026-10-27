@@ -53,7 +53,7 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
               const past = date < currentDay;
               return <button key={date} type="button" aria-pressed={selected} aria-label={dateTitle(date, { weekday: "long", day: "numeric", month: "long" })} onClick={() => setSelectedDate(date)} className={`flex h-[4.25rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-control)] transition ${selected ? "bg-brand-solid text-white" : past ? "text-ink-muted hover:bg-surface-subtle" : "text-ink-strong hover:bg-surface-subtle"}`}>
                 <span className="text-xs font-medium">{label}</span>
-                <span className={`text-base ${date === currentDay ? "font-extrabold" : "font-semibold"}`}>{dateAtNoon(date).getUTCDate()}</span>
+                <span className={`text-base ${date === currentDay ? `font-extrabold ${selected ? "" : "text-coral-text"}` : "font-semibold"}`}>{dateAtNoon(date).getUTCDate()}</span>
                 {lessonCounts[date] ? <span aria-label={russianPlural(lessonCounts[date], "урок", "урока", "уроков")} className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold leading-none ${selected ? "bg-white text-brand-solid" : "calendar-lesson-count calendar-lesson-count-upcoming"}`}>{lessonCounts[date]}</span> : <span aria-hidden className="h-5" />}
               </button>;
             })}
@@ -80,7 +80,7 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
           {requests.length === 0 && debtCount === 0 && withoutLessonCount === 0 ? <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">Всё в порядке — ничего срочного.</p> : <div className="h-1.5" />}
         </section>
         <section aria-label="Ближайший урок" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] bg-hero-start p-4 text-white">
-          <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-hero-muted">Ближайший урок</p>{nextLesson ? <><p className="mt-0.5 truncate text-lg font-bold"><span data-no-translate>{nextLesson.name}</span> · {nextLesson.time}</p><p className="text-sm text-hero-muted">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</p></> : <p className="mt-0.5 text-sm text-hero-muted">Будущих уроков пока нет</p>}</div>
+          <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-coral">Ближайший урок</p>{nextLesson ? <><p className="mt-0.5 truncate text-lg font-bold"><span data-no-translate>{nextLesson.name}</span> · {nextLesson.time}</p><p className="text-sm text-hero-muted">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</p></> : <p className="mt-0.5 text-sm text-hero-muted">Будущих уроков пока нет</p>}</div>
           {nextLesson && <button type="button" onClick={() => onOpenStudent(nextLesson.studentId)} className="w-full rounded-[var(--radius-control)] bg-white/15 px-3 py-2.5 text-sm font-semibold hover:bg-white/20 sm:w-auto sm:shrink-0 xl:w-full">Открыть карточку</button>}
         </section>
       </aside>
