@@ -104,7 +104,7 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отменить оплату"); return false; }
   };
   const submitStudentRequest = async (body: StudentRequestDraft) => {
-    try { await saveAppData({ action: "submitStudentRequest", ...body }); await reload(); toast.success("Запрос отправлен преподавателю"); return true; }
+    try { const result = await saveAppData({ action: "submitStudentRequest", ...body }); await reload(); toast.success(result.cancelled ? "Отмечено: вы не придёте. Преподаватель получил уведомление" : "Запрос отправлен преподавателю"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить запрос"); return false; }
   };
   const markNotificationsRead = async (notificationId?: string) => {

@@ -92,13 +92,13 @@ export function groupLessonParts(parts: LessonPart[]) {
     return { ...lesson, id: actionable.id, end: last.end, status, label, past, units, hasFile: members.some((member) => member.hasFile), hasNote: members.some((member) => member.hasNote) };
   }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
-export type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; lesson_type: "regular" | "trial"; starts_at: number; ends_at: number };
+export type ScheduledLessonRow = { id: string; student_id: string; series_id: string | null; group_id: string | null; class_id: string | null; lesson_type: "regular" | "trial"; starts_at: number; ends_at: number };
 export async function getScheduledLessonGroup(db: ReturnType<typeof getD1>, workspaceId: string, lessonId: string) {
-  const lesson = await db.prepare("SELECT id, student_id, series_id, group_id, lesson_type, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'")
+  const lesson = await db.prepare("SELECT id, student_id, series_id, group_id, class_id, lesson_type, starts_at, ends_at FROM lessons WHERE id = ? AND workspace_id = ? AND status = 'scheduled'")
     .bind(lessonId, workspaceId).first<ScheduledLessonRow>();
   if (!lesson) return [];
   if (!lesson.group_id) return [lesson];
-  const rows = await db.prepare("SELECT id, student_id, series_id, group_id, lesson_type, starts_at, ends_at FROM lessons WHERE group_id = ? AND workspace_id = ? AND status = 'scheduled' ORDER BY starts_at")
+  const rows = await db.prepare("SELECT id, student_id, series_id, group_id, class_id, lesson_type, starts_at, ends_at FROM lessons WHERE group_id = ? AND workspace_id = ? AND status = 'scheduled' ORDER BY starts_at")
     .bind(lesson.group_id, workspaceId).all<ScheduledLessonRow>();
   return rows.results;
 }

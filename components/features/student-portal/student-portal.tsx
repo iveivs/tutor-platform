@@ -7,7 +7,7 @@ import { CollapsibleSection } from "@/components/common/collapsible-section";
 import { ShowMoreButton } from "@/components/common/show-more-button";
 import { BrandIcon } from "@/components/brand-icon";
 import { MemberAvatar, MessagesDialog, ProfilePersonalizationCard } from "@/components/features/account";
-import type { AppNotification, AvailableSlot, BalanceEntry, HistoryEvent, Lesson, LessonRequest, Student, StudentRequestDraft } from "@/components/features/app/types";
+import type { AppNotification, AvailableSlot, BalanceEntry, HistoryEvent, Lesson, LessonRequest, MyGroup, Student, StudentRequestDraft } from "@/components/features/app/types";
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { LessonContentBadges } from "@/components/features/lessons/lesson-content-badges";
 import { StudentMaterialsCard } from "@/components/features/materials/student-materials-card";
@@ -39,11 +39,21 @@ type StudentPortalProps = {
   onMaterials: (lesson: Lesson) => void;
   onBack: () => void;
   onReload: () => Promise<void>;
+  myGroups?: MyGroup[];
 };
+
+const heroButton = "h-10 rounded-xl border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/25 dark:bg-white/10";
+
+// Group name under a lesson, plus classmates when the teacher lets members see each other.
+function GroupLine({ lesson, groups, className, showClassmates = false }: { lesson: Lesson; groups: MyGroup[]; className?: string; showClassmates?: boolean }) {
+  if (!lesson.classId) return null;
+  const group = groups.find((item) => item.id === lesson.classId);
+  return <p className={className}><span data-no-translate>{group?.name ?? lesson.className}</span>{" · групповое занятие"}{showClassmates && group?.membersVisible && group.classmates.length > 0 && <span className="block text-xs [overflow-wrap:anywhere]">{"Вместе с вами: "}<span data-no-translate>{group.classmates.join(", ")}</span></span>}</p>;
+}
 
 const lessonDay = (lesson: Lesson) => dateTitle(lesson.date, { weekday: "long", day: "numeric", month: "long" });
 
-export function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onMaterials, onBack, onReload }: StudentPortalProps) {
+export function StudentPortal({ student, teacherName, lessons, entries, historyEvents, requests, notifications, availableSlots, onReadNotifications, onRequest, onMaterials, onBack, onReload, myGroups = [] }: StudentPortalProps) {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
@@ -80,13 +90,16 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             </div>
             <p className="mt-2 text-xl font-bold first-letter:uppercase">{lessonDay(nextLesson)}</p>
             <p className="mt-1 text-3xl font-bold tracking-tight">{nextLesson.time}–{nextLesson.end}</p>
+            <GroupLine lesson={nextLesson} groups={myGroups} className="mt-2 text-sm text-hero-muted" showClassmates />
             <LessonContentBadges lesson={nextLesson} />
             <Button type="button" variant="secondary" className="mt-4 h-11 w-full rounded-xl" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", className: "h-10 rounded-xl border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/25 dark:bg-white/10" }} />
-              <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", className: "h-10 rounded-xl border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/25 dark:bg-white/10" }} />
-            </div>
-            <p className="mt-3 text-center text-xs text-hero-muted">Отмену можно запросить до 23:59 предыдущего дня</p>
+            {nextLesson.classId ? <div className="mt-2 grid gap-2">
+              <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Не приду", className: heroButton }} />
+            </div> : <div className="mt-2 grid grid-cols-2 gap-2">
+              <StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", className: heroButton }} />
+              <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", className: heroButton }} />
+            </div>}
+            <p className="mt-3 text-center text-xs text-hero-muted">{nextLesson.classId ? "Отметить «Не приду» можно до 23:59 предыдущего дня" : "Отмену можно запросить до 23:59 предыдущего дня"}</p>
           </section> : <section className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarClock className="size-5 shrink-0 text-ink-faint" />Следующий урок пока не назначен</section>}
 
           <div className="grid grid-cols-2 gap-3 lg:hidden">
@@ -112,13 +125,13 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             <h2 id="student-upcoming-title" className="text-lg font-bold">Дальнейшие занятия</h2>
             <div className="overflow-hidden rounded-2xl border border-line bg-surface">{futureLessons.slice(1).map((lesson, index, list) => <article key={lesson.id} className={`px-4 py-3 ${index < list.length - 1 ? "border-b border-line" : ""}`}>
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0"><strong className="block first-letter:uppercase">{lessonDay(lesson)}</strong><span className="text-sm text-ink-muted">{lesson.time}–{lesson.end}</span><LessonContentBadges lesson={lesson} /></div>
+                <div className="min-w-0"><strong className="block first-letter:uppercase">{lessonDay(lesson)}</strong><span className="text-sm text-ink-muted">{lesson.time}–{lesson.end}</span><GroupLine lesson={lesson} groups={myGroups} className="text-sm text-ink-muted" /><LessonContentBadges lesson={lesson} /></div>
                 <LessonStatusChip lesson={lesson} />
               </div>
               <div className="-mx-2 mt-1 grid grid-cols-3 gap-1 sm:flex">
                 <Button type="button" size="sm" variant="ghost" className="text-brand-text" onClick={() => onMaterials(lesson)}>Материалы</Button>
-                <StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", variant: "ghost" }} />
-                <StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", variant: "ghost", className: "text-danger-text" }} />
+                {!lesson.classId && <StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", variant: "ghost" }} />}
+                <StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: lesson.classId ? "Не приду" : "Отменить", variant: "ghost", className: "text-danger-text" }} />
               </div>
             </article>)}</div>
           </section>}
@@ -139,6 +152,10 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             <BalanceTile balance={student.balance} />
             <Button type="button" variant="outline" className="h-11 justify-start rounded-xl bg-surface" onClick={() => setMessagesOpen(true)}><MessageCircle />Написать преподавателю</Button>
           </div>
+
+          {myGroups.length > 0 && <SettingsGroup title="Мои группы">
+            {myGroups.map((group) => <div key={group.id} className={`${settingsRowClass} flex-col items-start gap-0.5`}><strong data-no-translate className="text-[15px]">{group.name}</strong><span className="text-sm text-ink-muted">{group.membersVisible ? (group.classmates.length ? <>{"Вместе с вами: "}<span data-no-translate className="[overflow-wrap:anywhere]">{group.classmates.join(", ")}</span></> : "Других участников пока нет") : "Состав группы видит только преподаватель"}</span></div>)}
+          </SettingsGroup>}
 
           {(student.floating || student.canViewAvailability) && <section className="rounded-2xl border border-line bg-surface p-4">
             <h2 className="text-base font-bold">Свободное время</h2>

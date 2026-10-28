@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTutorAppActions } from "@/components/features/app/use-tutor-app-actions";
-import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, GroupAbsence, HistoryEvent, Lesson, LessonRequest, NotificationPreferences, RecurringSlot, Student, StudentGroup, TeacherDayNote, TutorProfile } from "@/components/features/app/types";
+import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, GroupAbsence, HistoryEvent, Lesson, LessonRequest, NotificationPreferences, RecurringSlot, Student, MyGroup, StudentGroup, TeacherDayNote, TutorProfile } from "@/components/features/app/types";
 import { readAppData } from "@/lib/app-data-client";
 import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
@@ -28,6 +28,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [dayNotes, setDayNotes] = useState<TeacherDayNote[]>([]);
   const [groups, setGroups] = useState<StudentGroup[]>([]);
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [groupAbsences, setGroupAbsences] = useState<GroupAbsence[]>([]);
   const [profile, setProfile] = useState<TutorProfile>({
     name: user?.name ?? "Преподаватель",
@@ -89,6 +90,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     if (data.availableSlots) setAvailableSlots(data.availableSlots);
     if (data.dayNotes) setDayNotes(data.dayNotes);
     if (data.groups) setGroups(data.groups);
+    if (data.myGroups) setMyGroups(data.myGroups);
     if (data.groupAbsences) setGroupAbsences(data.groupAbsences);
     if (data.teacherName) setTeacherName(data.teacherName);
     if (data.profile) setProfile(data.profile);
@@ -256,6 +258,7 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     availableSlots,
     dayNotes,
     groups,
+    myGroups,
     groupAbsences,
     profile,
     teacherName,

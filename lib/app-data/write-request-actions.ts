@@ -83,12 +83,13 @@ export async function executeRequestAction({ db, body, auth, id }: WriteActionCo
     if (!studentId) return Response.json({ error: "Запрос может создать только ученик" }, { status: 403 });
     const student = await db.prepare("SELECT id, schedule_type, can_view_availability FROM members WHERE id = ? AND workspace_id = ? AND role = 'student'").bind(studentId, auth.workspaceId).first<{ id: string; schedule_type: string; can_view_availability: number }>();
     if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
-    let lesson: { id: string; starts_at: number; ends_at: number } | null = null;
+    let lesson: { id: string; starts_at: number; ends_at: number; class_id: string | null } | null = null;
     if (body.requestType !== "new_lesson") {
       if (!body.lessonId) return invalid();
       const lessonGroup = await getScheduledLessonGroup(db, auth.workspaceId, body.lessonId);
       if (!lessonGroup.length || lessonGroup[0].student_id !== studentId || lessonGroup[0].starts_at <= Date.now()) return Response.json({ error: "Можно изменить только будущий урок" }, { status: 409 });
-      lesson = { id: lessonGroup[0].id, starts_at: lessonGroup[0].starts_at, ends_at: lessonGroup.at(-1)?.ends_at ?? lessonGroup[0].ends_at };
+      lesson = { id: lessonGroup[0].id, starts_at: lessonGroup[0].starts_at, ends_at: lessonGroup.at(-1)?.ends_at ?? lessonGroup[0].ends_at, class_id: lessonGroup[0].class_id };
+      if (lesson.class_id && body.requestType === "reschedule") return Response.json({ error: "Занятие группы переносит преподаватель" }, { status: 409 });
     } else if (student.schedule_type !== "floating" && !student.can_view_availability) return Response.json({ error: "Для выбора нового времени нужен доступ преподавателя" }, { status: 409 });
     const proposal = body.requestType === "cancel" ? null : lessonRange(body.proposedDate ?? "", body.proposedTime ?? "", lesson ? Math.round((lesson.ends_at - lesson.starts_at) / 60_000) : body.lessonCount === 2 ? 120 : 60);
     if (body.requestType !== "cancel" && (!proposal || proposal.start <= Date.now())) return invalid();
@@ -107,6 +108,22 @@ export async function executeRequestAction({ db, body, auth, id }: WriteActionCo
       const lessonDate = toMoscowDate(new Date(lesson.starts_at));
       deadline = new Date(`${lessonDate}T00:00:00${MOSCOW_OFFSET}`).getTime() - 1;
       if (Date.now() > deadline) return Response.json({ error: "Отмену можно запросить только до 23:59 предыдущего дня" }, { status: 409 });
+    }
+    if (lesson?.class_id) {
+      // "Не приду" in a group: only this member's row is cancelled, at once and without a charge; the teacher is told.
+      const groupLesson = lesson;
+      const groupRow = await db.prepare(`SELECT g.name, m.display_name FROM student_groups g JOIN members m ON m.id = ? WHERE g.id = ?`).bind(studentId, groupLesson.class_id).first<{ name: string; display_name: string }>();
+      const owner = await db.prepare("SELECT id FROM members WHERE workspace_id = ? AND role = 'owner' AND status = 'active' LIMIT 1").bind(auth.workspaceId).first<{ id: string }>();
+      const cancelledAt = Date.now();
+      const when = new Date(groupLesson.starts_at);
+      const statements = [
+        db.prepare("UPDATE lessons SET status = 'cancelled', charge_status = 'waived', cancelled_at = ?, updated_at = ? WHERE id = ? AND status = 'scheduled'").bind(cancelledAt, cancelledAt, groupLesson.id),
+        lessonEventStatement(db, { workspaceId: auth.workspaceId, studentId, lessonId: groupLesson.id, actorMemberId: auth.memberId, sourceKey: `lesson-cancelled:${groupLesson.id}`, eventType: "cancelled", startsAt: groupLesson.starts_at, endsAt: groupLesson.ends_at, occurredAt: cancelledAt, note: "Ученик не придёт на занятие группы" }),
+      ];
+      if (owner) statements.push(db.prepare("INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES (?, ?, ?, ?, 'lesson_cancelled', 'Ученик не придёт', ?)")
+        .bind(crypto.randomUUID(), owner.id, studentId, groupLesson.id, `${groupRow?.display_name ?? "Ученик"} · ${groupRow?.name ?? "группа"}, ${toMoscowDate(when).split("-").reverse().slice(0, 2).join(".")} ${new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" }).format(when)}`));
+      await db.batch(statements);
+      return Response.json({ ok: true, id: groupLesson.id, cancelled: true });
     }
     const duplicate = lesson
       ? await db.prepare(`SELECT request.id FROM lesson_requests request LEFT JOIN lessons requested_lesson ON requested_lesson.id = request.lesson_id

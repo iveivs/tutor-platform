@@ -17,7 +17,7 @@ export async function saveAppData(body: Record<string, unknown>) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const result = await response.json() as { error?: string; inviteUrl?: string; expired?: boolean };
+  const result = await response.json() as { error?: string; inviteUrl?: string; expired?: boolean; cancelled?: boolean };
   if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить изменения");
   return result;
 }

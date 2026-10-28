@@ -28,7 +28,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const {
     lessons, students, recurringSlots, requests, balanceEntries, historyEvents, notifications,
-    availabilityWindows, availableSlots, dayNotes, groups, groupAbsences, profile, teacherName, selectedStudent, setSelectedStudent,
+    availabilityWindows, availableSlots, dayNotes, groups, myGroups, groupAbsences, profile, teacherName, selectedStudent, setSelectedStudent,
     loading, loadError, showPastLessons, pastLessonsLoading, reload, retry, changePastLessonsVisibility,
     addLesson, updateLesson, deleteLesson, stopLessonSeries, updateStudent, convertTrialContact,
     restoreStudent, deleteStudentPermanently, addStudent, createStudentInvite, addPayment, adjustBalance, updateStudentPrices,
@@ -50,7 +50,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const activityCount = getActivityAttentionCount(requests, notifications);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
   if (role === "student") return portalStudent
-    ? <><StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} availableSlots={availableSlots} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onMaterials={setMaterialsLesson} onBack={onLogout ?? (() => undefined)} onReload={reload} /><LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} /></>
+    ? <><StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} availableSlots={availableSlots} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onMaterials={setMaterialsLesson} onBack={onLogout ?? (() => undefined)} onReload={reload} myGroups={myGroups} /><LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} /></>
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-ink-muted">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (

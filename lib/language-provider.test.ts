@@ -33,6 +33,8 @@ describe("translateUiText", () => {
     ["Долг 1", "Owes 1 lesson"],
     ["Группа · 12 участников · 1 не придёт", "Group · 12 members · 1 not coming"],
     ["2 участника · 1 не придёт", "2 members · 1 not coming"],
+    [" · групповое занятие", " · group session"],
+    ["Не приду", "I can't come"],
     ["12 участников · 3 не придут", "12 members · 3 not coming"],
     ["придут 11 из 12", "11 of 12 coming"],
     ["3 участника · Вт 18:00, Чт 18:00", "3 members · Tue 18:00, Thu 18:00"],

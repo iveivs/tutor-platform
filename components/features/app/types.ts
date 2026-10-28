@@ -24,8 +24,10 @@ export type AppNotification = {
 export type StudentGroupSlot = { id: string; weekday: number; time: string; durationMinutes: number };
 export type StudentGroup = { id: string; name: string; membersVisible: boolean; archived: boolean; memberIds: string[]; slots: StudentGroupSlot[] };
 export type GroupDraft = { name: string; membersVisible: boolean; memberIds: string[]; slots: Array<{ weekday: number; time: string; durationMinutes: number }> };
+// A group as its member sees it in the student portal; classmates are listed only when the teacher allows it.
+export type MyGroup = { id: string; name: string; membersVisible: boolean; classmates: string[] };
 export type GroupAbsence = { lessonId: string; classId: string; studentId: string; studentName: string; startsAt: number };
-export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; dayNotes?: TeacherDayNote[]; groups?: StudentGroup[]; groupAbsences?: GroupAbsence[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
+export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; dayNotes?: TeacherDayNote[]; groups?: StudentGroup[]; myGroups?: MyGroup[]; groupAbsences?: GroupAbsence[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
 export type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 export type NotificationPreferences = { soundEnabled: boolean; telegramSchedule: boolean; telegramMessages: boolean; telegramMaterials: boolean };
 export type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };

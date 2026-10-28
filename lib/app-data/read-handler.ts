@@ -155,7 +155,8 @@ export async function handleGetAppData(request: Request) {
       loadRows(needs("availability") && auth.role === "student" && availabilityAccess, () => db.prepare("SELECT starts_at, ends_at FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND ends_at > ? AND starts_at < ? ORDER BY starts_at").bind(auth.workspaceId, Date.now(), availabilityHorizon).all()),
     ]);
     const teacherGroups = needs("groups") && auth.role !== "student";
-    const [groupRows, groupMemberRows, groupSlotRows, groupAbsenceRows] = await Promise.all([
+    const studentGroups = needs("groups") && auth.role === "student";
+    const [groupRows, groupMemberRows, groupSlotRows, groupAbsenceRows, ownGroupRows, classmateRows] = await Promise.all([
       loadRows(teacherGroups, () => db.prepare("SELECT id, name, members_visible, status FROM student_groups WHERE workspace_id = ? ORDER BY status, name").bind(auth.workspaceId).all()),
       loadRows(teacherGroups, () => db.prepare("SELECT group_id, member_id FROM student_group_members WHERE workspace_id = ?").bind(auth.workspaceId).all()),
       loadRows(teacherGroups, () => db.prepare("SELECT id, group_id, weekday, start_minutes, duration_minutes FROM student_group_slots WHERE workspace_id = ? AND is_active = 1 ORDER BY weekday, start_minutes").bind(auth.workspaceId).all()),
@@ -165,6 +166,13 @@ export async function handleGetAppData(request: Request) {
           AND EXISTS (SELECT 1 FROM student_group_members current_member WHERE current_member.group_id = l.class_id AND current_member.member_id = l.student_id)
           AND NOT EXISTS (SELECT 1 FROM lessons own WHERE own.class_id = l.class_id AND own.student_id = l.student_id AND own.starts_at = l.starts_at AND own.status = 'scheduled')
           AND EXISTS (SELECT 1 FROM lessons peer WHERE peer.class_id = l.class_id AND peer.starts_at = l.starts_at AND peer.status = 'scheduled')`).bind(auth.workspaceId, Date.now()).all()),
+      // A student sees only their own active groups; classmates' names only where the teacher turned that on.
+      loadRows(studentGroups, () => db.prepare(`SELECT g.id, g.name, g.members_visible FROM student_groups g JOIN student_group_members me ON me.group_id = g.id AND me.member_id = ?
+        WHERE g.workspace_id = ? AND g.status = 'active' ORDER BY g.name`).bind(auth.memberId, auth.workspaceId).all()),
+      loadRows(studentGroups, () => db.prepare(`SELECT gm.group_id, m.display_name FROM student_group_members gm JOIN members m ON m.id = gm.member_id JOIN student_groups g ON g.id = gm.group_id
+        WHERE g.workspace_id = ? AND g.status = 'active' AND g.members_visible AND gm.member_id <> ? AND m.status <> 'archived'
+          AND EXISTS (SELECT 1 FROM student_group_members me WHERE me.group_id = gm.group_id AND me.member_id = ?)
+        ORDER BY m.display_name`).bind(auth.workspaceId, auth.memberId, auth.memberId).all()),
     ]);
     const dayNoteRows = await loadRows(needs("dayNotes") && auth.role !== "student", () => db.prepare(`SELECT id, note_date, body, updated_at
       FROM teacher_day_notes WHERE workspace_id = ? AND author_member_id = ? ORDER BY note_date`).bind(auth.workspaceId, auth.memberId).all());
@@ -311,7 +319,18 @@ export async function handleGetAppData(request: Request) {
       memberIds: (groupMemberRows.results as Array<Record<string, unknown>>).filter((member) => member.group_id === row.id).map((member) => String(member.member_id)),
       slots: (groupSlotRows.results as Array<Record<string, unknown>>).filter((slot) => slot.group_id === row.id).map((slot) => ({ id: String(slot.id), weekday: Number(slot.weekday), time: minutesToTime(Number(slot.start_minutes)), durationMinutes: Number(slot.duration_minutes) })),
     }));
-    if (needs("lessons") && auth.role !== "student") payload.groupAbsences = (groupAbsenceRows.results as Array<Record<string, unknown>>).map((row) => ({
+    if (studentGroups) payload.myGroups = (ownGroupRows.results as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), name: String(row.name), membersVisible: Boolean(row.members_visible),
+      classmates: (classmateRows.results as Array<Record<string, unknown>>).filter((member) => member.group_id === row.id).map((member) => String(member.display_name)),
+    }));
+    // A member removed and re-added may have several cancelled rows for one session; show them once.
+    const seenAbsences = new Set<string>();
+    if (needs("lessons") && auth.role !== "student") payload.groupAbsences = (groupAbsenceRows.results as Array<Record<string, unknown>>).filter((row) => {
+      const key = `${row.class_id}:${row.student_id}:${row.starts_at}`;
+      if (seenAbsences.has(key)) return false;
+      seenAbsences.add(key);
+      return true;
+    }).map((row) => ({
       lessonId: String(row.id), classId: String(row.class_id), studentId: String(row.student_id), studentName: String(row.display_name), startsAt: Number(row.starts_at),
     }));
     if (needs("profile")) {
