@@ -28,7 +28,7 @@ export function LessonCard({ lesson, isNext = false, compact = false, showDate =
         <span className="mt-2 flex flex-wrap items-center gap-1.5"><LessonStatusChip lesson={lesson} /><LessonContentBadges lesson={lesson} className="contents" /></span>
       </button>
       {lesson.trialContact && onConvertTrial && <Button type="button" variant="outline" size="sm" aria-label="Создать ученика" className="shrink-0" onClick={() => void onConvertTrial(lesson.studentId)}><UserRound /><span className={compact ? "hidden" : "hidden sm:inline"}>Создать ученика</span></Button>}
-      {onMaterials && !lesson.participants && <Button type="button" variant="outline" aria-label="Материалы урока" className={compact ? "size-10 shrink-0 p-0" : "size-10 shrink-0 p-0 md:h-9 md:w-auto md:px-3"} onClick={() => onMaterials(lesson)}><NotebookPen /><span className={compact ? "hidden" : "hidden md:inline"}>Материалы</span></Button>}
+      {onMaterials && <Button type="button" variant="outline" aria-label="Материалы урока" className={compact ? "size-10 shrink-0 p-0" : "size-10 shrink-0 p-0 md:h-9 md:w-auto md:px-3"} onClick={() => onMaterials(lesson)}><NotebookPen /><span className={compact ? "hidden" : "hidden md:inline"}>Материалы</span></Button>}
     </div>
   </article>;
 }

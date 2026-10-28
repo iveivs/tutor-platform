@@ -1,7 +1,8 @@
 import type { Pool } from "pg";
 
 // Teacher statistics for a period of local (workspace time zone) dates, both ends inclusive.
-// A double lesson is two lesson rows sharing group_id and counts as one lesson here.
+// A double lesson is two lesson rows sharing group_id and counts as one lesson here; so does a group session
+// (one row per member sharing class_id and start), which is held if at least one member had it.
 
 export type TeacherStatsStudent = { id: string; name: string; lessons: number; chargedCents: number; balance: number };
 export type TeacherStats = {
@@ -15,7 +16,7 @@ export type TeacherStats = {
   students: TeacherStatsStudent[];
 };
 
-export type LessonRow = { lesson_key: string; student_id: string; local_date: string; minutes: number; status: string; trial: boolean };
+export type LessonRow = { lesson_key: string; student_ids: string[]; local_date: string; minutes: number; status: string; trial: boolean };
 
 const shiftDays = (date: string, days: number) => {
   const value = new Date(`${date}T12:00:00Z`);
@@ -38,12 +39,13 @@ export function summarizeLessons(rows: LessonRow[], from: string, to: string) {
     cancelled: rows.filter((row) => row.status === "cancelled").length,
     planned: rows.filter((row) => row.status === "scheduled").length,
     workingDays: counts.size,
-    activeStudents: new Set(completed.map((row) => row.student_id)).size,
+    activeStudents: new Set(completed.flatMap((row) => row.student_ids)).size,
     daily,
   };
 }
 
-const LESSONS_SQL = `SELECT COALESCE(l.group_id, l.id) AS lesson_key, min(l.student_id) AS student_id,
+const LESSON_KEY = "COALESCE(l.group_id, l.class_id || ':' || l.starts_at::text, l.id)";
+const LESSONS_SQL = `SELECT ${LESSON_KEY} AS lesson_key, COALESCE(array_agg(DISTINCT l.student_id) FILTER (WHERE l.status = 'completed'), '{}') AS student_ids,
     to_char((min(l.starts_at) AT TIME ZONE w.timezone)::date, 'YYYY-MM-DD') AS local_date,
     (EXTRACT(EPOCH FROM max(l.ends_at) - min(l.starts_at)) / 60)::int AS minutes,
     CASE WHEN bool_or(l.status = 'completed') THEN 'completed' WHEN bool_and(l.status = 'cancelled') THEN 'cancelled' ELSE 'scheduled' END AS status,
@@ -51,7 +53,7 @@ const LESSONS_SQL = `SELECT COALESCE(l.group_id, l.id) AS lesson_key, min(l.stud
   FROM lessons l JOIN workspaces w ON w.id = l.workspace_id
   JOIN members student ON student.id = l.student_id AND student.is_trial_contact = false
   WHERE l.workspace_id = $1 AND (l.starts_at AT TIME ZONE w.timezone)::date BETWEEN $2::date AND $3::date
-  GROUP BY COALESCE(l.group_id, l.id), w.timezone`;
+  GROUP BY ${LESSON_KEY}, w.timezone`;
 
 export async function loadTeacherStats(pool: Pool, workspaceId: string, from: string, to: string): Promise<TeacherStats> {
   const length = periodLength(from, to);
@@ -61,7 +63,7 @@ export async function loadTeacherStats(pool: Pool, workspaceId: string, from: st
   const [lessons, previous, rescheduled, payments, charges, debts, newStudents, paused, perStudent, currencies] = await Promise.all([
     pool.query<LessonRow>(LESSONS_SQL, [workspaceId, from, to]),
     pool.query<{ count: number }>(`SELECT count(*)::int AS count FROM (${LESSONS_SQL}) period WHERE status = 'completed'`, [workspaceId, previousFrom, previousTo]),
-    pool.query<{ count: number }>(`SELECT count(DISTINCT COALESCE(l.group_id, l.id))::int AS count FROM lesson_events e
+    pool.query<{ count: number }>(`SELECT count(DISTINCT ${LESSON_KEY})::int AS count FROM lesson_events e
       JOIN lessons l ON l.id = e.lesson_id JOIN workspaces w ON w.id = e.workspace_id
       WHERE e.workspace_id = $1 AND e.event_type = 'rescheduled' AND ${inPeriod("e.occurred_at")}`, [workspaceId, from, to]),
     pool.query<{ count: number; amount: string | null }>(`SELECT count(*)::int AS count, sum(b.amount_cents) AS amount FROM balance_entries b

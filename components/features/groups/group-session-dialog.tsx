@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, Trash2, UserX } from "lucide-react";
+import { CalendarClock, NotebookPen, Trash2, UserX } from "lucide-react";
 import { FormField } from "@/components/common/form-field";
 import type { Lesson } from "@/components/features/app/types";
 import { useGroupActions } from "@/components/features/groups/group-actions";
@@ -13,7 +13,7 @@ import { dateTitle } from "@/lib/date-time";
 import { russianPlural } from "@/lib/russian-plural";
 
 // Manage one group session: who comes, cancel for one member or for everyone, move the whole session.
-export function GroupSessionDialog({ lesson, onOpenChange, onOpenStudent }: { lesson: Lesson | null; onOpenChange: (open: boolean) => void; onOpenStudent: (studentId: string) => void }) {
+export function GroupSessionDialog({ lesson, onOpenChange, onMaterials, onOpenStudent }: { lesson: Lesson | null; onOpenChange: (open: boolean) => void; onMaterials: (lesson: Lesson) => void; onOpenStudent: (studentId: string) => void }) {
   const { cancelGroupSession, rescheduleGroupSession, cancelMemberLesson, openGroup } = useGroupActions();
   const [moving, setMoving] = useState(false);
   const [date, setDate] = useState(lesson?.date ?? "");
@@ -29,8 +29,10 @@ export function GroupSessionDialog({ lesson, onOpenChange, onOpenStudent }: { le
         <DialogTitle data-no-translate>{lesson.className ?? lesson.name}</DialogTitle>
         <DialogDescription>{dateTitle(lesson.date, { weekday: "short", day: "numeric", month: "long" })} · {lesson.time}–{lesson.end} · {russianPlural(participants.length, "участник", "участника", "участников")}</DialogDescription>
       </DialogHeader>
-      {/* Materials for the whole group arrive with step 3 (shared lesson materials); until then a file would reach one member only. */}
-      <Button type="button" variant="outline" aria-expanded={moving} onClick={() => setMoving((value) => !value)}><CalendarClock />Перенести</Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" variant="outline" onClick={() => onMaterials(lesson)}><NotebookPen />Материалы</Button>
+        <Button type="button" variant="outline" aria-expanded={moving} onClick={() => setMoving((value) => !value)}><CalendarClock />Перенести</Button>
+      </div>
       {moving && <div className="grid gap-3 rounded-2xl border border-line bg-surface-subtle p-3">
         <div className="grid grid-cols-2 gap-2"><FormField label="Новая дата"><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-11 rounded-xl" /></FormField><FormField label="Новое время"><Input type="time" value={time} onChange={(event) => setTime(event.target.value)} className="h-11 rounded-xl" /></FormField></div>
         <Button type="button" disabled={pending || !date || !time} onClick={() => void run(() => rescheduleGroupSession(lesson.id, date, time))}>{pending ? "Сохраняю…" : "Перенести для всей группы"}</Button>

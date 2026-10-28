@@ -81,11 +81,15 @@ export async function handleGetAppData(request: Request) {
         ORDER BY m.display_name`).bind(auth.memberId, Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("students", "lessons"), () => db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
+      // has_file / has_note look across a group session: its teacher content sits on one row of the session.
       loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.class_id, class_group.name AS class_name, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name, m.is_trial_contact,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
-        (EXISTS(SELECT 1 FROM lesson_resource_links link WHERE link.lesson_id = l.id)
-          OR EXISTS(SELECT 1 FROM lesson_attachments attachment WHERE attachment.lesson_id = l.id AND attachment.status = 'active')) AS has_file,
-        EXISTS(SELECT 1 FROM lesson_notes note WHERE note.lesson_id = l.id) AS has_note,
+        (EXISTS(SELECT 1 FROM lesson_resource_links link JOIN lessons session ON session.id = link.lesson_id
+            WHERE session.id = l.id OR (l.class_id IS NOT NULL AND session.class_id = l.class_id AND session.starts_at = l.starts_at))
+          OR EXISTS(SELECT 1 FROM lesson_attachments attachment JOIN lessons session ON session.id = attachment.lesson_id JOIN members uploader ON uploader.id = attachment.uploaded_by_member_id
+            WHERE attachment.status = 'active' AND (session.id = l.id OR (l.class_id IS NOT NULL AND session.class_id = l.class_id AND session.starts_at = l.starts_at AND uploader.role <> 'student')))) AS has_file,
+        EXISTS(SELECT 1 FROM lesson_notes note JOIN lessons session ON session.id = note.lesson_id JOIN members author ON author.id = note.author_member_id
+          WHERE session.id = l.id OR (l.class_id IS NOT NULL AND session.class_id = l.class_id AND session.starts_at = l.starts_at AND note.visibility = 'shared' AND author.role <> 'student')) AS has_note,
         (SELECT r.type FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
           WHERE r.status = 'pending' AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id))
           ORDER BY r.created_at LIMIT 1) AS request_type

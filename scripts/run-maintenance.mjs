@@ -79,6 +79,11 @@ async function deleteTeacherMaterials(client) {
   return { deleted, failed };
 }
 
+function membersLabel(count) {
+  const word = count % 10 === 1 && count % 100 !== 11 ? "участник" : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? "участника" : "участников";
+  return `${count} ${word}`;
+}
+
 async function enqueueTelegramReminders(client) {
   await client.query(`UPDATE telegram_deliveries delivery
     SET status = 'cancelled', updated_at = now()
@@ -93,18 +98,20 @@ async function enqueueTelegramReminders(client) {
   await client.query(`WITH upcoming AS (
       SELECT min(l.id) AS lesson_id, COALESCE(l.group_id, l.id) AS lesson_key, l.workspace_id, l.student_id,
         min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at, w.timezone,
-        owner.display_name AS owner_name,
+        owner.display_name AS owner_name, class_group.name AS class_name,
         COALESCE((SELECT SUM(b.lesson_units) FROM balance_entries b WHERE b.student_id = l.student_id), 0)::int AS balance
       FROM lessons l
       JOIN workspaces w ON w.id = l.workspace_id
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
+      LEFT JOIN student_groups class_group ON class_group.id = l.class_id
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
-      GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, owner.display_name
+      GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, owner.display_name, class_group.name
     )
     INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
     SELECT student_id, lesson_id, 'lesson_reminder',
       'lesson-reminder:' || lesson_key || ':' || student_id,
       'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
+      CASE WHEN class_name IS NOT NULL THEN E'\nГруппа: ' || class_name ELSE '' END ||
       E'\nПреподаватель: ' || owner_name ||
       -- Same balance as in the student portal: sum of the student's balance entries at reminder time.
       E'\nБаланс: ' || CASE WHEN balance < 0 THEN 'долг ' ELSE '' END || abs(balance) || ' ' ||
@@ -130,15 +137,18 @@ async function enqueueTelegramReminders(client) {
     ), day_lessons AS (
       SELECT days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
         min(l.id) AS lesson_id, min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at,
-        count(*)::int AS lesson_count, student.display_name AS student_name
+        count(*)::int AS lesson_count, bool_or(l.class_id IS NOT NULL) AS is_group,
+        min(CASE WHEN l.class_id IS NOT NULL THEN class_group.name ELSE student.display_name END) AS student_name
       FROM trigger_days days
       JOIN lessons l ON l.workspace_id = days.workspace_id
         AND l.status = 'scheduled'
         AND l.starts_at > now()
         AND (l.starts_at AT TIME ZONE days.timezone)::date = days.lesson_date
       JOIN members student ON student.id = l.student_id
+      LEFT JOIN student_groups class_group ON class_group.id = l.class_id
+      -- A group session (one row per member) is one line of the digest.
       GROUP BY days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
-        COALESCE(l.group_id, l.id), student.display_name
+        COALESCE(l.group_id, l.class_id || ':' || l.starts_at::text, l.id)
     )
     SELECT owner_id AS member_id, workspace_id, lesson_date::text AS lesson_date,
       min(lesson_id) AS lesson_id,
@@ -148,7 +158,8 @@ async function enqueueTelegramReminders(client) {
         'start', to_char(starts_at AT TIME ZONE timezone, 'HH24:MI'),
         'end', to_char(ends_at AT TIME ZONE timezone, 'HH24:MI'),
         'studentName', student_name,
-        'lessonCount', lesson_count
+        'lessonCount', lesson_count,
+        'isGroup', is_group
       ) ORDER BY starts_at, student_name) AS lessons
     FROM day_lessons
     GROUP BY owner_id, workspace_id, timezone, lesson_date
@@ -159,7 +170,7 @@ async function enqueueTelegramReminders(client) {
     const message = [
       digest.is_tomorrow ? "Расписание на завтра" : "Расписание на сегодня",
       String(digest.date_label),
-      ...lessons.map((lesson) => `• ${lesson.start}–${lesson.end} — ${lesson.studentName}${Number(lesson.lessonCount) > 1 ? " · двойной урок" : ""}`),
+      ...lessons.map((lesson) => `• ${lesson.start}–${lesson.end} — ${lesson.studentName}${lesson.isGroup ? ` · группа, ${membersLabel(Number(lesson.lessonCount))}` : Number(lesson.lessonCount) > 1 ? " · двойной урок" : ""}`),
     ].join("\n");
     await client.query(`INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
       VALUES ($1, $2, 'lesson_reminder', $3, $4)

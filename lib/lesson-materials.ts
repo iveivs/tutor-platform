@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { AuthMember } from "@/lib/auth";
@@ -11,10 +12,14 @@ export const MAX_PHOTO_INPUT_BYTES = 5 * 1024 * 1024;
 export const MAX_WORKSPACE_PHOTO_BYTES = 500 * 1024 * 1024;
 export const PHOTO_RETENTION_DAYS = 90;
 
-type LessonAccess = {
+// For a group session the teacher's content (notes, documents, photos, homework) lives on one "anchor" row of the
+// session (the earliest created); every member reads it from there, while their own notes, photos and answers stay on their row.
+export type LessonAccess = {
   lessonId: string;
   studentId: string;
   endsAt: Date;
+  /** Set for a group session the viewer may see as a whole (the teacher, or a current member). */
+  session: { classId: string; startsAt: Date; anchorLessonId: string } | null;
 };
 
 let s3Client: S3Client | null = null;
@@ -150,7 +155,11 @@ export async function hasCurrentContentRulesAcceptance(auth: AuthMember) {
 
 export async function resolveLessonAccess(auth: AuthMember, requestedLessonId: string): Promise<LessonAccess | null> {
   const result = await getPostgresPool().query(`SELECT canonical.id, canonical.student_id,
-      COALESCE((SELECT max(peer.ends_at) FROM lessons peer WHERE requested.group_id IS NOT NULL AND peer.group_id = requested.group_id), canonical.ends_at) AS ends_at
+      COALESCE((SELECT max(peer.ends_at) FROM lessons peer WHERE requested.group_id IS NOT NULL AND peer.group_id = requested.group_id), canonical.ends_at) AS ends_at,
+      requested.class_id, requested.starts_at,
+      (SELECT anchor.id FROM lessons anchor WHERE anchor.workspace_id = requested.workspace_id AND anchor.class_id = requested.class_id AND anchor.starts_at = requested.starts_at
+        ORDER BY anchor.created_at, anchor.id LIMIT 1) AS anchor_id,
+      ($3 <> 'student' OR EXISTS (SELECT 1 FROM student_group_members member WHERE member.group_id = requested.class_id AND member.member_id = $4)) AS session_visible
     FROM lessons requested
     JOIN LATERAL (
       SELECT candidate.id, candidate.student_id, candidate.ends_at
@@ -163,7 +172,41 @@ export async function resolveLessonAccess(auth: AuthMember, requestedLessonId: s
       AND ($3 <> 'student' OR requested.student_id = $4)
     LIMIT 1`, [requestedLessonId, auth.workspaceId, auth.role, auth.memberId]);
   const row = result.rows[0];
-  return row ? { lessonId: String(row.id), studentId: String(row.student_id), endsAt: new Date(row.ends_at) } : null;
+  if (!row) return null;
+  const session = row.class_id && row.anchor_id && row.session_visible ? { classId: String(row.class_id), startsAt: new Date(row.starts_at), anchorLessonId: String(row.anchor_id) } : null;
+  // The teacher always writes a group session's content to its anchor row; a student writes to their own row.
+  return { lessonId: session && auth.role !== "student" ? session.anchorLessonId : String(row.id), studentId: String(row.student_id), endsAt: new Date(row.ends_at), session };
+}
+
+/** SQL condition: the student (`studentParam`) may see teacher content on `lesson` — their own row, or a group session they belong to. */
+export function studentSeesLessonSql(lesson: string, studentParam: string) {
+  return `(${lesson}.student_id = ${studentParam} OR (${lesson}.class_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM lessons own JOIN student_group_members member ON member.group_id = own.class_id AND member.member_id = own.student_id
+    WHERE own.student_id = ${studentParam} AND own.class_id = ${lesson}.class_id AND own.starts_at = ${lesson}.starts_at)))`;
+}
+
+/** Lesson rows whose teacher-made content this viewer sees: the lesson itself, or the whole group session. */
+export async function sessionLessonIds(workspaceId: string, access: LessonAccess) {
+  if (!access.session) return [access.lessonId];
+  const result = await getPostgresPool().query("SELECT id FROM lessons WHERE workspace_id = $1 AND class_id = $2 AND starts_at = $3", [workspaceId, access.session.classId, access.session.startsAt]);
+  return [...new Set([access.lessonId, ...result.rows.map((row) => String(row.id))])];
+}
+
+/** Tell every student of the lesson (each member of a group session, on their own row) about new teacher content. */
+export async function notifyLessonStudents(workspaceId: string, access: LessonAccess, type: string, title: string, body: string) {
+  for (const target of await lessonAudience(workspaceId, access)) {
+    await getPostgresPool().query(`INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body) VALUES ($1, $2, $2, $3, $4, $5, $6)`,
+      [randomUUID(), target.studentId, target.lessonId, type, title, body]);
+  }
+}
+
+/** Students to notify about teacher-made content, each with their own lesson row. */
+export async function lessonAudience(workspaceId: string, access: LessonAccess) {
+  if (!access.session) return [{ studentId: access.studentId, lessonId: access.lessonId }];
+  const result = await getPostgresPool().query(`SELECT lesson.id, lesson.student_id FROM lessons lesson
+    JOIN student_group_members member ON member.group_id = lesson.class_id AND member.member_id = lesson.student_id
+    WHERE lesson.workspace_id = $1 AND lesson.class_id = $2 AND lesson.starts_at = $3 AND lesson.status <> 'cancelled'`, [workspaceId, access.session.classId, access.session.startsAt]);
+  return result.rows.map((row) => ({ studentId: String(row.student_id), lessonId: String(row.id) }));
 }
 
 export function photoExpiresAt(lessonEndsAt: Date) {

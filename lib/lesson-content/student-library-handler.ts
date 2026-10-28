@@ -1,3 +1,4 @@
+import { studentSeesLessonSql } from "@/lib/lesson-materials";
 import { getPostgresPool } from "@/db/postgres";
 import { requireAuth } from "@/lib/lesson-content/shared";
 
@@ -12,7 +13,7 @@ export async function readStudentMaterialLibrary(request: Request) {
           SELECT link.resource_id, lesson.starts_at AS lesson_starts_at, link.created_at AS shared_at
           FROM lesson_resource_links link
           JOIN lessons lesson ON lesson.id = link.lesson_id AND lesson.workspace_id = link.workspace_id
-          WHERE link.workspace_id = $1 AND lesson.student_id = $2
+          WHERE link.workspace_id = $1 AND ${studentSeesLessonSql("lesson", "$2")}
           UNION ALL
           SELECT direct.resource_id, NULL::timestamptz AS lesson_starts_at, direct.created_at AS shared_at
           FROM student_resource_links direct
@@ -32,7 +33,7 @@ export async function readStudentMaterialLibrary(request: Request) {
         FROM lesson_attachments attachment
         JOIN lessons lesson ON lesson.id = attachment.lesson_id AND lesson.workspace_id = attachment.workspace_id
         JOIN members author ON author.id = attachment.uploaded_by_member_id
-        WHERE attachment.workspace_id = $1 AND lesson.student_id = $2
+        WHERE attachment.workspace_id = $1 AND (lesson.student_id = $2 OR (author.role <> 'student' AND ${studentSeesLessonSql("lesson", "$2")}))
           AND author.role IN ('owner', 'teacher')
           AND attachment.status = 'active' AND attachment.expires_at > now()
         ORDER BY attachment.created_at DESC`, [auth.workspaceId, auth.memberId]),

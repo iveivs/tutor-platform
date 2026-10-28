@@ -6,7 +6,7 @@ import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import {
   deleteLessonPhoto, hasCurrentContentRulesAcceptance, lessonPhotoObjectKey, lessonPhotoStorageConfigured,
   MAX_PHOTO_INPUT_BYTES, MAX_PHOTOS_PER_LESSON_MEMBER, MAX_WORKSPACE_PHOTO_BYTES, photoExpiresAt,
-  putLessonPhoto, resolveLessonAccess,
+  notifyLessonStudents, putLessonPhoto, resolveLessonAccess,
 } from "@/lib/lesson-materials";
 
 export const runtime = "nodejs";
@@ -82,12 +82,9 @@ export async function POST(request: Request) {
           FROM members teacher
           WHERE teacher.workspace_id = $4 AND teacher.role = 'owner' AND teacher.status = 'active'
           ORDER BY teacher.created_at LIMIT 1`, [randomUUID(), lesson.studentId, lesson.lessonId, auth.workspaceId]);
-      } else {
-        await db.query(`INSERT INTO notifications (id, member_id, student_id, lesson_id, type, title, body)
-          VALUES ($1, $2, $2, $3, 'lesson_material_added', 'Добавлена фотография к уроку', 'Преподаватель добавил новую фотографию к материалам урока.')`,
-        [randomUUID(), lesson.studentId, lesson.lessonId]);
       }
       await db.query("COMMIT");
+      if (auth.role !== "student") await notifyLessonStudents(auth.workspaceId, lesson, "lesson_material_added", "Добавлена фотография к уроку", "Преподаватель добавил новую фотографию к материалам урока.");
       uploadedObjectKey = null;
       return Response.json({ ok: true, id: attachmentId });
     } catch (error) {

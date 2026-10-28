@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getPostgresPool } from "@/db/postgres";
 import { CONTENT_RULES_VERSION } from "@/lib/legal-consent";
-import { hasCurrentContentRulesAcceptance, resolveLessonAccess } from "@/lib/lesson-materials";
+import { hasCurrentContentRulesAcceptance, notifyLessonStudents, resolveLessonAccess, sessionLessonIds } from "@/lib/lesson-materials";
 import type { LessonContentAction, LessonContentAuth } from "@/lib/lesson-content/shared";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 
@@ -69,10 +69,7 @@ export async function executeLessonContentAction({
         [randomUUID(), auth.workspaceId, lesson.lessonId, value, auth.memberId]);
       }
       if (value && body.field === "assignment") {
-        await db.query(`INSERT INTO notifications
-          (id, member_id, student_id, lesson_id, type, title, body)
-          VALUES ($1, $2, $2, $3, 'homework_updated', 'Новое домашнее задание', 'Преподаватель добавил или обновил домашнее задание к уроку.')`,
-        [randomUUID(), lesson.studentId, lesson.lessonId]);
+        await notifyLessonStudents(auth.workspaceId, lesson, "homework_updated", "Новое домашнее задание", "Преподаватель добавил или обновил домашнее задание к уроку.");
       } else if (value && body.field === "student_response") {
         await db.query(`INSERT INTO notifications
           (id, member_id, student_id, lesson_id, type, title, body)
@@ -111,14 +108,11 @@ export async function executeLessonContentAction({
         }
         await getPostgresPool().query("UPDATE teacher_resources SET last_used_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [body.resourceId, auth.workspaceId]);
         if (result.rowCount) {
-          await getPostgresPool().query(`INSERT INTO notifications
-            (id, member_id, student_id, lesson_id, type, title, body)
-            VALUES ($1, $2, $2, $3, 'lesson_material_added', 'Добавлен материал к уроку', 'Преподаватель поделился новым материалом.')`,
-          [randomUUID(), lesson.studentId, lesson.lessonId]);
+          await notifyLessonStudents(auth.workspaceId, lesson, "lesson_material_added", "Добавлен материал к уроку", "Преподаватель поделился новым материалом.");
         }
       } else {
         await getPostgresPool().query(`DELETE FROM lesson_resource_links
-          WHERE workspace_id = $1 AND lesson_id = $2 AND resource_id = $3`, [auth.workspaceId, lesson.lessonId, body.resourceId]);
+          WHERE workspace_id = $1 AND lesson_id = ANY($2::text[]) AND resource_id = $3`, [auth.workspaceId, await sessionLessonIds(auth.workspaceId, lesson), body.resourceId]);
       }
       return Response.json({ ok: true });
     }

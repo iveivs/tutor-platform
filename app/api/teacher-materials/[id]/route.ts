@@ -1,6 +1,6 @@
 import { getAuthMember } from "@/lib/auth";
 import { getPostgresPool } from "@/db/postgres";
-import { getTeacherMaterial } from "@/lib/lesson-materials";
+import { getTeacherMaterial, studentSeesLessonSql } from "@/lib/lesson-materials";
 import { materialContentDisposition } from "@/lib/teacher-material-files";
 import { parseHttpByteRange } from "@/lib/http-byte-range";
 
@@ -16,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       WHERE resource.id = $1 AND resource.workspace_id = $2 AND resource.status = 'active'
         AND ($3 <> 'student' OR EXISTS (
           SELECT 1 FROM lesson_resource_links link JOIN lessons lesson ON lesson.id = link.lesson_id
-          WHERE link.resource_id = resource.id AND link.workspace_id = resource.workspace_id AND lesson.student_id = $4
+          WHERE link.resource_id = resource.id AND link.workspace_id = resource.workspace_id AND ${studentSeesLessonSql("lesson", "$4")}
         ) OR EXISTS (
           SELECT 1 FROM student_resource_links direct
           WHERE direct.resource_id = resource.id AND direct.workspace_id = resource.workspace_id AND direct.student_id = $4
