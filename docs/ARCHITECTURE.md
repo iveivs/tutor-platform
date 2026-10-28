@@ -50,7 +50,7 @@ route.ts
 
 ### Кабинет
 
-`lib/app-data/read-handler.ts` собирает разрешённые разделы кабинета. `write-handler.ts` отвечает за транспортные проверки, а `write-actions.ts` маршрутизирует команды в модули профиля, учеников, уроков, баланса и запросов.
+`lib/app-data/read-handler.ts` собирает разрешённые разделы кабинета. `write-handler.ts` отвечает за транспортные проверки, а `write-actions.ts` маршрутизирует команды в модули профиля, учеников, уроков, баланса, запросов и групп.
 
 ### События преподавателя
 
@@ -59,6 +59,14 @@ route.ts
 ### Материалы урока
 
 `lib/lesson-content/` содержит схему действий, чтение и выполнение операций с заметками, домашними заданиями, фотографиями и назначенными документами. Библиотека преподавателя находится отдельно в `lib/teacher-material-library/`; загрузка, замена, метаданные и удаление имеют самостоятельные handlers.
+
+### Групповые занятия
+
+Группа (`student_groups`, состав, недельные слоты) создаёт по строке `lessons` на каждого участника с общим `class_id`, поэтому баланс, списания и отмены работают как у индивидуальных уроков. Команды — `lib/app-data/write-group-actions.ts`, генерация по слотам — `ensureSeriesLessons` в `lib/app-data/route-utils.ts`, склейка строк в одно занятие для экрана — `lib/group-sessions.ts`, экраны — `components/features/groups/`. Материалы преподавателя хранятся на одной «якорной» строке занятия и видны всем участникам (`resolveLessonAccess`, `sessionLessonIds`, `studentSeesLessonSql` в `lib/lesson-materials.ts`). Статистика (`lib/teacher-stats.ts`) и сводка в Telegram (`scripts/run-maintenance.mjs`) считают занятие один раз. Подробные правила — раздел «Групповые занятия» в `docs/BACKEND_RULES.md`.
+
+### Статистика
+
+`GET /api/teacher-stats` и `lib/teacher-stats.ts` считают показатели преподавателя за период на сервере; экран — `components/features/stats/stats-view.tsx`.
 
 ### Авторизация и аккаунты
 
