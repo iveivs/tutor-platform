@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LegalLinks } from "@/components/legal-links";
 import { PasswordInput } from "@/components/common/password-input";
 import { disablePushOnThisDevice, setIconBadge } from "@/lib/push-client";
+import { LandingPage } from "@/components/features/landing/landing-page";
 
 type AppUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type PlatformAdminUser = { name: string; email: string; role: "platform_admin"; isPlatformAdmin?: true };
@@ -28,10 +29,18 @@ async function loadSession() {
   return response.ok ? response.json() as Promise<{ user?: User }> : null;
 }
 
+// The home-screen app and links to /?login skip the product page and open the sign-in form at once.
+function opensLoginFirst() {
+  return window.matchMedia("(display-mode: standalone)").matches
+    || (navigator as Navigator & { standalone?: boolean }).standalone === true
+    || new URLSearchParams(window.location.search).has("login");
+}
+
 export function AuthGate({ enabled }: { enabled: boolean }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(!enabled);
   const [recoverySession, setRecoverySession] = useState<RecoverySession | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -43,7 +52,7 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
       }, 0);
       return () => window.clearTimeout(timer);
     }
-    void loadSession().then((data) => setUser(data?.user ?? null)).finally(() => setReady(true));
+    void loadSession().then((data) => setUser(data?.user ?? null)).finally(() => { setShowLogin(opensLoginFirst()); setReady(true); });
   }, [enabled]);
 
   const logout = async () => {
@@ -61,14 +70,15 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
   if (!enabled) return <TutorApp />;
   if (!ready) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><BrandIcon className="size-12 animate-pulse" /></main>;
   if (recoverySession) return <><PreferencesOverlay /><PasswordReset session={recoverySession} onBack={() => setRecoverySession(null)} /></>;
-  if (!user) return <><PreferencesOverlay /><LoginScreen onSuccess={setUser} /></>;
+  if (!user && !showLogin) return <LandingPage onLogin={() => setShowLogin(true)} />;
+  if (!user) return <><PreferencesOverlay /><LoginScreen onSuccess={setUser} onBack={() => setShowLogin(false)} /></>;
   if (user.role === "platform_admin") return <AdminDashboard standalone onLogout={logout} />;
   return <TutorApp role={user.role} user={user} onLogout={logout} />;
 }
 
 function PreferencesOverlay() { return <div className="fixed right-4 top-4 z-50"><ThemeToggle compact /></div>; }
 
-function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
+function LoginScreen({ onSuccess, onBack }: { onSuccess: (user: User) => void; onBack: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -97,6 +107,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (user: User) => void }) {
   };
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4 pb-8 pt-20 text-foreground sm:py-8">
+      <div className="fixed left-4 top-4 z-50"><Button type="button" variant="ghost" onClick={onBack} className="h-10 rounded-xl px-3 text-ink-secondary"><ArrowLeft />На главную</Button></div>
       <section className="card w-full max-w-md p-7 sm:p-9">
         <div className="mb-7 text-center">
           {recovering ? <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-solid text-white shadow-lg shadow-brand-glow"><KeyRound className="size-7" /></span> : <BrandIcon className="mx-auto size-14 shadow-lg" />}

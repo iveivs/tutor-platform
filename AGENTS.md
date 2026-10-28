@@ -27,6 +27,7 @@
 - `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
 - `app/globals.css` — светлая и графитовая тёмная темы, включая календарь.
 - `components/auth-gate.tsx` и `components/invite-accept.tsx` — вход и принятие приглашения.
+- `components/features/landing/` — страница о продукте для невошедшего посетителя главной; «Войти» открывает форму входа, «Начать» — панель запроса приглашения (Telegram и почта), потому что регистрация преподавателей закрыта. Приложение с главного экрана и ссылка `/?login` сразу открывают вход.
 - `db/postgres/schema.ts` — рабочая схема PostgreSQL; `drizzle-postgres/` — последовательные production-миграции.
 - `db/schema.ts` и `drizzle/` — только схема и миграции совместимого D1-контура.
 - `lib/lesson-maintenance.ts` — автоматическое списание завершённых уроков.
