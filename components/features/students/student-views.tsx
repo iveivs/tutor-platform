@@ -5,18 +5,19 @@ import { ArrowLeft, ChevronDown, ChevronRight, Clock3, Search } from "lucide-rea
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import { InfoCard } from "@/components/common/info-card";
-import type { BalanceEntry, HistoryEvent, Lesson, LessonDraft, RecurringSlot, Student, StudentDraft } from "@/components/features/app/types";
+import type { BalanceEntry, HistoryEvent, Lesson, LessonDraft, RecurringSlot, Student, StudentDraft, StudentPrices } from "@/components/features/app/types";
 import { MemberAvatar, MessagesDialog, StudentAvatarPreferenceCard } from "@/components/features/account";
 import { BalanceHistory, HistoryTimeline } from "@/components/features/history/history-lists";
 import { LessonCard } from "@/components/features/schedule/lesson-card";
 import { AddLessonDialog } from "@/components/features/schedule/lesson-dialogs";
 import { StudentAvailabilityAccessCard } from "@/components/features/students/student-availability-access-card";
-import { AddStudentSheet, BalanceAdjustmentDialog, EditStudentDialog, InviteStudentDialog, PaymentDialog, StopSeriesDialog, StudentArchiveActions } from "@/components/features/students/student-dialogs";
+import { AddStudentSheet, BalanceAdjustmentDialog, EditStudentDialog, InviteStudentDialog, PaymentDialog, StopSeriesDialog, StudentArchiveActions, StudentPricesDialog } from "@/components/features/students/student-dialogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { today } from "@/lib/date-time";
+import { formatMoney } from "@/lib/money";
 import { russianPlural } from "@/lib/russian-plural";
 
 const filters = ["Все", "Постоянное", "Плавающее", "Задолженность", "Без урока", "Архив"];
@@ -50,7 +51,7 @@ export function StudentsView({ students, onAdd, onOpen }: { students: Student[];
   </AppShell>;
 }
 
-type StudentViewProps = { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; historyEvents: HistoryEvent[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string) => Promise<boolean>; onAdjustBalance: (id: string, units: number, note: string) => Promise<boolean>; onReversePayment: (id: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean>; onRestore: (id: string) => Promise<boolean>; onDeletePermanently: (id: string) => Promise<boolean>; onReload: () => Promise<void> };
+type StudentViewProps = { student: Student; lessons: Lesson[]; recurringSlots: RecurringSlot[]; balanceEntries: BalanceEntry[]; historyEvents: HistoryEvent[]; onAdd: (lesson: LessonDraft) => Promise<boolean>; onBack: () => void; onPay: (id: string, count: number, date: string, amountCents?: number | null) => Promise<boolean>; onUpdatePrices: (id: string, prices: StudentPrices) => Promise<boolean>; onAdjustBalance: (id: string, units: number, note: string) => Promise<boolean>; onReversePayment: (id: string) => Promise<boolean>; onCreateInvite: (id: string) => Promise<string>; onUpdate: (student: Pick<Student, "id" | "name" | "email" | "canViewAvailability">) => Promise<boolean>; onStopSeries: (id: string) => Promise<boolean>; onRestore: (id: string) => Promise<boolean>; onDeletePermanently: (id: string) => Promise<boolean>; onReload: () => Promise<void> };
 
 // Archived student: read-only history and payments, restore or delete permanently.
 function ArchivedStudentView({ student, balanceEntries, historyEvents, onBack, onReversePayment, onRestore, onDeletePermanently }: StudentViewProps) {
@@ -75,7 +76,7 @@ function ArchivedStudentView({ student, balanceEntries, historyEvents, onBack, o
 
 // Student card.
 export function StudentView(props: StudentViewProps) {
-  const { student, lessons, recurringSlots, balanceEntries, historyEvents, onAdd, onBack, onPay, onAdjustBalance, onReversePayment, onCreateInvite, onUpdate, onStopSeries, onReload } = props;
+  const { student, lessons, recurringSlots, balanceEntries, historyEvents, onAdd, onBack, onPay, onUpdatePrices, onAdjustBalance, onReversePayment, onCreateInvite, onUpdate, onStopSeries, onReload } = props;
   const [moreOpen, setMoreOpen] = useState(false);
   if (student.archived) return <ArchivedStudentView {...props} />;
   const history = balanceEntries.filter((entry) => entry.studentId === student.id);
@@ -83,6 +84,11 @@ export function StudentView(props: StudentViewProps) {
   const studentSlots = recurringSlots.filter((slot) => slot.studentId === student.id);
   const upcoming = lessons.filter((lesson) => lesson.studentId === student.id && lesson.date >= today());
   const nextStudentLesson = upcoming[0];
+  const lessonPrice = student.prices?.lessonCents ?? null;
+  const currency = student.prices?.currency ?? null;
+  const priceDetails = [student.prices?.doubleLessonCents != null ? `двойное ${formatMoney(student.prices.doubleLessonCents, currency)}` : null, lessonPrice !== null || student.prices?.trialLessonCents != null ? `пробное ${student.prices?.trialLessonCents != null ? formatMoney(student.prices.trialLessonCents, currency) : "бесплатно"}` : null].filter(Boolean).join(" · ");
+  const paidAmounts = history.filter((entry) => entry.kind === "payment" && !entry.reversed && entry.amountCents !== undefined);
+  const paidTotal = paidAmounts.length ? paidAmounts.reduce((sum, entry) => sum + (entry.amountCents ?? 0), 0) : null;
   const message = student.accountStatus === "active" && <MessagesDialog initialPeerId={student.id} label="Написать" />;
   const secondary = <><EditStudentDialog student={student} onUpdate={onUpdate} />{student.email && <InviteStudentDialog student={student} onCreateInvite={onCreateInvite} />}<BalanceAdjustmentDialog student={student} onAdjust={onAdjustBalance} /></>;
 
@@ -96,17 +102,22 @@ export function StudentView(props: StudentViewProps) {
       <div className="hidden flex-wrap gap-2 lg:flex"><PaymentDialog student={student} onPay={onPay} triggerLabel="Оплата" /><AddLessonDialog compact triggerLabel="Урок" students={[student]} defaultDate={today()} onAdd={onAdd} />{message}{secondary}</div>
     </div>
 
-    <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+    <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div className={`flex min-w-0 flex-col gap-0.5 rounded-[var(--radius-card)] p-4 ${student.balance < 0 ? "bg-status-debt text-status-debt-ink" : student.balance <= 1 ? "bg-status-unpaid text-status-unpaid-ink" : "bg-status-paid text-status-paid-ink"}`}>
         <span className="text-sm font-semibold">Баланс</span>
         <span className="text-2xl font-extrabold">{balanceText(student.balance)}</span>
-        {student.balance < 0 && <span className="text-xs">Необходимо оплатить {russianPlural(Math.abs(student.balance), "занятие", "занятия", "занятий")}</span>}
+        {student.balance < 0 && <span className="text-xs">Необходимо оплатить {russianPlural(Math.abs(student.balance), "занятие", "занятия", "занятий")}{lessonPrice !== null ? ` · ${formatMoney(Math.abs(student.balance) * lessonPrice, currency)}` : ""}</span>}
+        {student.balance > 0 && lessonPrice !== null && <span className="text-xs">≈ {formatMoney(student.balance * lessonPrice, currency)}</span>}
       </div>
       <div className="flex min-w-0 flex-col gap-0.5 rounded-[var(--radius-card)] border border-line bg-surface p-4">
         <span className="text-sm font-semibold text-ink-muted">Следующий урок</span>
         <span className="text-lg font-extrabold leading-snug md:text-2xl">{student.next}</span>
         <span className="text-xs text-ink-muted">{nextStudentLesson?.units === 2 ? "Двойной урок: 2 часа" : "Продолжительность: 1 час"}</span>
       </div>
+      <StudentPricesDialog student={student} onSave={onUpdatePrices} trigger={<button type="button" className="col-span-2 flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-left transition hover:bg-surface-subtle lg:col-span-1 lg:flex-col lg:items-start lg:justify-start lg:gap-0.5">
+        <span className="flex min-w-0 flex-col gap-0.5"><span className="text-sm font-semibold text-ink-muted">Стоимость занятия</span><span className="text-lg font-extrabold leading-snug md:text-2xl">{lessonPrice !== null ? formatMoney(lessonPrice, currency) : "Не указана"}</span>{priceDetails && <span className="text-xs text-ink-muted">{priceDetails}</span>}</span>
+        <span className="shrink-0 text-xs font-semibold text-brand-text">{lessonPrice !== null ? "Изменить" : "Указать"}</span>
+      </button>} />
       <div className="hidden min-w-0 flex-col gap-0.5 rounded-[var(--radius-card)] border border-line bg-surface p-4 lg:flex">
         <span className="text-sm font-semibold text-ink-muted">Расписание</span>
         <span className="text-lg font-extrabold leading-snug md:text-2xl">{student.floating ? "Плавающее" : student.schedule}</span>
@@ -131,7 +142,7 @@ export function StudentView(props: StudentViewProps) {
       </div></TabsContent>
       <TabsContent value="lessons">{upcoming.length ? <div className="space-y-2.5">{upcoming.map((lesson) => <LessonCard key={lesson.id} showDate lesson={lesson} />)}</div> : <EmptyState text="Будущих уроков нет" />}</TabsContent>
       <TabsContent value="history"><HistoryTimeline events={studentHistory} showStudent={false} onReversePayment={onReversePayment} /></TabsContent>
-      <TabsContent value="payments"><BalanceHistory entries={history.filter((entry) => entry.kind === "payment" || entry.kind === "refund" || entry.kind === "adjustment")} onReversePayment={onReversePayment} /></TabsContent>
+      <TabsContent value="payments">{paidTotal !== null && <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-4"><span className="text-sm text-ink-muted">Всего оплачено</span><strong className="text-lg">{formatMoney(paidTotal, currency)}</strong></div>}<BalanceHistory entries={history.filter((entry) => entry.kind === "payment" || entry.kind === "refund" || entry.kind === "adjustment")} onReversePayment={onReversePayment} currency={currency} /></TabsContent>
     </Tabs>
   </div>;
 }

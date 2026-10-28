@@ -52,6 +52,12 @@ export async function executeStudentAction({ request, db, body, auth, id }: Writ
     if (Boolean(student.account_ready) && (student.email ?? "").toLowerCase() !== (email ?? "").toLowerCase()) return Response.json({ error: "Email подключённого аккаунта меняется через поддержку" }, { status: 409 });
     await db.prepare("UPDATE members SET display_name = ?, email = ?, can_view_availability = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
       .bind(name, email, body.canViewAvailability ? 1 : 0, Date.now(), student.id, auth.workspaceId).run();
+  } else if (body.action === "updateStudentPrices") {
+    const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND status != 'archived'").bind(body.studentId, auth.workspaceId).first();
+    if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+    const currency = body.priceCurrency?.trim() || null;
+    await db.prepare("UPDATE members SET lesson_price_cents = ?, double_lesson_price_cents = ?, trial_lesson_price_cents = ?, price_currency = ?, updated_at = ? WHERE id = ? AND workspace_id = ?")
+      .bind(body.lessonPriceCents, body.doubleLessonPriceCents, body.trialLessonPriceCents, currency, Date.now(), body.studentId, auth.workspaceId).run();
   } else if (body.action === "convertTrialContact") {
     const contact = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 1 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first();
     if (!contact) return Response.json({ error: "Пробный посетитель не найден" }, { status: 404 });

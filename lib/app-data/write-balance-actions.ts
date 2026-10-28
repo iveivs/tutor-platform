@@ -9,11 +9,13 @@ export async function executeBalanceAction({ db, body, auth, id }: WriteActionCo
     if (body.paymentDate && body.paymentDate > currentDate) return Response.json({ error: "Дата оплаты не может быть в будущем" }, { status: 400 });
     const occurredAt = !body.paymentDate || body.paymentDate === currentDate ? Date.now() : new Date(`${body.paymentDate}T12:00:00${MOSCOW_OFFSET}`).getTime();
     if (!Number.isFinite(occurredAt)) return invalid();
-    const student = await db.prepare("SELECT id FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first();
+    const student = await db.prepare("SELECT id, lesson_price_cents FROM members WHERE id = ? AND workspace_id = ? AND role = 'student' AND is_trial_contact = 0 AND status != 'archived'").bind(body.studentId, auth.workspaceId).first<{ id: string; lesson_price_cents: number | null }>();
     if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
+    // The amount is stored with the payment, so a later price change does not rewrite past payments.
+    const amountCents = body.amountCents !== undefined ? body.amountCents : student.lesson_price_cents === null ? null : student.lesson_price_cents * body.count;
     await db.batch([
-      db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, note, occurred_at, recorded_by_id)
-        VALUES (?, ?, ?, 'payment', ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, occurredAt, auth.memberId),
+      db.prepare(`INSERT INTO balance_entries (id, workspace_id, student_id, kind, lesson_units, amount_cents, note, occurred_at, recorded_by_id)
+        VALUES (?, ?, ?, 'payment', ?, ?, 'Оплата занятий', ?, ?)`).bind(id, auth.workspaceId, body.studentId, body.count, amountCents, occurredAt, auth.memberId),
       db.prepare("INSERT INTO notifications (id, member_id, student_id, balance_entry_id, type, title, body) VALUES (?, ?, ?, ?, 'payment_recorded', 'Оплата учтена', ?)")
         .bind(crypto.randomUUID(), body.studentId, body.studentId, id, `Баланс пополнен на ${body.count} занятий.`),
     ]);

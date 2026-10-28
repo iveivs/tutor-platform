@@ -245,9 +245,10 @@ async function settleWorkspace(client, workspaceId, now) {
           WHERE r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at
             AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id)))
       ON CONFLICT DO NOTHING`, [workspaceId, now]);
-    await client.query(`INSERT INTO balance_entries (id, workspace_id, student_id, lesson_id, kind, lesson_units, note, occurred_at, recorded_by_id)
-      SELECT replace(gen_random_uuid()::text, '-', ''), l.workspace_id, l.student_id, l.id, 'lesson_charge', -1, 'Урок проведён', l.ends_at, l.created_by_id
-      FROM lessons l WHERE l.workspace_id = $1 AND l.lesson_type = 'regular' AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= $2
+    await client.query(`INSERT INTO balance_entries (id, workspace_id, student_id, lesson_id, kind, lesson_units, amount_cents, note, occurred_at, recorded_by_id)
+      SELECT replace(gen_random_uuid()::text, '-', ''), l.workspace_id, l.student_id, l.id, 'lesson_charge', -1,
+        CASE WHEN l.group_id IS NOT NULL AND m.double_lesson_price_cents IS NOT NULL THEN CASE WHEN l.id = (SELECT MIN(part.id) FROM lessons part WHERE part.group_id = l.group_id) THEN m.double_lesson_price_cents - m.double_lesson_price_cents / 2 ELSE m.double_lesson_price_cents / 2 END ELSE m.lesson_price_cents END, 'Урок проведён', l.ends_at, l.created_by_id
+      FROM lessons l JOIN members m ON m.id = l.student_id WHERE l.workspace_id = $1 AND l.lesson_type = 'regular' AND l.status = 'scheduled' AND l.charge_status = 'pending' AND l.ends_at <= $2
         AND NOT EXISTS (SELECT 1 FROM lesson_requests r LEFT JOIN lessons requested ON requested.id = r.lesson_id
           WHERE r.type = 'cancel' AND r.status = 'pending' AND r.created_at <= r.cancellation_deadline_at
             AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id)))

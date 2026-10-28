@@ -6,12 +6,13 @@ export type LessonDraft = { date: string; time: string; studentId?: string; repe
 export type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
 export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
 export type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
-export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string };
+export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; prices?: StudentPrices };
+export type StudentPrices = { lessonCents: number | null; doubleLessonCents: number | null; trialLessonCents: number | null; currency: string | null };
 export type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
 export type TeacherDayNote = { id: string; date: string; body: string; updatedAt: number };
 export type AvailableSlot = { startsAt: number; endsAt: number; maxUnits: 1 | 2 };
 export type LessonRequest = { id: string; type: string; kind: string; name: string; detail: string; note: string };
-export type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean };
+export type BalanceEntry = { id: string; studentId: string; kind: string; units: number; note: string; date: string; reversed?: boolean; amountCents?: number };
 export type HistoryEvent = { id: string; sourceId?: string; studentId: string; studentName: string; category: "lesson" | "payment" | "request"; type: string; title: string; detail: string; actor?: string; units?: number; canReverse?: boolean; occurredAt: number };
 export type AppNotification = {
   id: string; type: string; title: string; body: string; read: boolean; createdAt: number;

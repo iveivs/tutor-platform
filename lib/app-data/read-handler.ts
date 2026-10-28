@@ -67,6 +67,7 @@ export async function handleGetAppData(request: Request) {
       : Promise.resolve({ results: [] as Array<Record<string, unknown>> });
     const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows, availabilityRows, availabilityBusyRows] = await Promise.all([
       loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type, m.can_view_availability,
+        m.lesson_price_cents, m.double_lesson_price_cents, m.trial_lesson_price_cents, m.price_currency,
         m.avatar_color, m.avatar_object_key IS NOT NULL AS has_avatar, m.avatar_updated_at,
         (SELECT preference.avatar_color FROM member_display_preferences preference
           WHERE preference.viewer_member_id = ? AND preference.student_member_id = m.id LIMIT 1) AS avatar_override_color,
@@ -102,7 +103,7 @@ export async function handleGetAppData(request: Request) {
         JOIN members m ON m.id = r.student_id
         LEFT JOIN lessons l ON l.id = r.lesson_id
         WHERE r.workspace_id = ? AND r.status = 'pending' AND (? IS NULL OR r.student_id = ?) ORDER BY r.created_at`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
-      loadRows(needs("balanceEntries"), () => db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.note, b.occurred_at,
+      loadRows(needs("balanceEntries"), () => db.prepare(`SELECT b.id, b.student_id, b.kind, b.lesson_units, b.amount_cents, b.note, b.occurred_at,
         EXISTS(SELECT 1 FROM balance_entries reversal WHERE reversal.reverses_entry_id = b.id) AS reversed
         FROM balance_entries b
         WHERE b.workspace_id = ? AND (? IS NULL OR b.student_id = ?) ORDER BY b.occurred_at DESC, b.created_at DESC`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
@@ -176,6 +177,13 @@ export async function handleGetAppData(request: Request) {
         balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), archived: row.status === "archived", trialEligible: Boolean(row.trial_eligible), accountStatus: Boolean(row.account_ready) ? "active" : "invited",
         ownAvatarColor: String(row.avatar_color ?? "indigo"), avatarColor: String(row.avatar_override_color ?? row.avatar_color ?? "indigo"),
         avatarUrl: row.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(String(row.id))}&v=${Number(row.avatar_updated_at ?? 0)}` : undefined,
+        // Prices are the teacher's working data and are not sent to the student portal.
+        prices: auth.role === "student" ? undefined : {
+          lessonCents: row.lesson_price_cents === null || row.lesson_price_cents === undefined ? null : Number(row.lesson_price_cents),
+          doubleLessonCents: row.double_lesson_price_cents === null || row.double_lesson_price_cents === undefined ? null : Number(row.double_lesson_price_cents),
+          trialLessonCents: row.trial_lesson_price_cents === null || row.trial_lesson_price_cents === undefined ? null : Number(row.trial_lesson_price_cents),
+          currency: row.price_currency ? String(row.price_currency) : null,
+        },
       };
     });
     const rawLessonRows = lessonRows.results as Array<Record<string, unknown>>;
@@ -221,6 +229,7 @@ export async function handleGetAppData(request: Request) {
     const balanceEntries = (balanceRows.results as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id), studentId: String(row.student_id), kind: String(row.kind), units: Number(row.lesson_units),
       note: String(row.note ?? (row.kind === "payment" ? "Оплата занятий" : "Урок проведён")), date: toMoscowDate(new Date(Number(row.occurred_at))), reversed: Boolean(row.reversed),
+      amountCents: auth.role === "student" || row.amount_cents === null || row.amount_cents === undefined ? undefined : Number(row.amount_cents),
     }));
     const lessonHistory = groupDoubleLessonEvents(lessonEventRows.results as Array<Record<string, unknown>>).map((row) => {
       const eventType = String(row.event_type);

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
-import type { LessonDraft, Student, StudentDraft, StudentRequestDraft, TutorProfile } from "@/components/features/app/types";
+import type { LessonDraft, Student, StudentDraft, StudentPrices, StudentRequestDraft, TutorProfile } from "@/components/features/app/types";
 import { saveAppData } from "@/lib/app-data-client";
 import { russianPlural } from "@/lib/russian-plural";
 
@@ -39,6 +39,12 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     try { await saveAppData({ action: "updateStudent", studentId: student.id, name: student.name, email: student.email, canViewAvailability: student.canViewAvailability }); await reload(); toast.success("Данные ученика сохранены"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить данные ученика"); return false; }
   };
+  const updateStudentPrices = async (studentId: string, prices: StudentPrices) => {
+    try {
+      await saveAppData({ action: "updateStudentPrices", studentId, lessonPriceCents: prices.lessonCents, doubleLessonPriceCents: prices.doubleLessonCents, trialLessonPriceCents: prices.trialLessonCents, priceCurrency: prices.currency });
+      await reload(); toast.success("Стоимость занятий сохранена"); return true;
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить стоимость"); return false; }
+  };
   const convertTrialContact = async (studentId: string) => {
     try { await saveAppData({ action: "convertTrialContact", studentId }); await reload(); toast.success("Карточка ученика создана"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать ученика"); return false; }
@@ -67,8 +73,8 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     if (!result.inviteUrl) throw new Error("Ссылка не была создана");
     return result.inviteUrl;
   };
-  const addPayment = async (studentId: string, count: number, paymentDate: string) => {
-    try { await saveAppData({ action: "addPayment", studentId, count, paymentDate }); await reload(); toast.success(`Добавлено ${russianPlural(count, "занятие", "занятия", "занятий")}`); return true; }
+  const addPayment = async (studentId: string, count: number, paymentDate: string, amountCents?: number | null) => {
+    try { await saveAppData({ action: "addPayment", studentId, count, paymentDate, ...(amountCents !== undefined ? { amountCents } : {}) }); await reload(); toast.success(`Добавлено ${russianPlural(count, "занятие", "занятия", "занятий")}`); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось добавить оплату"); return false; }
   };
   const adjustBalance = async (studentId: string, units: number, note: string) => {
@@ -120,6 +126,7 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     deleteLesson,
     stopLessonSeries,
     updateStudent,
+    updateStudentPrices,
     convertTrialContact,
     restoreStudent,
     deleteStudentPermanently,

@@ -102,6 +102,7 @@ const translations: Record<string, string> = {
   "Подробнее": "Details",
   "Режим календаря": "Calendar view", "Выбранный день": "Selected day",
   "Тип запроса": "Request type", "Формат": "Format",
+  "Стоимость занятий": "Lesson prices", "· необязательно": "· optional", "Подставится в оплату": "Used for payments", "Валюта": "Currency", "Любая подпись": "Any label", "Двойное занятие": "Double lesson", "Пусто — считается как два обычных": "Empty — counted as two regular lessons", "Бесплатно": "Free", "Своя цена": "Custom price", "Сумма": "Amount", "Не указана": "Not set", "Новая цена действует для следующих оплат и списаний; прошлые остаются по старой.": "A new price applies to future payments and charges; past ones keep the old price.", "Стоимость занятия": "Lesson price", "Указать": "Set", "Всего оплачено": "Total paid", "Сумма оплаты": "Payment amount", "Стоимость пробного занятия": "Trial lesson price", "Введите сумму числом, например 2000 или 1999,50": "Enter the amount as a number, e.g. 2000 or 1999.50", "Цена занятий не указана — сумму можно вписать вручную или оставить пустой.": "No lesson price is set — enter the amount manually or leave it empty.", "Стоимость занятий сохранена": "Lesson prices saved", "Не удалось сохранить стоимость": "Could not save the prices",
   "Тема и язык": "Theme and language","Оформление кабинета на этом устройстве.": "Appearance on this device.", "Новый интерфейс": "New interface","Предварительная версия редизайна. Включается только на этом устройстве.": "Redesign preview. Applies to this device only.", "Показывать новый интерфейс": "Show the new interface", "Изменения появляются поэтапно. Выключите, чтобы вернуться к привычному виду.": "Changes arrive step by step. Turn it off to return to the familiar look.",
   "Управление платформой": "Platform management", "Список кабинетов преподавателей и управление доступом.": "Tutor accounts and access management.", "Преподаватель": "Tutor", "Создан": "Created", "Доступ": "Access", "Активен": "Active", "Заблокирован": "Blocked", "Заблокировать": "Block", "Разблокировать": "Unblock",
   "Персональная ссылка": "Personal link", "Ссылка на кабинет": "Portal link", "Готовим ссылку…": "Preparing link…", "Скопировать ссылку": "Copy link", "Отправить": "Send", "Пригласить ученика": "Invite student", "Отправить ссылку на кабинет": "Send portal link", "Ссылка действует 14 дней. Создание новой ссылки отключит предыдущую.": "The link is valid for 14 days. Creating a new link disables the previous one.", "Это обычная ссылка на вход, она не меняет пароль и не создаёт новое приглашение.": "This is a regular sign-in link. It does not change the password or create a new invitation.",
@@ -173,6 +174,7 @@ export function translateUiText(value: string) {
     .replace(/^Текущий баланс: (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Current balance: ${englishLessons(count)}`)
     .replace(/^После оплаты баланс составит (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance after payment: ${englishLessons(count)}`)
     .replace(/^После корректировки баланс составит (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Balance after adjustment: ${englishLessons(count)}`)
+    .replace(/^Необходимо оплатить (-?\d+) (?:занятие|занятия|занятий) · (.+)$/, (_, count: string, amount: string) => `Payment required for ${englishLessons(count)} · ${amount}`)
     .replace(/^Необходимо оплатить (-?\d+) (?:занятие|занятия|занятий)$/, (_, count: string) => `Payment required for ${englishLessons(count)}`)
     .replace(/^(\d+) (ученик|ученика|учеников)$/, "$1 students")
     .replace(/^(\d+) (урок|урока|уроков)$/, "$1 lessons")
@@ -184,6 +186,10 @@ export function translateUiText(value: string) {
     .replace(/^(\d+) (?:файл|файла|файлов)$/, (_, count: string) => `${count} ${Number(count) === 1 ? "file" : "files"}`)
     .replace(/^Подключён · (@.+)$/, "Connected · $1")
     .replace(/^Ещё: (.+)$/, "More: $1")
+    .replace(/^Посчитано по цене (.+) за занятие\. Можно изменить, например для скидки или абонемента\.$/, "Calculated at $1 per lesson. You can change it, e.g. for a discount or a package.")
+    .replace(/(^|· )двойное /g, "$1double ")
+    .replace(/(^|· )пробное бесплатно$/, "$1trial free")
+    .replace(/(^|· )пробное /, "$1trial ")
     .replace(/, (\d+) (?:урок|урока|уроков)$/, (_, count: string) => `, ${count} ${Number(count) === 1 ? "lesson" : "lessons"}`)
     .replace(/^Открыть (.+)$/, "Open $1")
     .replace(/^([\d.,]+) (КБ|МБ) · /, (_, amount: string, unit: string) => `${amount} ${unit === "КБ" ? "KB" : "MB"} · `)

@@ -99,6 +99,13 @@
       "when": 1792728000000,
       "tag": "0013_warm_day_note",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793180000000,
+      "tag": "0014_student_lesson_prices",
+      "breakpoints": true
     }
   ]
 }

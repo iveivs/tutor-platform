@@ -19,4 +19,22 @@ describe("settlePastLessons", () => {
     expect(chargeQuery).toContain("l.lesson_type = 'regular'");
     expect(completionQuery).toContain("WHEN lesson_type = 'trial' THEN 'waived'");
   });
+
+  it("stores the student's lesson price with each charge", async () => {
+    const queries: string[] = [];
+    const db = {
+      prepare(query: string) {
+        queries.push(query);
+        return { bind: () => ({ query }) };
+      },
+      batch: async () => [],
+    } as unknown as D1Database;
+
+    await settlePastLessons(db, "workspace", 123);
+
+    const chargeQuery = queries.find((query) => query.includes("INSERT OR IGNORE INTO balance_entries")) ?? "";
+    expect(chargeQuery).toContain("amount_cents");
+    expect(chargeQuery).toContain("m.lesson_price_cents");
+    expect(chargeQuery).toContain("m.double_lesson_price_cents / 2");
+  });
 });

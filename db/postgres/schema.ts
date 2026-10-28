@@ -119,8 +119,14 @@ export const members = pgTable("members", {
   isTrialContact: boolean("is_trial_contact").notNull().default(false),
   scheduleType: text("schedule_type").notNull().default("floating"),
   canViewAvailability: boolean("can_view_availability").notNull().default(false),
+  lessonPriceCents: integer("lesson_price_cents"),
+  doubleLessonPriceCents: integer("double_lesson_price_cents"),
+  trialLessonPriceCents: integer("trial_lesson_price_cents"),
+  priceCurrency: text("price_currency"),
   ...timestamps(),
 }, (table) => [
+  check("members_lesson_prices_check", sql`(${table.lessonPriceCents} is null or ${table.lessonPriceCents} between 0 and 100000000) and (${table.doubleLessonPriceCents} is null or ${table.doubleLessonPriceCents} between 0 and 100000000) and (${table.trialLessonPriceCents} is null or ${table.trialLessonPriceCents} between 0 and 100000000)`),
+  check("members_price_currency_check", sql`${table.priceCurrency} is null or char_length(${table.priceCurrency}) between 1 and 12`),
   check("members_role_check", sql`${table.role} in ('owner', 'teacher', 'student')`),
   check("members_status_check", sql`${table.status} in ('invited', 'active', 'archived')`),
   check("members_schedule_type_check", sql`${table.scheduleType} in ('fixed', 'floating')`),
@@ -427,6 +433,7 @@ export const balanceEntries = pgTable("balance_entries", {
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [
   check("balance_entries_kind_check", sql`${table.kind} in ('payment', 'lesson_charge', 'adjustment', 'refund')`),
+  check("balance_entries_amount_check", sql`${table.amountCents} is null or ${table.amountCents} between 0 and 1000000000`),
   index("idx_balance_entries_student_occurred").on(table.studentId, table.occurredAt),
   uniqueIndex("balance_entries_lesson_charge_unique").on(table.lessonId, table.kind),
   uniqueIndex("balance_entries_reversal_unique").on(table.reversesEntryId).where(sql`${table.reversesEntryId} is not null`),
