@@ -8,6 +8,7 @@ import { AppShell } from "@/components/common/app-shell";
 import { FormField } from "@/components/common/form-field";
 import type { AvailabilityWindow } from "@/components/features/app/types";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
+import { PushNotificationsCard } from "@/components/features/notifications/push-notifications-card";
 import { useLanguage, type Language } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +103,8 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
       <Button type="button" variant="outline" disabled={availabilityPending} onClick={() => { setWindows(initialWindows()); setWindowsChanged(false); }}>Отменить</Button>
     </div>}
     <p className="px-1 text-xs leading-5 text-ink-muted">Эти интервалы используются для показа свободного времени ученикам, которым вы дали доступ.</p>
+
+    <PushNotificationsCard audience="teacher" />
 
     <TelegramNotificationsCard />
 

@@ -540,6 +540,9 @@ export const notificationPreferences = pgTable("notification_preferences", {
   telegramSchedule: boolean("telegram_schedule").notNull().default(true),
   telegramMessages: boolean("telegram_messages").notNull().default(false),
   telegramMaterials: boolean("telegram_materials").notNull().default(false),
+  pushSchedule: boolean("push_schedule").notNull().default(true),
+  pushMessages: boolean("push_messages").notNull().default(true),
+  pushMaterials: boolean("push_materials").notNull().default(true),
   ...timestamps(),
 });
 
@@ -589,6 +592,45 @@ export const telegramDeliveries = pgTable("telegram_deliveries", {
   uniqueIndex("telegram_deliveries_dedupe_key_unique").on(table.dedupeKey),
   index("idx_telegram_deliveries_due").on(table.status, table.nextAttemptAt),
   index("idx_telegram_deliveries_member_created").on(table.memberId, table.createdAt),
+]);
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: text("id").primaryKey(),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  language: text("language").notNull().default("ru"),
+  lastSuccessAt: instant("last_success_at"),
+  ...timestamps(),
+}, (table) => [
+  check("push_subscriptions_language_check", sql`${table.language} in ('ru', 'en')`),
+  uniqueIndex("push_subscriptions_endpoint_unique").on(table.endpoint),
+  index("idx_push_subscriptions_member").on(table.memberId),
+]);
+
+export const pushDeliveries = pgTable("push_deliveries", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  notificationId: text("notification_id").references(() => notifications.id, { onDelete: "set null" }),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: instant("next_attempt_at").notNull().defaultNow(),
+  sentAt: instant("sent_at"),
+  lastError: text("last_error"),
+  ...timestamps(),
+}, (table) => [
+  check("push_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material', 'test')`),
+  check("push_deliveries_status_check", sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'cancelled')`),
+  check("push_deliveries_attempts_check", sql`${table.attempts} >= 0`),
+  uniqueIndex("push_deliveries_dedupe_key_unique").on(table.dedupeKey),
+  index("idx_push_deliveries_due").on(table.status, table.nextAttemptAt),
+  index("idx_push_deliveries_member_created").on(table.memberId, table.createdAt),
 ]);
 
 export const dataChanges = pgTable("data_changes", {

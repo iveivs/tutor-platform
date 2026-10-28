@@ -15,6 +15,7 @@ import { StudentRequestDialog } from "@/components/features/requests/student-req
 import { LessonStatusChip } from "@/components/features/schedule/lesson-card";
 import { SettingsGroup, settingsRowClass } from "@/components/features/settings/settings-group";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
+import { PushNotificationsCard } from "@/components/features/notifications/push-notifications-card";
 import { useLanguage, type Language } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -171,6 +172,8 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             <h2 className="px-1 pt-2 text-[13px] font-bold uppercase tracking-wide text-ink-muted">Оплаты</h2>
             <BalanceHistory entries={paymentEntries} />
           </section>
+
+          <PushNotificationsCard audience="student" />
 
           <TelegramNotificationsCard />
 

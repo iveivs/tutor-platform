@@ -1,12 +1,14 @@
 import pg from "pg";
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { readVapidConfig, sendWebPush } from "./web-push.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const intervalMs = Number(process.env.JOB_INTERVAL_MS ?? 15 * 60 * 1000);
 if (!Number.isFinite(intervalMs) || intervalMs < 10_000) throw new Error("JOB_INTERVAL_MS must be at least 10000");
 
-const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const pool = new pg.Pool({ connectionString: databaseUrl, max: 3 });
+const vapid = readVapidConfig();
 let stopping = false;
 let wakeSleep;
 
@@ -84,18 +86,24 @@ function membersLabel(count) {
   return `${count} ${word}`;
 }
 
-async function enqueueTelegramReminders(client) {
-  await client.query(`UPDATE telegram_deliveries delivery
-    SET status = 'cancelled', updated_at = now()
-    FROM members recipient
-    WHERE delivery.member_id = recipient.id
-      AND recipient.role IN ('owner', 'teacher')
-      AND delivery.kind = 'lesson_reminder'
-      AND delivery.status IN ('pending', 'failed')
-      AND delivery.dedupe_key LIKE 'lesson-reminder:%'
-      AND delivery.dedupe_key NOT LIKE 'lesson-reminder-day:%'`);
+// Who gets reminders on each external channel: Telegram needs an active connection,
+// push needs at least one device subscription; both respect the "schedule" preference.
+const reminderChannels = {
+  telegram: {
+    recipientFilter: (memberColumn) => `JOIN telegram_connections connection ON connection.member_id = ${memberColumn} AND connection.disabled_at IS NULL
+      LEFT JOIN notification_preferences preference ON preference.member_id = ${memberColumn}`,
+    preferenceCondition: "COALESCE(preference.telegram_schedule, true)",
+  },
+  push: {
+    recipientFilter: (memberColumn) => `LEFT JOIN notification_preferences preference ON preference.member_id = ${memberColumn}`,
+    preferenceCondition: "COALESCE(preference.push_schedule, true) AND EXISTS (SELECT 1 FROM push_subscriptions subscription WHERE subscription.member_id = preference_member.id)",
+  },
+};
 
-  await client.query(`WITH upcoming AS (
+// Student reminders as (member_id, lesson_id, dedupe_key, title, body) for one channel.
+function studentReminderRowsSql(channel) {
+  const { recipientFilter, preferenceCondition } = reminderChannels[channel];
+  return `WITH upcoming AS (
       SELECT min(l.id) AS lesson_id, COALESCE(l.group_id, l.id) AS lesson_key, l.workspace_id, l.student_id,
         min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at, w.timezone,
         owner.display_name AS owner_name, class_group.name AS class_name,
@@ -107,33 +115,36 @@ async function enqueueTelegramReminders(client) {
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
       GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, owner.display_name, class_group.name
     )
-    INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
-    SELECT student_id, lesson_id, 'lesson_reminder',
-      'lesson-reminder:' || lesson_key || ':' || student_id,
-      'Напоминание об уроке' || E'\n' || to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
-      CASE WHEN class_name IS NOT NULL THEN E'\nГруппа: ' || class_name ELSE '' END ||
-      E'\nПреподаватель: ' || owner_name ||
+    SELECT student_id AS member_id, lesson_id,
+      'lesson-reminder:' || lesson_key || ':' || student_id AS dedupe_key,
+      'Напоминание об уроке' AS title,
+      to_char(starts_at AT TIME ZONE timezone, 'DD.MM.YYYY в HH24:MI') ||
+      CASE WHEN class_name IS NOT NULL THEN E'\\nГруппа: ' || class_name ELSE '' END ||
+      E'\\nПреподаватель: ' || owner_name ||
       -- Same balance as in the student portal: sum of the student's balance entries at reminder time.
-      E'\nБаланс: ' || CASE WHEN balance < 0 THEN 'долг ' ELSE '' END || abs(balance) || ' ' ||
+      E'\\nБаланс: ' || CASE WHEN balance < 0 THEN 'долг ' ELSE '' END || abs(balance) || ' ' ||
       CASE WHEN abs(balance) % 10 = 1 AND abs(balance) % 100 <> 11 THEN 'занятие'
         WHEN abs(balance) % 10 BETWEEN 2 AND 4 AND abs(balance) % 100 NOT BETWEEN 12 AND 14 THEN 'занятия'
-        ELSE 'занятий' END
+        ELSE 'занятий' END AS body
     FROM upcoming
-    JOIN telegram_connections connection ON connection.member_id = student_id AND connection.disabled_at IS NULL
-    LEFT JOIN notification_preferences preference ON preference.member_id = student_id
-    WHERE COALESCE(preference.telegram_schedule, true)
-    ON CONFLICT (dedupe_key) DO NOTHING`);
+    JOIN members preference_member ON preference_member.id = student_id
+    ${recipientFilter("student_id")}
+    WHERE ${preferenceCondition}`;
+}
 
-  const teacherDigests = await client.query(`WITH trigger_days AS (
+// One digest per owner and lesson day, as title + body lines, for one channel.
+async function teacherDigests(client, channel) {
+  const { recipientFilter, preferenceCondition } = reminderChannels[channel];
+  const result = await client.query(`WITH trigger_days AS (
       SELECT DISTINCT l.workspace_id, owner.id AS owner_id, w.timezone,
         (l.starts_at AT TIME ZONE w.timezone)::date AS lesson_date
       FROM lessons l
       JOIN workspaces w ON w.id = l.workspace_id
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
-      JOIN telegram_connections connection ON connection.member_id = owner.id AND connection.disabled_at IS NULL
-      LEFT JOIN notification_preferences preference ON preference.member_id = owner.id
+      JOIN members preference_member ON preference_member.id = owner.id
+      ${recipientFilter("owner.id")}
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
-        AND COALESCE(preference.telegram_schedule, true)
+        AND ${preferenceCondition}
     ), day_lessons AS (
       SELECT days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
         min(l.id) AS lesson_id, min(l.starts_at) AS starts_at, max(l.ends_at) AS ends_at,
@@ -164,22 +175,54 @@ async function enqueueTelegramReminders(client) {
     FROM day_lessons
     GROUP BY owner_id, workspace_id, timezone, lesson_date
     ORDER BY lesson_date, owner_id`);
-
-  for (const digest of teacherDigests.rows) {
+  return result.rows.map((digest) => {
     const lessons = Array.isArray(digest.lessons) ? digest.lessons : [];
-    const message = [
-      digest.is_tomorrow ? "Расписание на завтра" : "Расписание на сегодня",
-      String(digest.date_label),
-      ...lessons.map((lesson) => `• ${lesson.start}–${lesson.end} — ${lesson.studentName}${lesson.isGroup ? ` · группа, ${membersLabel(Number(lesson.lessonCount))}` : Number(lesson.lessonCount) > 1 ? " · двойной урок" : ""}`),
-    ].join("\n");
+    return {
+      memberId: digest.member_id,
+      lessonId: digest.lesson_id,
+      dedupeKey: `lesson-reminder-day:${digest.workspace_id}:${digest.lesson_date}:${digest.member_id}`,
+      title: digest.is_tomorrow ? "Расписание на завтра" : "Расписание на сегодня",
+      body: [
+        String(digest.date_label),
+        ...lessons.map((lesson) => `• ${lesson.start}–${lesson.end} — ${lesson.studentName}${lesson.isGroup ? ` · группа, ${membersLabel(Number(lesson.lessonCount))}` : Number(lesson.lessonCount) > 1 ? " · двойной урок" : ""}`),
+      ].join("\n"),
+    };
+  });
+}
+
+async function enqueueTelegramReminders(client) {
+  await client.query(`UPDATE telegram_deliveries delivery
+    SET status = 'cancelled', updated_at = now()
+    FROM members recipient
+    WHERE delivery.member_id = recipient.id
+      AND recipient.role IN ('owner', 'teacher')
+      AND delivery.kind = 'lesson_reminder'
+      AND delivery.status IN ('pending', 'failed')
+      AND delivery.dedupe_key LIKE 'lesson-reminder:%'
+      AND delivery.dedupe_key NOT LIKE 'lesson-reminder-day:%'`);
+
+  await client.query(`INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
+    SELECT member_id, lesson_id, 'lesson_reminder', dedupe_key, title || E'\\n' || body
+    FROM (${studentReminderRowsSql("telegram")}) reminder
+    ON CONFLICT (dedupe_key) DO NOTHING`);
+
+  for (const digest of await teacherDigests(client, "telegram")) {
     await client.query(`INSERT INTO telegram_deliveries (member_id, lesson_id, kind, dedupe_key, message)
       VALUES ($1, $2, 'lesson_reminder', $3, $4)
-      ON CONFLICT (dedupe_key) DO NOTHING`, [
-      digest.member_id,
-      digest.lesson_id,
-      `lesson-reminder-day:${digest.workspace_id}:${digest.lesson_date}:${digest.member_id}`,
-      message,
-    ]);
+      ON CONFLICT (dedupe_key) DO NOTHING`, [digest.memberId, digest.lessonId, digest.dedupeKey, `${digest.title}\n${digest.body}`]);
+  }
+}
+
+async function enqueuePushReminders(client) {
+  if (!vapid) return;
+  await client.query(`INSERT INTO push_deliveries (member_id, lesson_id, kind, dedupe_key, title, body)
+    SELECT member_id, lesson_id, 'lesson_reminder', dedupe_key, title, body
+    FROM (${studentReminderRowsSql("push")}) reminder
+    ON CONFLICT (dedupe_key) DO NOTHING`);
+  for (const digest of await teacherDigests(client, "push")) {
+    await client.query(`INSERT INTO push_deliveries (member_id, lesson_id, kind, dedupe_key, title, body)
+      VALUES ($1, $2, 'lesson_reminder', $3, $4, $5)
+      ON CONFLICT (dedupe_key) DO NOTHING`, [digest.memberId, digest.lessonId, digest.dedupeKey, digest.title, digest.body]);
   }
 }
 
@@ -246,6 +289,158 @@ async function deliverTelegramMessages(client) {
   }
 }
 
+const englishPushText = {
+  lesson_reminder: "Lesson reminder",
+  schedule_changed: "Schedule update",
+  new_request: "New student request",
+  new_message: "New message",
+  new_material: "New lesson material",
+  test: "Test notification",
+};
+
+// Same number as the in-app counter: unread among the latest 30 notifications, and for a
+// teacher pending requests instead of their "new request" notifications.
+async function pushBadgeCount(client, memberId, role) {
+  const result = await client.query(`SELECT
+      (SELECT count(*) FROM (SELECT read_at, type FROM notifications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 30) recent
+        WHERE recent.read_at IS NULL AND ($2::text = 'student' OR recent.type <> 'new_request'))::int
+      + CASE WHEN $2::text = 'student' THEN 0 ELSE (SELECT count(*) FROM lesson_requests request
+        JOIN members recipient ON recipient.id = $1 WHERE request.workspace_id = recipient.workspace_id AND request.status = 'pending')::int END AS count`, [memberId, role]);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+function pushMessage(delivery, language, badge) {
+  const teacher = delivery.role !== "student";
+  const english = language === "en";
+  const isTest = delivery.kind === "test";
+  return {
+    title: english ? (teacher && delivery.kind === "lesson_reminder" ? "Upcoming lessons" : englishPushText[delivery.kind] ?? "Tyuttori") : String(delivery.title),
+    body: english ? (isTest ? "Notifications on this device are working." : "Open Tyuttori to see the details.") : String(delivery.body),
+    url: !teacher || isTest ? "/" : delivery.kind === "lesson_reminder" ? "/?view=today" : "/?view=activity",
+    badge,
+    tag: delivery.kind === "new_message" ? "new_message" : `delivery-${delivery.id}`,
+  };
+}
+
+async function deliverPushMessages(client) {
+  if (!vapid) return;
+  await client.query("UPDATE push_deliveries SET status = 'pending', updated_at = now() WHERE status = 'sending' AND updated_at < now() - interval '10 minutes'");
+  for (let index = 0; index < 100; index += 1) {
+    const claimed = await client.query(`WITH due AS (
+        SELECT delivery.id FROM push_deliveries delivery
+        WHERE delivery.status = 'pending' AND delivery.next_attempt_at <= now()
+        ORDER BY delivery.next_attempt_at, delivery.id FOR UPDATE OF delivery SKIP LOCKED LIMIT 1
+      )
+      UPDATE push_deliveries delivery SET status = 'sending', attempts = attempts + 1, updated_at = now()
+      FROM due, members recipient, workspaces workspace
+      WHERE delivery.id = due.id AND recipient.id = delivery.member_id AND workspace.id = recipient.workspace_id
+      RETURNING delivery.id, delivery.member_id, delivery.kind, delivery.title, delivery.body, delivery.attempts,
+        recipient.role, recipient.status = 'active' AND workspace.access_status <> 'blocked' AS can_receive`);
+    const delivery = claimed.rows[0];
+    if (!delivery) break;
+    const subscriptions = delivery.can_receive
+      ? (await client.query("SELECT id, endpoint, p256dh, auth, language FROM push_subscriptions WHERE member_id = $1", [delivery.member_id])).rows
+      : [];
+    if (subscriptions.length === 0) {
+      await client.query("UPDATE push_deliveries SET status = 'cancelled', last_error = 'no_subscription', updated_at = now() WHERE id = $1", [delivery.id]);
+      continue;
+    }
+    const badge = await pushBadgeCount(client, delivery.member_id, String(delivery.role));
+    let delivered = false;
+    let retry = false;
+    let reason = null;
+    for (const subscription of subscriptions) {
+      const result = await sendWebPush(subscription, pushMessage(delivery, subscription.language, badge), vapid, {
+        urgency: delivery.kind === "new_message" || delivery.kind === "test" ? "high" : "normal",
+      });
+      if (result.outcome === "ok") {
+        delivered = true;
+        await client.query("UPDATE push_subscriptions SET last_success_at = now() WHERE id = $1", [subscription.id]);
+      } else if (result.outcome === "gone") {
+        await client.query("DELETE FROM push_subscriptions WHERE id = $1", [subscription.id]);
+      } else {
+        reason = result.reason;
+        if (result.outcome === "retry") retry = true;
+      }
+    }
+    if (delivered) {
+      await client.query("UPDATE push_deliveries SET status = 'sent', sent_at = now(), last_error = $2, updated_at = now() WHERE id = $1", [delivery.id, reason]);
+    } else if (!retry && !reason) {
+      await client.query("UPDATE push_deliveries SET status = 'cancelled', last_error = 'subscriptions_expired', updated_at = now() WHERE id = $1", [delivery.id]);
+    } else if (!retry || Number(delivery.attempts) >= 5) {
+      await client.query("UPDATE push_deliveries SET status = 'failed', last_error = $2, updated_at = now() WHERE id = $1", [delivery.id, reason]);
+    } else {
+      const retryMinutes = Math.min(60, 2 ** Number(delivery.attempts));
+      await client.query("UPDATE push_deliveries SET status = 'pending', next_attempt_at = now() + ($2 * interval '1 minute'), last_error = $3, updated_at = now() WHERE id = $1", [delivery.id, retryMinutes, reason]);
+    }
+  }
+}
+
+// Push is delivered within seconds: a LISTEN connection wakes this runner on every new
+// push_deliveries row, and a one-minute timer picks up retries. Telegram keeps its cycle.
+let pushRun = null;
+let pushAgain = false;
+
+function runPushDeliveries() {
+  if (!vapid || stopping) return Promise.resolve();
+  if (pushRun) {
+    pushAgain = true;
+    return pushRun;
+  }
+  pushRun = (async () => {
+    do {
+      pushAgain = false;
+      const client = await pool.connect();
+      let locked = false;
+      try {
+        const lock = await client.query("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", ["tutor:push-delivery"]);
+        locked = Boolean(lock.rows[0]?.locked);
+        if (locked) await deliverPushMessages(client);
+      } finally {
+        if (locked) await client.query("SELECT pg_advisory_unlock(hashtext($1))", ["tutor:push-delivery"]).catch(() => undefined);
+        client.release();
+      }
+    } while (pushAgain && !stopping);
+  })().catch((error) => {
+    console.error(JSON.stringify({ event: "push_delivery_failed", reason: error instanceof Error ? error.name : "unknown" }));
+  }).finally(() => {
+    pushRun = null;
+  });
+  return pushRun;
+}
+
+let stopPushListener;
+
+async function listenForPushDeliveries() {
+  const retryTimer = setInterval(() => void runPushDeliveries(), 60_000);
+  let debounce;
+  while (!stopping) {
+    const listener = new pg.Client({ connectionString: databaseUrl, application_name: "tutor-push-listener" });
+    try {
+      await listener.connect();
+      await listener.query("LISTEN tutor_push_deliveries");
+      listener.on("notification", () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => void runPushDeliveries(), 200);
+      });
+      void runPushDeliveries();
+      await new Promise((resolve) => {
+        listener.once("error", resolve);
+        listener.once("end", resolve);
+        stopPushListener = resolve;
+      });
+    } catch {
+      // Reconnect below; the retry timer still delivers in the meantime.
+    } finally {
+      stopPushListener = undefined;
+      await listener.end().catch(() => undefined);
+    }
+    if (!stopping) await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+  clearInterval(retryTimer);
+  clearTimeout(debounce);
+}
+
 async function settleWorkspace(client, workspaceId, now) {
   await client.query("BEGIN");
   try {
@@ -301,12 +496,15 @@ async function runOnce() {
     for (const workspace of workspaces.rows) await settleWorkspace(client, String(workspace.id), now);
     await enqueueTelegramReminders(client);
     await deliverTelegramMessages(client);
+    await enqueuePushReminders(client);
+    await runPushDeliveries();
     const photoCleanup = await deleteExpiredLessonPhotos(client);
     const materialCleanup = await deleteTeacherMaterials(client);
     await client.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days' OR revoked_at < now() - interval '7 days'");
     await client.query("DELETE FROM auth_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_link_tokens WHERE expires_at < now() - interval '7 days' OR consumed_at < now() - interval '7 days'");
     await client.query("DELETE FROM telegram_deliveries WHERE status IN ('sent', 'cancelled') AND updated_at < now() - interval '90 days'");
+    await client.query("DELETE FROM push_deliveries WHERE status IN ('sent', 'cancelled', 'failed') AND updated_at < now() - interval '30 days'");
     await client.query("DELETE FROM rate_limit_buckets WHERE expires_at < now() - interval '1 hour'");
     await client.query("UPDATE job_runs SET status = 'succeeded', finished_at = now(), detail = $1 WHERE id = $2", [`processed ${workspaces.rowCount} workspaces; photos deleted ${photoCleanup.deleted}, failed ${photoCleanup.failed}; materials deleted ${materialCleanup.deleted}, failed ${materialCleanup.failed}`, runId]);
   } catch (error) {
@@ -319,6 +517,7 @@ async function runOnce() {
 }
 
 async function loop() {
+  const pushListener = vapid && process.env.RUN_JOBS_ONCE !== "true" ? listenForPushDeliveries() : Promise.resolve();
   while (!stopping) {
     await runOnce();
     if (process.env.RUN_JOBS_ONCE === "true") break;
@@ -328,8 +527,12 @@ async function loop() {
     });
     wakeSleep = undefined;
   }
+  stopping = true;
+  stopPushListener?.();
+  await pushListener;
+  await pushRun;
   await pool.end();
 }
 
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { stopping = true; wakeSleep?.(); });
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { stopping = true; wakeSleep?.(); stopPushListener?.(); });
 await loop();

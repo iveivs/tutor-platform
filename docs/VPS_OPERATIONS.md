@@ -13,6 +13,7 @@
 5. Сохранить копии production-переменных и `RESTIC_PASSWORD` в отдельном менеджере секретов. Потеря `RESTIC_PASSWORD` делает зашифрованные резервные копии невосстановимыми.
 6. Для почты задать Selectel SMTP через TLS: `SMTP_HOST=smtp.mail.selcloud.ru`, `SMTP_PORT=1127`, `SMTP_SECURE=true`, логин, пароль и адрес отправителя на подтверждённом домене. Пароль не выводить при проверке конфигурации.
 7. Selectel VPS не достигает `api.telegram.org`, поэтому развернуть `workers/telegram-relay/` в Cloudflare. Добавить в Worker secrets `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и независимый `TELEGRAM_RELAY_SECRET`. На VPS задать имя бота без `@`, тот же webhook-secret и relay-secret, а `TELEGRAM_API_BASE_URL` установить в `https://<relay>.workers.dev/bot`. Пустые Telegram-переменные безопасно оставляют модуль выключенным.
+7a. Для Web Push один раз выполнить на сервере `node scripts/generate-vapid-keys.mjs >> .env` (или тот же скрипт в контейнере), не выводя ключи на экран, и сохранить их копию в менеджере секретов. Публичный ключ получают app и worker, приватный — только worker. Сервер должен достигать `fcm.googleapis.com`, `web.push.apple.com` и `updates.push.services.mozilla.com` по HTTPS. Смена ключей отключает все подписки устройств.
 8. Для фотографий и документов задать `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PHOTOS_PREFIX` и `S3_MATERIALS_PREFIX`. Bucket не должен разрешать публичное чтение. Worker использует те же параметры для удаления поставленных в очередь документов и поставленных в очередь либо просроченных изображений.
 
 ## Telegram relay
@@ -129,6 +130,7 @@ docker compose --profile operations run --rm \
 - Успешный `lesson-maintenance` должен появляться в `job_runs` не реже одного раза в 30 минут.
 - Открытые кабинеты выполняют лёгкую проверку `data_changes` каждые 30 секунд в активной вкладке и каждые 5 минут в скрытой; при оценке нагрузки отдельно контролировать частоту API-запросов и задержку PostgreSQL.
 - Если Telegram включён, контролировать число `failed` и старых `pending` в `telegram_deliveries`; текст сообщений и идентификаторы чатов в мониторинг не выводить.
+- Если Web Push включён, так же контролировать `failed` и старые `pending` в `push_deliveries` и рост `last_error` вида `http_4xx`/`TimeoutError`.
 - Контролировать заполнение диска, память, перезапуски контейнеров, срок TLS-сертификата, ответы `5xx`, задержку PostgreSQL и свежесть backup.
 - Не журналировать `.env`, cookies, токены приглашений, пароли, исходные email из auth-аудита и содержимое базы.
 - При компрометации менять соответствующие ключи. Смена `AUTH_SECRET` прекращает корреляцию старых audit-хешей; смена `RESTIC_PASSWORD` выполняется средствами Restic и требует отдельной проверки восстановления.

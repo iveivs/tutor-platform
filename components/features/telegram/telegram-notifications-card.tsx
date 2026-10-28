@@ -9,12 +9,29 @@ import { Switch } from "@/components/ui/switch";
 import { SettingsGroup, settingsRowClass } from "@/components/features/settings/settings-group";
 import { appFetch } from "@/lib/client-fetch";
 
-const defaultPreferences: NotificationPreferences = {
+export const defaultPreferences: NotificationPreferences = {
   soundEnabled: true,
   telegramSchedule: true,
   telegramMessages: false,
   telegramMaterials: false,
+  pushSchedule: true,
+  pushMessages: true,
+  pushMaterials: true,
 };
+
+/** Saves one preference and announces the stored set to the open cabinet (sound, other cards). */
+export async function savePreference(key: keyof NotificationPreferences, checked: boolean) {
+  const response = await appFetch("/api/notification-preferences", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ [key]: checked }),
+  });
+  const result = await response.json() as Partial<NotificationPreferences> & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить настройки уведомлений");
+  const stored = Object.fromEntries(Object.entries(defaultPreferences).map(([name, fallback]) => [name, result[name as keyof NotificationPreferences] ?? fallback])) as NotificationPreferences;
+  window.dispatchEvent(new CustomEvent("tyuttori:notification-preferences", { detail: stored }));
+  return stored;
+}
 
 // Notification preferences and the Telegram connection, as a settings group.
 export function TelegramNotificationsCard() {
@@ -46,14 +63,7 @@ export function TelegramNotificationsCard() {
     setPreferences(next);
     setPending(true);
     try {
-      const response = await appFetch("/api/notification-preferences", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(next),
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось сохранить настройки уведомлений");
-      window.dispatchEvent(new CustomEvent("tyuttori:notification-preferences", { detail: next }));
+      setPreferences(await savePreference(key, checked));
     } catch (error) {
       setPreferences(previous);
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить настройки уведомлений");

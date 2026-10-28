@@ -13,6 +13,7 @@ import { AdminDashboard } from "@/components/admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LegalLinks } from "@/components/legal-links";
 import { PasswordInput } from "@/components/common/password-input";
+import { disablePushOnThisDevice, setIconBadge } from "@/lib/push-client";
 
 type AppUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 type PlatformAdminUser = { name: string; email: string; role: "platform_admin"; isPlatformAdmin?: true };
@@ -47,6 +48,9 @@ export function AuthGate({ enabled }: { enabled: boolean }) {
 
   const logout = async () => {
     try {
+      // This device should stop notifying the account that is signing out.
+      await disablePushOnThisDevice().catch(() => undefined);
+      setIconBadge(0);
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error();
       setUser(null);

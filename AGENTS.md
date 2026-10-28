@@ -32,7 +32,9 @@
 - `lib/lesson-maintenance.ts` — автоматическое списание завершённых уроков.
 - `lib/telegram.ts` и `app/api/telegram/` — безопасная привязка Telegram и webhook бота.
 - `workers/telegram-relay/` — минимальный внешний шлюз Telegram для недоступного с VPS `api.telegram.org`.
-- `scripts/run-maintenance.mjs` — PostgreSQL worker: завершение уроков, напоминания и очередь Telegram.
+- `scripts/run-maintenance.mjs` — PostgreSQL worker: завершение уроков, напоминания, очереди Telegram и Web Push (`LISTEN tutor_push_deliveries`).
+- `scripts/web-push.mjs` — отправка Web Push без зависимостей (шифрование aes128gcm, VAPID, список разрешённых push-сервисов); `scripts/generate-vapid-keys.mjs` — генерация ключей.
+- `public/sw.js`, `lib/push-client.ts`, `app/api/push/` и `components/features/notifications/push-notifications-card.tsx` — service worker, подписка устройства, значок приложения и карточка настроек.
 - `scripts/merge-d1-sqlite-into-postgres.mjs` — одноразовое безопасное объединение архивной D1 с уже работающей PostgreSQL; без `--apply` всегда откатывает dry-run.
 - `worker-entry.ts` — Worker и фоновый запуск каждые 15 минут.
 - `wrangler.deploy.jsonc` — рабочая конфигурация Cloudflare.
@@ -65,7 +67,9 @@
 - Внутренние `notifications` и предметные таблицы остаются источником истины; Telegram — добровольный дополнительный канал.
 - `chat_id`, токен бота, webhook-secret, relay-secret и SMTP-пароль не выводить в логи и не добавлять в Git.
 - Relay принимает только `sendMessage`, `getMe`, `getWebhookInfo` и безопасно переопределяемый `setWebhook`; не превращать его в общий прокси Telegram API.
-- При изменении типов внешних уведомлений синхронно проверить PostgreSQL-триггер в новой миграции и worker-доставку.
+- При изменении типов внешних уведомлений синхронно проверить PostgreSQL-триггеры Telegram и Web Push в новой миграции и worker-доставку.
+- Web Push — такой же добровольный канал: отдельные категории `push_*` в `notification_preferences`, очередь `push_deliveries`, отправка только на адреса из `isAllowedPushEndpoint`. `VAPID_PRIVATE_KEY` нужен только worker, не выводить его и не передавать в контейнер app.
+- Число в push-сообщении должно совпадать со счётчиком в интерфейсе (`pushBadgeCount` в worker и `getActivityAttentionCount` в клиенте); менять их вместе.
 
 ## Изменения
 
