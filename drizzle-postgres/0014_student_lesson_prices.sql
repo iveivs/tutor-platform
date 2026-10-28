@@ -16,4 +16,5 @@ ALTER TABLE "members" ADD CONSTRAINT "members_lesson_prices_check" CHECK (
 --> statement-breakpoint
 ALTER TABLE "members" ADD CONSTRAINT "members_price_currency_check" CHECK ("price_currency" IS NULL OR char_length("price_currency") BETWEEN 1 AND 12);
 --> statement-breakpoint
-ALTER TABLE "balance_entries" ADD CONSTRAINT "balance_entries_amount_check" CHECK ("amount_cents" IS NULL OR "amount_cents" BETWEEN 0 AND 1000000000);
+-- NOT VALID: checks new rows only, so older imported amounts cannot block the migration.
+ALTER TABLE "balance_entries" ADD CONSTRAINT "balance_entries_amount_check" CHECK ("amount_cents" IS NULL OR "amount_cents" BETWEEN 0 AND 1000000000) NOT VALID;
