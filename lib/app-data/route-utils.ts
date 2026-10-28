@@ -63,7 +63,7 @@ export function lessonRange(date: string, time: string, durationMinutes = 60) {
   return { start, end: start + durationMinutes * 60_000, duration: durationMinutes };
 }
 export type LessonPart = {
-  id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string;
+  id: string; groupId?: string; classId?: string; className?: string; studentId: string; date: string; time: string; end: string; name: string;
   status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType: "regular" | "trial"; past: boolean; startsAt: number; units: number; hasFile?: boolean; hasNote?: boolean;
 };
 export function groupLessonParts(parts: LessonPart[]) {
@@ -118,7 +118,7 @@ export async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspac
   const horizonDate = horizon.toISOString().slice(0, 10);
   const horizonEnd = new Date(`${horizonDate}T23:59:59${MOSCOW_OFFSET}`).getTime();
   const dayStart = new Date(`${startDate}T00:00:00${MOSCOW_OFFSET}`).getTime();
-  const existing = await db.prepare(`SELECT id, series_id, group_id, student_id, starts_at, ends_at, status FROM lessons
+  const existing = await db.prepare(`SELECT id, series_id, group_id, class_id, class_slot_id, student_id, starts_at, ends_at, status FROM lessons
     WHERE workspace_id = ? AND starts_at <= ? AND ends_at >= ?`)
     .bind(workspaceId, horizonEnd, dayStart).all<Record<string, unknown>>();
   const occurrenceKey = (lesson: Record<string, unknown>) => `${String(lesson.series_id)}:${Number(lesson.starts_at)}`;
@@ -126,7 +126,7 @@ export async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspac
   const knownOccurrences = new Set(existing.results.filter((lesson) => lesson.series_id).map(occurrenceKey));
   const occupied = existing.results
     .filter((lesson) => lesson.status === "scheduled" && !(lesson.series_id && cancelledOccurrences.has(occurrenceKey(lesson))))
-    .map((lesson) => ({ studentId: String(lesson.student_id), start: Number(lesson.starts_at), end: Number(lesson.ends_at) }));
+    .map((lesson) => ({ studentId: String(lesson.student_id), classId: lesson.class_id ? String(lesson.class_id) : null, start: Number(lesson.starts_at), end: Number(lesson.ends_at) }));
   const statements: ReturnType<typeof db.prepare>[] = [];
   for (const lesson of existing.results) {
     if (lesson.status === "scheduled" && lesson.series_id && cancelledOccurrences.has(occurrenceKey(lesson))) {
@@ -155,7 +155,42 @@ export async function ensureSeriesLessons(db: ReturnType<typeof getD1>, workspac
       for (const range of missing) {
         statements.push(db.prepare(`INSERT OR IGNORE INTO lessons (id, workspace_id, student_id, series_id, group_id, starts_at, ends_at, created_by_id)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workspaceId, row.student_id, row.id, groupId, range.start, range.end, owner.id));
-        occupied.push({ studentId, start: range.start, end: range.end });
+        occupied.push({ studentId, classId: null, start: range.start, end: range.end });
+      }
+    }
+  }
+  // Group slots: one lesson per member and session. A session is skipped where another lesson (not of this group) is booked.
+  const groupSlots = await db.prepare(`SELECT slot.id, slot.group_id, slot.weekday, slot.start_minutes, slot.duration_minutes, slot.active_from, slot.active_until
+    FROM student_group_slots slot JOIN student_groups g ON g.id = slot.group_id AND g.status = 'active'
+    WHERE slot.workspace_id = ? AND slot.is_active = 1`).bind(workspaceId).all<Record<string, unknown>>();
+  if (groupSlots.results.length) {
+    const groupMembers = await db.prepare(`SELECT gm.group_id, gm.member_id FROM student_group_members gm
+      JOIN members m ON m.id = gm.member_id AND m.status <> 'archived' WHERE gm.workspace_id = ?`).bind(workspaceId).all<{ group_id: string; member_id: string }>();
+    const knownClassOccurrences = new Set(existing.results.filter((lesson) => lesson.class_slot_id).map((lesson) => `${String(lesson.class_slot_id)}:${String(lesson.student_id)}:${Number(lesson.starts_at)}`));
+    // A session whose rows are all cancelled was cancelled or moved for the whole group: new members do not get it.
+    const sessionHasScheduled = new Map<string, boolean>();
+    for (const lesson of existing.results.filter((row) => row.class_slot_id)) {
+      const key = `${String(lesson.class_slot_id)}:${Number(lesson.starts_at)}`;
+      sessionHasScheduled.set(key, Boolean(sessionHasScheduled.get(key)) || lesson.status !== "cancelled");
+    }
+    for (const slot of groupSlots.results) {
+      const members = groupMembers.results.filter((member) => member.group_id === slot.group_id).map((member) => member.member_id);
+      if (!members.length) continue;
+      const firstDate = String(slot.active_from) > startDate ? String(slot.active_from) : startDate;
+      const activeUntil = slot.active_until ? String(slot.active_until) : null;
+      for (let date = firstDate; date <= horizonDate; date = shiftIsoDate(date, 1)) {
+        const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7;
+        if (weekday !== Number(slot.weekday) || (activeUntil && date > activeUntil)) continue;
+        const range = lessonRange(date, minutesToTime(Number(slot.start_minutes)), Number(slot.duration_minutes));
+        if (!range || range.start <= Date.now()) continue;
+        if (occupied.some((lesson) => lesson.classId !== slot.group_id && lesson.start < range.end && lesson.end > range.start)) continue;
+        if (sessionHasScheduled.get(`${String(slot.id)}:${range.start}`) === false) continue;
+        for (const memberId of members) {
+          if (knownClassOccurrences.has(`${String(slot.id)}:${memberId}:${range.start}`)) continue;
+          statements.push(db.prepare(`INSERT OR IGNORE INTO lessons (id, workspace_id, student_id, class_id, class_slot_id, starts_at, ends_at, created_by_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workspaceId, memberId, slot.group_id, slot.id, range.start, range.end, owner.id));
+          occupied.push({ studentId: memberId, classId: String(slot.group_id), start: range.start, end: range.end });
+        }
       }
     }
   }

@@ -22,6 +22,7 @@
 - `components/tutor-app.tsx` — корневая композиция кабинета; предметные экраны находятся в `components/features/`.
 - `components/features/activity/` — единый раздел событий преподавателя: запросы, уведомления и история.
 - `lib/app-data/` — чтение кабинета, транспорт записи и предметные команды.
+- Групповые занятия: `lib/app-data/write-group-actions.ts` (команды), `lib/group-sessions.ts` (склейка строк участников в одно занятие), `components/features/groups/` (экраны). Занятие группы — строка `lessons` на каждого участника с общим `class_id`; правила в разделе «Групповые занятия» `docs/BACKEND_RULES.md`.
 - `lib/lesson-content/` и `lib/teacher-material-library/` — материалы урока и библиотека преподавателя.
 - `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
 - `app/globals.css` — светлая и графитовая тёмная темы, включая календарь.

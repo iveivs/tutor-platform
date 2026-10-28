@@ -3,22 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTutorAppActions } from "@/components/features/app/use-tutor-app-actions";
-import type {
-  AppData,
-  AppNotification,
-  AvailabilityWindow,
-  AvailableSlot,
-  BalanceEntry,
-  CurrentUser,
-  HistoryEvent,
-  Lesson,
-  LessonRequest,
-  NotificationPreferences,
-  RecurringSlot,
-  Student,
-  TeacherDayNote,
-  TutorProfile,
-} from "@/components/features/app/types";
+import type { AppData, AppNotification, AvailabilityWindow, AvailableSlot, BalanceEntry, CurrentUser, GroupAbsence, HistoryEvent, Lesson, LessonRequest, NotificationPreferences, RecurringSlot, Student, StudentGroup, TeacherDayNote, TutorProfile } from "@/components/features/app/types";
 import { readAppData } from "@/lib/app-data-client";
 import { preferenceKey, readPreference, writePreference } from "@/lib/client-preferences";
 import { syncDelayForVisibility } from "@/lib/incremental-sync";
@@ -42,6 +27,8 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [dayNotes, setDayNotes] = useState<TeacherDayNote[]>([]);
+  const [groups, setGroups] = useState<StudentGroup[]>([]);
+  const [groupAbsences, setGroupAbsences] = useState<GroupAbsence[]>([]);
   const [profile, setProfile] = useState<TutorProfile>({
     name: user?.name ?? "Преподаватель",
     professionalTitle: "Репетитор",
@@ -101,6 +88,8 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     if (data.availabilityWindows) setAvailabilityWindows(data.availabilityWindows);
     if (data.availableSlots) setAvailableSlots(data.availableSlots);
     if (data.dayNotes) setDayNotes(data.dayNotes);
+    if (data.groups) setGroups(data.groups);
+    if (data.groupAbsences) setGroupAbsences(data.groupAbsences);
     if (data.teacherName) setTeacherName(data.teacherName);
     if (data.profile) setProfile(data.profile);
     if (typeof data.syncCursor === "number") syncCursorRef.current = data.syncCursor;
@@ -266,6 +255,8 @@ export function useTutorAppData({ role, user, preferenceScope }: TutorAppDataOpt
     availabilityWindows,
     availableSlots,
     dayNotes,
+    groups,
+    groupAbsences,
     profile,
     teacherName,
     selectedStudent,

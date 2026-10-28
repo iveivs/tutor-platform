@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
-import type { LessonDraft, Student, StudentDraft, StudentPrices, StudentRequestDraft, TutorProfile } from "@/components/features/app/types";
+import type { GroupDraft, LessonDraft, Student, StudentDraft, StudentPrices, StudentRequestDraft, TutorProfile } from "@/components/features/app/types";
 import { saveAppData } from "@/lib/app-data-client";
 import { russianPlural } from "@/lib/russian-plural";
 
@@ -45,6 +45,19 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
       await reload(); toast.success("Стоимость занятий сохранена"); return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить стоимость"); return false; }
   };
+  // Group lessons. Each action reloads the data and reports the result; it returns whether it succeeded.
+  const groupAction = async (body: Record<string, unknown>, success: string, failure: string) => {
+    try { await saveAppData(body); await reload(); toast.success(success); return true; }
+    catch (error) { toast.error(error instanceof Error ? error.message : failure); return false; }
+  };
+  const createGroup = (group: GroupDraft) => groupAction({ action: "createGroup", ...group }, "Группа создана", "Не удалось создать группу");
+  const updateGroup = (groupId: string, name: string, membersVisible: boolean) => groupAction({ action: "updateGroup", groupId, name, membersVisible }, "Группа сохранена", "Не удалось сохранить группу");
+  const setGroupMembers = (groupId: string, memberIds: string[]) => groupAction({ action: "setGroupMembers", groupId, memberIds }, "Состав группы сохранён", "Не удалось изменить состав");
+  const setGroupSlots = (groupId: string, slots: GroupDraft["slots"]) => groupAction({ action: "setGroupSlots", groupId, slots }, "Расписание группы сохранено", "Не удалось изменить расписание");
+  const archiveGroup = (groupId: string) => groupAction({ action: "archiveGroup", groupId }, "Группа перенесена в архив", "Не удалось архивировать группу");
+  const addGroupSession = (groupId: string, date: string, time: string, durationMinutes: number) => groupAction({ action: "addGroupSession", groupId, date, time, durationMinutes }, "Занятие группы добавлено", "Не удалось добавить занятие");
+  const cancelGroupSession = (lessonId: string) => groupAction({ action: "cancelGroupSession", lessonId }, "Занятие отменено для всей группы", "Не удалось отменить занятие");
+  const rescheduleGroupSession = (lessonId: string, date: string, time: string) => groupAction({ action: "rescheduleGroupSession", lessonId, date, time }, "Занятие группы перенесено", "Не удалось перенести занятие");
   const convertTrialContact = async (studentId: string) => {
     try { await saveAppData({ action: "convertTrialContact", studentId }); await reload(); toast.success("Карточка ученика создана"); return true; }
     catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось создать ученика"); return false; }
@@ -59,7 +72,7 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
   };
   const addStudent = async (student: StudentDraft) => {
     try {
-      await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating, weekday: student.weekday, time: student.time });
+      await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating, weekday: student.weekday, time: student.time, ...(student.groupId ? { groupId: student.groupId } : {}) });
       await reload();
       toast.success(student.email ? "Ученик создан. Пригласить его можно из карточки" : "Ученик создан");
       return true;
@@ -127,6 +140,14 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
     stopLessonSeries,
     updateStudent,
     updateStudentPrices,
+    createGroup,
+    updateGroup,
+    setGroupMembers,
+    setGroupSlots,
+    archiveGroup,
+    addGroupSession,
+    cancelGroupSession,
+    rescheduleGroupSession,
     convertTrialContact,
     restoreStudent,
     deleteStudentPermanently,

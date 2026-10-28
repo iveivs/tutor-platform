@@ -6,10 +6,12 @@ import { LessonContentBadges } from "@/components/features/lessons/lesson-conten
 import { lessonStatusLabel, lessonStatusStyle } from "@/components/features/lessons/status-styles";
 import { Button } from "@/components/ui/button";
 import { dateTitle } from "@/lib/date-time";
+import { russianPlural } from "@/lib/russian-plural";
 
-export const lessonMeta = (lesson: Lesson) => lesson.lessonType === "trial" ? "Пробное занятие · бесплатно" : lesson.units === 2 ? "Двойной урок · 2 занятия" : "Барабаны · Студия";
+export const lessonMeta = (lesson: Lesson) => lesson.participants ? `${russianPlural(lesson.participants.length, "участник", "участника", "участников")}${lesson.absentees?.length ? ` · ${lesson.absentees.length} ${lesson.absentees.length % 10 === 1 && lesson.absentees.length % 100 !== 11 ? "не придёт" : "не придут"}` : ""}` : lesson.lessonType === "trial" ? "Пробное занятие · бесплатно" : lesson.units === 2 ? "Двойной урок · 2 занятия" : "Барабаны · Студия";
 
 export function LessonStatusChip({ lesson }: { lesson: Lesson }) {
+  if (lesson.participants) return <span className="inline-flex rounded-full bg-status-request px-2.5 py-1 text-xs font-semibold text-status-request-ink ring-1 ring-status-request-ring">Группа</span>;
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${lessonStatusStyle(lesson)}`}>{lessonStatusLabel(lesson)}</span>;
 }
 
@@ -26,7 +28,7 @@ export function LessonCard({ lesson, isNext = false, compact = false, showDate =
         <span className="mt-2 flex flex-wrap items-center gap-1.5"><LessonStatusChip lesson={lesson} /><LessonContentBadges lesson={lesson} className="contents" /></span>
       </button>
       {lesson.trialContact && onConvertTrial && <Button type="button" variant="outline" size="sm" aria-label="Создать ученика" className="shrink-0" onClick={() => void onConvertTrial(lesson.studentId)}><UserRound /><span className={compact ? "hidden" : "hidden sm:inline"}>Создать ученика</span></Button>}
-      {onMaterials && <Button type="button" variant="outline" aria-label="Материалы урока" className={compact ? "size-10 shrink-0 p-0" : "size-10 shrink-0 p-0 md:h-9 md:w-auto md:px-3"} onClick={() => onMaterials(lesson)}><NotebookPen /><span className={compact ? "hidden" : "hidden md:inline"}>Материалы</span></Button>}
+      {onMaterials && !lesson.participants && <Button type="button" variant="outline" aria-label="Материалы урока" className={compact ? "size-10 shrink-0 p-0" : "size-10 shrink-0 p-0 md:h-9 md:w-auto md:px-3"} onClick={() => onMaterials(lesson)}><NotebookPen /><span className={compact ? "hidden" : "hidden md:inline"}>Материалы</span></Button>}
     </div>
   </article>;
 }

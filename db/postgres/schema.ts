@@ -198,6 +198,46 @@ export const availabilityWindows = pgTable("availability_windows", {
   index("idx_availability_windows_workspace_weekday").on(table.workspaceId, table.weekday),
 ]);
 
+export const studentGroups = pgTable("student_groups", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  membersVisible: boolean("members_visible").notNull().default(false),
+  status: text("status").notNull().default("active"),
+  ...timestamps(),
+}, (table) => [
+  check("student_groups_name_check", sql`char_length(${table.name}) between 1 and 80`),
+  check("student_groups_status_check", sql`${table.status} in ('active', 'archived')`),
+  index("idx_student_groups_workspace").on(table.workspaceId, table.status),
+]);
+
+export const studentGroupMembers = pgTable("student_group_members", {
+  groupId: text("group_id").notNull().references(() => studentGroups.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  joinedAt: instant("joined_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_student_group_members_member").on(table.memberId),
+]);
+
+export const studentGroupSlots = pgTable("student_group_slots", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull().references(() => studentGroups.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull(),
+  startMinutes: integer("start_minutes").notNull(),
+  durationMinutes: integer("duration_minutes").notNull().default(60),
+  activeFrom: date("active_from").notNull(),
+  activeUntil: date("active_until"),
+  isActive: boolean("is_active").notNull().default(true),
+  ...timestamps(),
+}, (table) => [
+  check("student_group_slots_weekday_check", sql`${table.weekday} between 1 and 7`),
+  check("student_group_slots_start_check", sql`${table.startMinutes} between 0 and 1439`),
+  check("student_group_slots_duration_check", sql`${table.durationMinutes} between 15 and 240`),
+  index("idx_student_group_slots_group").on(table.groupId, table.isActive),
+]);
+
 export const lessonSeries = pgTable("lesson_series", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
@@ -222,6 +262,9 @@ export const lessons = pgTable("lessons", {
   studentId: text("student_id").notNull().references(() => members.id, { onDelete: "restrict" }),
   seriesId: text("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
   groupId: text("group_id"),
+  // Group lessons: one row per member; members of one group may share a time slot.
+  classId: text("class_id").references(() => studentGroups.id, { onDelete: "set null" }),
+  classSlotId: text("class_slot_id").references(() => studentGroupSlots.id, { onDelete: "set null" }),
   lessonType: text("lesson_type").notNull().default("regular"),
   startsAt: instant("starts_at").notNull(),
   endsAt: instant("ends_at").notNull(),
@@ -239,6 +282,8 @@ export const lessons = pgTable("lessons", {
   index("idx_lessons_workspace_starts_at").on(table.workspaceId, table.startsAt),
   index("idx_lessons_student_starts_at").on(table.studentId, table.startsAt),
   index("idx_lessons_group_id").on(table.groupId),
+  index("idx_lessons_class_starts_at").on(table.classId, table.startsAt),
+  uniqueIndex("lessons_class_slot_occurrence_unique").on(table.classSlotId, table.studentId, table.startsAt).where(sql`${table.classSlotId} is not null`),
   index("idx_lessons_pending_charge").on(table.chargeStatus, table.startsAt),
   uniqueIndex("lessons_series_start_unique").on(table.seriesId, table.startsAt).where(sql`${table.status} <> 'cancelled'`),
 ]);

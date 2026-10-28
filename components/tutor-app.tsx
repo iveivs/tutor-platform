@@ -12,6 +12,9 @@ import { TeacherMaterialsView } from "@/components/features/materials/teacher-ma
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
 import { SettingsView } from "@/components/features/settings/settings-view";
 import { StatsView } from "@/components/features/stats/stats-view";
+import { GroupActionsProvider } from "@/components/features/groups/group-actions";
+import { combineGroupSessions } from "@/lib/group-sessions";
+import { GroupView } from "@/components/features/groups/groups-view";
 import { StudentsView, StudentView } from "@/components/features/students/student-views";
 import type { CurrentUser, Lesson, View } from "@/components/features/app/types";
 import { BrandIcon } from "@/components/brand-icon";
@@ -22,12 +25,14 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const preferenceScope = user?.email || role;
   const [view, setView] = useState<View>("today");
   const [materialsLesson, setMaterialsLesson] = useState<Lesson | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const {
     lessons, students, recurringSlots, requests, balanceEntries, historyEvents, notifications,
-    availabilityWindows, availableSlots, dayNotes, profile, teacherName, selectedStudent, setSelectedStudent,
+    availabilityWindows, availableSlots, dayNotes, groups, groupAbsences, profile, teacherName, selectedStudent, setSelectedStudent,
     loading, loadError, showPastLessons, pastLessonsLoading, reload, retry, changePastLessonsVisibility,
     addLesson, updateLesson, deleteLesson, stopLessonSeries, updateStudent, convertTrialContact,
     restoreStudent, deleteStudentPermanently, addStudent, createStudentInvite, addPayment, adjustBalance, updateStudentPrices,
+    createGroup, updateGroup, setGroupMembers, setGroupSlots, archiveGroup, addGroupSession, cancelGroupSession, rescheduleGroupSession,
     reversePayment, submitStudentRequest, markNotificationsRead, updateProfile, updateAvailability, saveTeacherDayNote,
   } = useTutorAppData({ role, user, preferenceScope });
 
@@ -36,6 +41,11 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   if (loading) return <main className="grid min-h-screen place-items-center bg-background text-foreground"><div className="text-center"><BrandIcon className="mx-auto mb-3 size-12 animate-pulse" /><p className="font-semibold">Загружаю расписание…</p></div></main>;
   if (loadError) return <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Данные временно недоступны</h1><p className="mt-2 text-ink-muted">Локальная база не ответила. Попробуйте ещё раз.</p><Button className="mt-5 bg-brand-solid" onClick={() => void retry()}>Повторить</Button></div></main>;
   const activeLessons = lessons.filter((lesson) => !lesson.past);
+  // Today and the calendar show a group session as one card; other screens keep one lesson per student.
+  const scheduleLessons = combineGroupSessions(lessons, groupAbsences);
+  const activeScheduleLessons = scheduleLessons.filter((lesson) => !lesson.past);
+  const groupActions = { groups, createGroup, updateGroup, setGroupMembers, setGroupSlots, archiveGroup, addGroupSession, cancelGroupSession, rescheduleGroupSession, cancelMemberLesson: deleteLesson, openGroup: (groupId: string) => { setSelectedGroup(groupId); setView("group"); } };
+  const openedGroup = groups.find((group) => group.id === selectedGroup);
   const activeStudents = students.filter((student) => !student.archived);
   const activityCount = getActivityAttentionCount(requests, notifications);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
@@ -44,22 +54,23 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-ink-muted">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <GroupActionsProvider value={groupActions}><main className="min-h-screen bg-background text-foreground">
       <Sidebar view={view} setView={setView} name={profile.name} professionalTitle={profile.professionalTitle} onLogout={onLogout} activityCount={activityCount} />
       <section className="min-h-screen pb-24 lg:ml-[var(--sidebar-width)] lg:pb-0">
         <MobileHeader name={profile.name} professionalTitle={profile.professionalTitle} activityCount={activityCount} onActivity={() => setView("activity")} view={view} />
-        {view === "today" && <TodayView lessons={activeLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
-        {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={lessons} students={students.filter((student) => !student.archived)} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "today" && <TodayView lessons={activeScheduleLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
+        {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={scheduleLessons} students={students.filter((student) => !student.archived)} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onUpdatePrices={updateStudentPrices} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
         {view === "activity" && <ActivityView requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}
         {view === "materials" && <TeacherMaterialsView />}
         {view === "stats" && <StatsView />}
+        {view === "group" && openedGroup && <GroupView group={openedGroup} students={students} lessons={activeLessons} onBack={() => setView("students")} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
       </section>
       <MobileNav view={view} setView={setView} />
       <LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} />
       <Toaster position="top-right" richColors />
-    </main>
+    </main></GroupActionsProvider>
   );
 }

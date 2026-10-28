@@ -1,5 +1,6 @@
 "use client";
 
+import { GroupSessionDialog } from "@/components/features/groups/group-session-dialog";
 import { useEffect, useRef, useState } from "react";
 import { BarChart3, Bell, ChevronLeft, ChevronRight, Clock3, UserRound } from "lucide-react";
 import { AppShell } from "@/components/common/app-shell";
@@ -87,7 +88,8 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
         <button type="button" onClick={() => setView("stats")} className="flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-left transition hover:bg-surface-subtle lg:hidden"><BarChart3 className="size-5 shrink-0 text-coral" /><span className="flex min-w-0 flex-1 flex-col"><span className="font-semibold">Статистика</span><span className="text-sm text-ink-muted">Уроки, оплаты и показатели за период</span></span><ChevronRight className="size-4 shrink-0 text-ink-subtle" /></button>
       </aside>
     </div>
-    <EditLessonDialog key={editing?.id ?? "today-no-lesson"} lesson={editing} onOpenChange={(open) => !open && setEditing(null)} onUpdate={onUpdate} onDelete={onDelete} onMaterials={onMaterials} onOpenStudent={(studentId) => { setEditing(null); onOpenStudent(studentId); }} />
+    <GroupSessionDialog key={editing?.participants ? `group-${editing.id}` : "today-no-lesson-group"} lesson={editing?.participants ? editing : null} onOpenChange={(open) => !open && setEditing(null)} onOpenStudent={(studentId) => { setEditing(null); onOpenStudent(studentId); }} />
+    <EditLessonDialog key={editing?.id ?? "today-no-lesson"} lesson={editing?.participants ? null : editing} onOpenChange={(open) => !open && setEditing(null)} onUpdate={onUpdate} onDelete={onDelete} onMaterials={onMaterials} onOpenStudent={(studentId) => { setEditing(null); onOpenStudent(studentId); }} />
   </AppShell>;
 }
 

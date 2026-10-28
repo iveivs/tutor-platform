@@ -1,10 +1,11 @@
-export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "stats" | "settings";
+export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "stats" | "settings" | "group";
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 export type TutorProfile = { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string };
-export type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean; hasFile?: boolean; hasNote?: boolean };
+export type GroupParticipant = { lessonId: string; studentId: string; name: string; status: Lesson["status"]; label: string };
+export type Lesson = { id: string; groupId?: string; classId?: string; className?: string; participants?: GroupParticipant[]; absentees?: GroupAbsence[]; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean; hasFile?: boolean; hasNote?: boolean };
 export type LessonDraft = { date: string; time: string; studentId?: string; repeat: "once" | "weekly"; lessonCount: 1 | 2; lessonType: "regular" | "trial"; trialGuestName?: string; trialGuestEmail?: string; trialGuestPhone?: string; trialGuestNote?: string };
 export type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
-export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string };
+export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string; groupId?: string };
 export type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
 export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; prices?: StudentPrices };
 export type StudentPrices = { lessonCents: number | null; doubleLessonCents: number | null; trialLessonCents: number | null; currency: string | null };
@@ -20,7 +21,11 @@ export type AppNotification = {
   studentName?: string; requestType?: string; requestStatus?: string; requestMessage?: string;
   lessonStartsAt?: number; lessonEndsAt?: number; proposedStartsAt?: number; proposedEndsAt?: number; lessonUnits?: number;
 };
-export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; dayNotes?: TeacherDayNote[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
+export type StudentGroupSlot = { id: string; weekday: number; time: string; durationMinutes: number };
+export type StudentGroup = { id: string; name: string; membersVisible: boolean; archived: boolean; memberIds: string[]; slots: StudentGroupSlot[] };
+export type GroupDraft = { name: string; membersVisible: boolean; memberIds: string[]; slots: Array<{ weekday: number; time: string; durationMinutes: number }> };
+export type GroupAbsence = { lessonId: string; classId: string; studentId: string; studentName: string; startsAt: number };
+export type AppData = { lessons?: Lesson[]; students?: Student[]; recurringSlots?: RecurringSlot[]; requests?: LessonRequest[]; balanceEntries?: BalanceEntry[]; historyEvents?: HistoryEvent[]; notifications?: AppNotification[]; availabilityWindows?: AvailabilityWindow[]; availableSlots?: AvailableSlot[]; dayNotes?: TeacherDayNote[]; groups?: StudentGroup[]; groupAbsences?: GroupAbsence[]; currentStudentId?: string | null; teacherName?: string; teacherTitle?: string; profile?: TutorProfile; syncCursor?: number };
 export type TelegramStatus = { configured: boolean; botUsername: string | null; connected: boolean; username: string | null; connectedAt: string | null };
 export type NotificationPreferences = { soundEnabled: boolean; telegramSchedule: boolean; telegramMessages: boolean; telegramMaterials: boolean };
 export type LessonMaterialNote = { id: string; authorId: string; authorName: string; authorRole: string; visibility: "shared" | "teacher_private"; body: string; mine: boolean; canDelete: boolean; updatedAt: number };

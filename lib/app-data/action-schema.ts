@@ -9,15 +9,26 @@ const avatarColor = z.enum(["indigo", "violet", "rose", "amber", "emerald", "cya
 const email = z.union([z.literal(""), z.string().email().max(254)]).optional();
 // Lesson prices and payment amounts are integers in minor units (kopecks, cents); null means "not set".
 const price = z.number().int().min(0).max(100_000_000).nullable();
+const groupSlot = z.object({ weekday: z.number().int().min(1).max(7), time, durationMinutes: z.number().int().min(15).max(240) }).strict();
+const groupName = z.string().trim().min(1).max(80);
+const memberIds = z.array(id).max(100);
 export const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("createLesson"), studentId: id.optional(), trialGuestName: z.string().trim().min(1).max(80).optional(), trialGuestEmail: email, trialGuestPhone: z.string().trim().max(40).optional(), trialGuestNote: z.string().trim().max(300).optional(), date, time, durationMinutes: duration, lessonCount, lessonType: z.enum(["regular", "trial"]).optional(), repeat: z.enum(["once", "weekly"]).optional() }).strict(),
   z.object({ action: z.literal("updateLesson"), lessonId: id, date, time, durationMinutes: duration }).strict(),
   z.object({ action: z.literal("deleteLesson"), lessonId: id }).strict(),
   z.object({ action: z.literal("stopLessonSeries"), seriesId: id }).strict(),
-  z.object({ action: z.literal("createStudent"), name: z.string().trim().min(1).max(80), email, floating: z.boolean(), weekday: z.number().int().min(1).max(7).optional(), time: time.optional(), durationMinutes: duration }).strict(),
+  z.object({ action: z.literal("createStudent"), name: z.string().trim().min(1).max(80), email, floating: z.boolean(), groupId: id.optional(), weekday: z.number().int().min(1).max(7).optional(), time: time.optional(), durationMinutes: duration }).strict(),
   z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email, canViewAvailability: z.boolean() }).strict(),
   z.object({ action: z.literal("updateStudentPrices"), studentId: id, lessonPriceCents: price, doubleLessonPriceCents: price, trialLessonPriceCents: price, priceCurrency: z.string().trim().max(12).nullable() }).strict(),
   z.object({ action: z.literal("convertTrialContact"), studentId: id }).strict(),
+  z.object({ action: z.literal("createGroup"), name: groupName, membersVisible: z.boolean(), memberIds, slots: z.array(groupSlot).max(14) }).strict(),
+  z.object({ action: z.literal("updateGroup"), groupId: id, name: groupName, membersVisible: z.boolean() }).strict(),
+  z.object({ action: z.literal("setGroupMembers"), groupId: id, memberIds }).strict(),
+  z.object({ action: z.literal("setGroupSlots"), groupId: id, slots: z.array(groupSlot).max(14) }).strict(),
+  z.object({ action: z.literal("archiveGroup"), groupId: id }).strict(),
+  z.object({ action: z.literal("addGroupSession"), groupId: id, date, time, durationMinutes: duration }).strict(),
+  z.object({ action: z.literal("cancelGroupSession"), lessonId: id }).strict(),
+  z.object({ action: z.literal("rescheduleGroupSession"), lessonId: id, date, time }).strict(),
   z.object({ action: z.literal("archiveStudent"), studentId: id }).strict(),
   z.object({ action: z.literal("restoreStudent"), studentId: id }).strict(),
   z.object({ action: z.literal("deleteStudent"), studentId: id }).strict(),

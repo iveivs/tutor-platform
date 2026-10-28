@@ -1,7 +1,9 @@
 "use client";
 
+import { FilterChips } from "@/components/common/filter-chips";
+import { GroupEditorDialog, GroupsList } from "@/components/features/groups/groups-view";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, Clock3, Search } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Clock3, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import { InfoCard } from "@/components/common/info-card";
@@ -32,8 +34,15 @@ function BalancePill({ balance }: { balance: number }) {
 export function StudentsView({ students, onAdd, onOpen }: { students: Student[]; onAdd: (student: StudentDraft) => Promise<boolean>; onOpen: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("Все");
+  const [section, setSection] = useState<"students" | "groups">("students");
   const filtered = useMemo(() => students.filter((student) => student.name.toLowerCase().includes(query.toLowerCase()) && (filter === "Архив" ? student.archived : !student.archived && (filter === "Все" || filter === "Плавающее" && student.floating || filter === "Постоянное" && !student.floating || filter === "Задолженность" && student.balance < 0 || filter === "Без урока" && student.next === "Не назначен"))), [students, query, filter]);
+  const sectionSwitch = <FilterChips label="Раздел" items={[{ value: "students", label: "Ученики" }, { value: "groups", label: "Группы" }] as const} value={section} onChange={setSection} />;
+  if (section === "groups") return <AppShell actionsInline title="Ученики" actions={<GroupEditorDialog students={students} trigger={<Button size="lg" className="h-11 rounded-xl"><Plus />Новая группа</Button>} />}>
+    <div className="mb-4">{sectionSwitch}</div>
+    <GroupsList students={students} />
+  </AppShell>;
   return <AppShell actionsInline title="Ученики" actions={<AddStudentSheet onAdd={onAdd} />}>
+    <div className="mb-4">{sectionSwitch}</div>
     <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <div className="relative max-w-md flex-1"><Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-ink-subtle" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени" className="h-12 rounded-[var(--radius-control)] bg-surface pl-11 dark:bg-surface" /></div>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">{filters.map((item) => <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)} className={`h-9 shrink-0 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold transition ${filter === item ? "bg-brand-solid text-white" : "border border-line bg-surface text-ink-secondary hover:text-ink-strong"}`}>{item}</button>)}</div>

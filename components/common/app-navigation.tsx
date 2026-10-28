@@ -5,7 +5,7 @@ import { BrandIcon } from "@/components/brand-icon";
 import type { View } from "@/components/features/app/types";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const isActive = (view: View, id: View) => view === id || (id === "students" && view === "student");
+const isActive = (view: View, id: View) => view === id || (id === "students" && (view === "student" || view === "group"));
 
 export function Sidebar({ view, setView, name, professionalTitle, onLogout, activityCount }: { view: View; setView: (view: View) => void; name: string; professionalTitle: string; onLogout?: () => void; activityCount: number }) {
   const items = [

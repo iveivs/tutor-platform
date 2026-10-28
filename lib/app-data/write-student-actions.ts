@@ -4,6 +4,7 @@ import { deleteMemberAvatar } from "@/lib/lesson-materials";
 import { conflict, hasConflict, invalid, lessonRange, nextOccurrenceDate, toMoscowDate } from "@/lib/app-data/route-utils";
 
 import type { WriteActionContext } from "@/lib/app-data/write-action-types";
+import { manualSessionCopies } from "@/lib/app-data/write-group-actions";
 
 export async function executeStudentAction({ request, db, body, auth, id }: WriteActionContext): Promise<Response | void> {
   if (body.action === "createStudent") {
@@ -28,6 +29,12 @@ export async function executeStudentAction({ request, db, body, auth, id }: Writ
       if (seriesConflict || await hasConflict(db, auth.workspaceId, firstRange.start, firstRange.end)) return conflict();
       statements.push(db.prepare(`INSERT INTO lesson_series (id, workspace_id, student_id, weekday, start_minutes, duration_minutes, active_from)
         VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), auth.workspaceId, id, weekday, startMinutes, duration, activeFrom));
+    }
+    if (body.groupId) {
+      const group = await db.prepare("SELECT id FROM student_groups WHERE id = ? AND workspace_id = ? AND status = 'active'").bind(body.groupId, auth.workspaceId).first();
+      if (!group) return Response.json({ error: "Группа не найдена" }, { status: 404 });
+      statements.push(db.prepare("INSERT INTO student_group_members (group_id, member_id, workspace_id) VALUES (?, ?, ?)").bind(body.groupId, id, auth.workspaceId));
+      statements.push(...await manualSessionCopies(db, auth.workspaceId, body.groupId, [id], auth.memberId));
     }
     let inviteUrl: string | undefined;
     if (email) {

@@ -81,7 +81,7 @@ export async function handleGetAppData(request: Request) {
         ORDER BY m.display_name`).bind(auth.memberId, Date.now(), auth.workspaceId, ownStudentId, ownStudentId).all()),
       loadRows(needs("students", "lessons"), () => db.prepare(`SELECT id, student_id, weekday, start_minutes, duration_minutes FROM lesson_series
         WHERE workspace_id = ? AND is_active = 1 AND (? IS NULL OR student_id = ?) ORDER BY weekday, start_minutes`).bind(auth.workspaceId, ownStudentId, ownStudentId).all()),
-      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name, m.is_trial_contact,
+      loadRows(needs("lessons"), () => db.prepare(`SELECT l.id, l.student_id, l.group_id, l.class_id, class_group.name AS class_name, l.lesson_type, l.starts_at, l.ends_at, l.status AS lesson_status, m.display_name, m.is_trial_contact,
         COALESCE((SELECT SUM(be.lesson_units) FROM balance_entries be WHERE be.student_id = l.student_id), 0) AS balance,
         (EXISTS(SELECT 1 FROM lesson_resource_links link WHERE link.lesson_id = l.id)
           OR EXISTS(SELECT 1 FROM lesson_attachments attachment WHERE attachment.lesson_id = l.id AND attachment.status = 'active')) AS has_file,
@@ -90,6 +90,7 @@ export async function handleGetAppData(request: Request) {
           WHERE r.status = 'pending' AND (r.lesson_id = l.id OR (l.group_id IS NOT NULL AND requested.group_id = l.group_id))
           ORDER BY r.created_at LIMIT 1) AS request_type
         FROM lessons l JOIN members m ON m.id = l.student_id
+        LEFT JOIN student_groups class_group ON class_group.id = l.class_id
         WHERE l.workspace_id = ?
           AND ((l.status = 'scheduled' AND l.ends_at > ?)
             OR (l.group_id IS NOT NULL AND l.status = 'completed' AND EXISTS (
@@ -153,6 +154,18 @@ export async function handleGetAppData(request: Request) {
       loadRows(needs("availability") && availabilityAccess, () => db.prepare("SELECT id, weekday, start_minutes, end_minutes FROM availability_windows WHERE workspace_id = ? ORDER BY weekday, start_minutes").bind(auth.workspaceId).all()),
       loadRows(needs("availability") && auth.role === "student" && availabilityAccess, () => db.prepare("SELECT starts_at, ends_at FROM lessons WHERE workspace_id = ? AND status = 'scheduled' AND ends_at > ? AND starts_at < ? ORDER BY starts_at").bind(auth.workspaceId, Date.now(), availabilityHorizon).all()),
     ]);
+    const teacherGroups = needs("groups") && auth.role !== "student";
+    const [groupRows, groupMemberRows, groupSlotRows, groupAbsenceRows] = await Promise.all([
+      loadRows(teacherGroups, () => db.prepare("SELECT id, name, members_visible, status FROM student_groups WHERE workspace_id = ? ORDER BY status, name").bind(auth.workspaceId).all()),
+      loadRows(teacherGroups, () => db.prepare("SELECT group_id, member_id FROM student_group_members WHERE workspace_id = ?").bind(auth.workspaceId).all()),
+      loadRows(teacherGroups, () => db.prepare("SELECT id, group_id, weekday, start_minutes, duration_minutes FROM student_group_slots WHERE workspace_id = ? AND is_active = 1 ORDER BY weekday, start_minutes").bind(auth.workspaceId).all()),
+      // Members who cancelled an upcoming session of their group (shown on the session card).
+      loadRows(needs("lessons") && auth.role !== "student", () => db.prepare(`SELECT l.id, l.class_id, l.student_id, l.starts_at, m.display_name FROM lessons l JOIN members m ON m.id = l.student_id
+        WHERE l.workspace_id = ? AND l.class_id IS NOT NULL AND l.status = 'cancelled' AND l.ends_at > ?
+          AND EXISTS (SELECT 1 FROM student_group_members current_member WHERE current_member.group_id = l.class_id AND current_member.member_id = l.student_id)
+          AND NOT EXISTS (SELECT 1 FROM lessons own WHERE own.class_id = l.class_id AND own.student_id = l.student_id AND own.starts_at = l.starts_at AND own.status = 'scheduled')
+          AND EXISTS (SELECT 1 FROM lessons peer WHERE peer.class_id = l.class_id AND peer.starts_at = l.starts_at AND peer.status = 'scheduled')`).bind(auth.workspaceId, Date.now()).all()),
+    ]);
     const dayNoteRows = await loadRows(needs("dayNotes") && auth.role !== "student", () => db.prepare(`SELECT id, note_date, body, updated_at
       FROM teacher_day_notes WHERE workspace_id = ? AND author_member_id = ? ORDER BY note_date`).bind(auth.workspaceId, auth.memberId).all());
 
@@ -212,7 +225,7 @@ export async function handleGetAppData(request: Request) {
       const status: LessonPart["status"] = trial ? "trial" : past ? (pastUnpaid ? "debt" : "paid") : requestType ? "request" : balance < 0 ? "debt" : covered ? "paid" : "low";
       const label = trial ? (past ? "Пробное · проведено" : "Пробное · бесплатно") : past ? (pastUnpaid ? "Проведён · не оплачен" : "Проведён · оплачен") : status === "request" ? "Ожидает ответа" : balance < 0 ? `Баланс ${balance}` : covered ? "Оплачен" : "Не оплачен";
       const start = new Date(Number(row.starts_at));
-      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", trialContact: Boolean(row.is_trial_contact), past, startsAt: Number(row.starts_at), units: 1, hasFile: Boolean(row.has_file), hasNote: Boolean(row.has_note) };
+      return { id: String(row.id), groupId: row.group_id ? String(row.group_id) : undefined, classId: row.class_id ? String(row.class_id) : undefined, className: row.class_name ? String(row.class_name) : undefined, studentId, date: toMoscowDate(start), time: timeLabel.format(start), end: timeLabel.format(new Date(Number(row.ends_at))), name: String(row.display_name), status, label, lessonType: trial ? "trial" : "regular", trialContact: Boolean(row.is_trial_contact), past, startsAt: Number(row.starts_at), units: 1, hasFile: Boolean(row.has_file), hasNote: Boolean(row.has_note) };
     });
     const lessons = groupLessonParts(lessonParts);
     const requests = (requestRows.results as Array<Record<string, unknown>>).map((row) => {
@@ -293,6 +306,14 @@ export async function handleGetAppData(request: Request) {
       else payload.availabilityWindows = availabilityWindows;
     }
     if (needs("dayNotes") && auth.role !== "student") payload.dayNotes = dayNotes;
+    if (teacherGroups) payload.groups = (groupRows.results as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), name: String(row.name), membersVisible: Boolean(row.members_visible), archived: row.status === "archived",
+      memberIds: (groupMemberRows.results as Array<Record<string, unknown>>).filter((member) => member.group_id === row.id).map((member) => String(member.member_id)),
+      slots: (groupSlotRows.results as Array<Record<string, unknown>>).filter((slot) => slot.group_id === row.id).map((slot) => ({ id: String(slot.id), weekday: Number(slot.weekday), time: minutesToTime(Number(slot.start_minutes)), durationMinutes: Number(slot.duration_minutes) })),
+    }));
+    if (needs("lessons") && auth.role !== "student") payload.groupAbsences = (groupAbsenceRows.results as Array<Record<string, unknown>>).map((row) => ({
+      lessonId: String(row.id), classId: String(row.class_id), studentId: String(row.student_id), studentName: String(row.display_name), startsAt: Number(row.starts_at),
+    }));
     if (needs("profile")) {
       payload.currentStudentId = ownStudentId;
       payload.teacherName = teacherRow?.display_name ?? "Преподаватель";

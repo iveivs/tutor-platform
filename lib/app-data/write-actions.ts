@@ -1,3 +1,4 @@
+import { executeGroupAction } from "@/lib/app-data/write-group-actions";
 import { invalid } from "@/lib/app-data/route-utils";
 import { executeBalanceAction } from "@/lib/app-data/write-balance-actions";
 import { executeLessonAction } from "@/lib/app-data/write-lesson-actions";
@@ -29,6 +30,15 @@ export async function executeAppDataAction(context: WriteActionContext): Promise
     case "deleteStudent":
     case "createStudentInvite":
       return executeStudentAction(context);
+    case "createGroup":
+    case "updateGroup":
+    case "setGroupMembers":
+    case "setGroupSlots":
+    case "archiveGroup":
+    case "addGroupSession":
+    case "cancelGroupSession":
+    case "rescheduleGroupSession":
+      return executeGroupAction(context);
     case "addPayment":
     case "adjustBalance":
     case "reversePayment":
