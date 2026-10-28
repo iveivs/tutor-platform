@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CalendarDays, FolderOpen, Home, Inbox, LogOut, Settings, UsersRound } from "lucide-react";
+import { BarChart3, Bell, CalendarDays, FolderOpen, Home, Inbox, LogOut, Settings, UsersRound } from "lucide-react";
 import { BrandIcon } from "@/components/brand-icon";
 import type { View } from "@/components/features/app/types";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -14,6 +14,7 @@ export function Sidebar({ view, setView, name, professionalTitle, onLogout, acti
     { id: "students" as View, label: "Ученики", icon: UsersRound },
     { id: "activity" as View, label: "События", icon: Inbox, count: activityCount },
     { id: "materials" as View, label: "Материалы", icon: FolderOpen },
+    { id: "stats" as View, label: "Статистика", icon: BarChart3 },
     { id: "settings" as View, label: "Настройки", icon: Settings },
   ];
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-width)] flex-col border-r border-line bg-surface lg:flex">

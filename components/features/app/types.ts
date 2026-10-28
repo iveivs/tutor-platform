@@ -1,4 +1,4 @@
-export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "settings";
+export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "stats" | "settings";
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 export type TutorProfile = { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string };
 export type Lesson = { id: string; groupId?: string; studentId: string; date: string; time: string; end: string; name: string; status: "paid" | "low" | "debt" | "request" | "trial"; label: string; lessonType?: "regular" | "trial"; trialContact?: boolean; units: number; past?: boolean; hasFile?: boolean; hasNote?: boolean };

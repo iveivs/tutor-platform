@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronLeft, ChevronRight, Clock3, UserRound } from "lucide-react";
+import { BarChart3, Bell, ChevronLeft, ChevronRight, Clock3, UserRound } from "lucide-react";
 import { AppShell } from "@/components/common/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import type { Lesson, LessonDraft, LessonRequest, Student, TeacherDayNote, View } from "@/components/features/app/types";
@@ -83,6 +83,8 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
           <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-coral">Ближайший урок</p>{nextLesson ? <><p className="mt-0.5 truncate text-lg font-bold"><span data-no-translate>{nextLesson.name}</span> · {nextLesson.time}</p><p className="text-sm text-hero-muted">{dateTitle(nextLesson.date, { weekday: "long", day: "numeric", month: "long" })}</p></> : <p className="mt-0.5 text-sm text-hero-muted">Будущих уроков пока нет</p>}</div>
           {nextLesson && <button type="button" onClick={() => onOpenStudent(nextLesson.studentId)} className="w-full rounded-[var(--radius-control)] bg-white/15 px-3 py-2.5 text-sm font-semibold hover:bg-white/20 sm:w-auto sm:shrink-0 xl:w-full">Открыть карточку</button>}
         </section>
+        {/* Phones have no sidebar item for statistics, so the entry lives here. */}
+        <button type="button" onClick={() => setView("stats")} className="flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-left transition hover:bg-surface-subtle lg:hidden"><BarChart3 className="size-5 shrink-0 text-coral" /><span className="flex min-w-0 flex-1 flex-col"><span className="font-semibold">Статистика</span><span className="text-sm text-ink-muted">Уроки, оплаты и показатели за период</span></span><ChevronRight className="size-4 shrink-0 text-ink-subtle" /></button>
       </aside>
     </div>
     <EditLessonDialog key={editing?.id ?? "today-no-lesson"} lesson={editing} onOpenChange={(open) => !open && setEditing(null)} onUpdate={onUpdate} onDelete={onDelete} onMaterials={onMaterials} onOpenStudent={(studentId) => { setEditing(null); onOpenStudent(studentId); }} />

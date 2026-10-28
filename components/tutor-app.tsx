@@ -11,6 +11,7 @@ import { LessonMaterialsDialog } from "@/components/features/materials/lesson-ma
 import { TeacherMaterialsView } from "@/components/features/materials/teacher-materials-view";
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
 import { SettingsView } from "@/components/features/settings/settings-view";
+import { StatsView } from "@/components/features/stats/stats-view";
 import { StudentsView, StudentView } from "@/components/features/students/student-views";
 import type { CurrentUser, Lesson, View } from "@/components/features/app/types";
 import { BrandIcon } from "@/components/brand-icon";
@@ -53,6 +54,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
         {view === "student" && students.length > 0 && <StudentView student={students.find((student) => student.id === selectedStudent) ?? students[0]} lessons={activeLessons} recurringSlots={recurringSlots} balanceEntries={balanceEntries} historyEvents={historyEvents} onAdd={addLesson} onBack={() => setView("students")} onPay={addPayment} onUpdatePrices={updateStudentPrices} onAdjustBalance={adjustBalance} onReversePayment={reversePayment} onCreateInvite={createStudentInvite} onUpdate={updateStudent} onStopSeries={stopLessonSeries} onRestore={restoreStudent} onDeletePermanently={async (studentId) => { const deleted = await deleteStudentPermanently(studentId); if (deleted) setView("students"); return deleted; }} onReload={reload} />}
         {view === "activity" && <ActivityView requests={requests} notifications={notifications} historyEvents={historyEvents} students={students} preferenceScope={preferenceScope} onResolved={reload} onReadNotifications={markNotificationsRead} onReversePayment={reversePayment} />}
         {view === "materials" && <TeacherMaterialsView />}
+        {view === "stats" && <StatsView />}
         {view === "settings" && <SettingsView profile={profile} availabilityWindows={availabilityWindows} onSave={updateProfile} onSaveAvailability={updateAvailability} onLogout={onLogout} isPlatformAdmin={Boolean(user?.isPlatformAdmin)} />}
       </section>
       <MobileNav view={view} setView={setView} />
