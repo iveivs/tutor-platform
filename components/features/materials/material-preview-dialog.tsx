@@ -22,6 +22,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
   const useSafariPdfRenderer = useSyncExternalStore(subscribeBrowserIdentity, isIosSafari, () => false);
   const isImage = item?.contentType.startsWith("image/") ?? false;
   const isPdf = item?.contentType === "application/pdf";
+  const isAudio = item?.contentType.startsWith("audio/") ?? false;
   const isDocx = item?.contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const docxState = item && docxResult.url === item.url ? docxResult.state : "loading";
   const pdfUrl = item && isPdf ? `${item.url}#view=FitH` : "";
@@ -55,7 +56,8 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
         ? <SafariPdfPreview url={item.url} title={item.title} />
         : <div className="h-[72vh] min-h-[420px] w-full overflow-hidden rounded-xl border bg-surface"><iframe src={pdfUrl} title={item.title} className="block size-full border-0 bg-surface" /></div>)}
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-surface text-ink-strong shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-ink-muted">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
-      {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
+      {item && isAudio && <div className="mx-auto flex max-w-xl flex-col gap-3 rounded-xl bg-surface p-5 shadow-sm"><audio controls preload="metadata" src={item.url} className="w-full" /><p className="text-xs text-ink-muted">Перемотка работает; файл не скачивается заново при каждом прослушивании.</p></div>}
+      {item && !isImage && !isPdf && !isDocx && !isAudio && <PreviewUnavailable />}
     </div>
     <DialogFooter className="border-t px-5 py-4">{item && <ReportDialog url={item.url} />}<Button variant="outline" onClick={() => onOpenChange(false)}>Закрыть</Button><Button asChild><a href={downloadUrl}><Download />Скачать</a></Button></DialogFooter>
   </DialogContent></Dialog>;

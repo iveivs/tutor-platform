@@ -41,7 +41,7 @@ export async function uploadTeacherMaterial(request: Request) {
     const sourceBody = new Uint8Array(await file.arrayBuffer());
     const image = await optimizeTeacherMaterialImage(sourceFilename, sourceBody);
     const detected = image ?? detectTeacherMaterial(sourceFilename, sourceBody);
-    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC, DOCX, JPEG, PNG или WebP" }, { status: 415 });
+    if (!detected) return Response.json({ error: "Можно загрузить только корректный PDF, DOC, DOCX, JPEG, PNG, WebP или MP3 до 20 МБ" }, { status: 415 });
     const body = image?.body ?? sourceBody;
     const filename = image?.filename ?? sourceFilename;
     const contentSha256 = createHash("sha256").update(body).digest("hex");

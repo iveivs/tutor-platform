@@ -169,6 +169,13 @@
       "when": 1793360000000,
       "tag": "0023_admin_communication",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793370000000,
+      "tag": "0024_teacher_audio",
+      "breakpoints": true
     }
   ]
 }

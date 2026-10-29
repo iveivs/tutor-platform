@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultMaterialTitle, detectTeacherMaterial, isTeacherMaterialImageFilename, materialContentDisposition, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
+import { MAX_TEACHER_AUDIO_BYTES, defaultMaterialTitle, detectTeacherMaterial, isTeacherMaterialImageFilename, materialContentDisposition, materialDownloadDisposition, sanitizeMaterialFilename } from "./teacher-material-files";
 
 describe("teacher material files", () => {
   it("recognizes PDF by extension and signature", () => {
@@ -24,5 +24,14 @@ describe("teacher material files", () => {
     expect(isTeacherMaterialImageFilename("photo.JPEG")).toBe(true);
     expect(isTeacherMaterialImageFilename("photo.gif")).toBe(false);
     expect(defaultMaterialTitle("Упражнение.png")).toBe("Упражнение");
+  });
+});
+
+describe("library audio", () => {
+  it("accepts MP3 by its content, not by the extension alone", () => {
+    expect(detectTeacherMaterial("track.mp3", new Uint8Array([0x49, 0x44, 0x33, 0x04, 0, 0]))?.contentType).toBe("audio/mpeg");
+    expect(detectTeacherMaterial("track.mp3", new Uint8Array([0xff, 0xfb, 0x90, 0x64]))?.contentType).toBe("audio/mpeg");
+    expect(detectTeacherMaterial("track.mp3", new Uint8Array([0x25, 0x50, 0x44, 0x46]))).toBeNull();
+    expect(detectTeacherMaterial("track.mp3", new Uint8Array(MAX_TEACHER_AUDIO_BYTES + 1).fill(0xff))).toBeNull();
   });
 });
