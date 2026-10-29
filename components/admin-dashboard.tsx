@@ -12,6 +12,7 @@ import {
 } from "@/components/features/admin/admin-model";
 import { WorkspaceDialog } from "@/components/features/admin/workspace-dialog";
 import { PlatformStats } from "@/components/features/admin/platform-stats";
+import { AdminCommunication } from "@/components/features/admin/admin-communication";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -43,7 +44,7 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [tab, setTab] = useState<"workspaces" | "stats">("workspaces");
+  const [tab, setTab] = useState<"workspaces" | "stats" | "communication">("workspaces");
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -124,8 +125,8 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
     <div className="mx-auto max-w-6xl">
       <header className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><BrandIcon className="size-12" /><div><p className="flex items-center gap-2 text-sm font-semibold text-brand-text"><ShieldCheck className="size-4" />Администрирование</p><h1 className="text-3xl font-bold">Кабинеты преподавателей</h1></div></div><div className="flex flex-wrap gap-2"><CreateTeacherInvitation onCreated={() => void load()} />{standalone ? <Button variant="outline" onClick={onLogout}><LogOut />Выйти</Button> : <Button asChild variant="outline"><Link href="/"><ArrowLeft />Вернуться в кабинет</Link></Button>}</div></header>
 
-      <div className="mb-6"><FilterChips label="Раздел" items={[{ value: "workspaces", label: "Кабинеты" }, { value: "stats", label: "Статистика" }] as const} value={tab} onChange={setTab} /></div>
-      {tab === "stats" ? <PlatformStats /> : <>
+      <div className="mb-6"><FilterChips label="Раздел" items={[{ value: "workspaces", label: "Кабинеты" }, { value: "stats", label: "Статистика" }, { value: "communication", label: "Связь" }] as const} value={tab} onChange={setTab} /></div>
+      {tab === "stats" ? <PlatformStats /> : tab === "communication" ? <AdminCommunication workspaces={workspaces} /> : <>
 
       {!loading && !error && <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         <SummaryTile label="Платят" value={paidCount} hint={monthIncome ? `${rubles(monthIncome)} за этот месяц` : "оплат в этом месяце нет"} />

@@ -824,3 +824,68 @@ export const platformAlerts = pgTable("platform_alerts", {
   key: text("key").primaryKey(),
   lastSentAt: instant("last_sent_at").notNull(),
 });
+
+// Admin ↔ teacher communication (see «Связь с администрацией» in docs/BACKEND_RULES.md).
+export const supportThreads = pgTable("support_threads", {
+  workspaceId: text("workspace_id").primaryKey().references(() => workspaces.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("open"),
+  lastMessageAt: instant("last_message_at").notNull().defaultNow(),
+  adminReadAt: instant("admin_read_at"),
+  teacherReadAt: instant("teacher_read_at"),
+}, (table) => [check("support_threads_status_check", sql`${table.status} in ('open', 'waiting', 'resolved')`)]);
+
+export const supportMessages = pgTable("support_messages", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  fromAdmin: boolean("from_admin").notNull(),
+  authorMemberId: text("author_member_id").references(() => members.id, { onDelete: "set null" }),
+  topic: text("topic"),
+  body: text("body").notNull(),
+  device: text("device"),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("support_messages_body_check", sql`char_length(${table.body}) between 1 and 2000`),
+  check("support_messages_topic_check", sql`${table.topic} is null or ${table.topic} in ('bug', 'question', 'idea', 'payment')`),
+  check("support_messages_device_check", sql`${table.device} is null or char_length(${table.device}) <= 200`),
+  index("idx_support_messages_workspace_created").on(table.workspaceId, table.createdAt),
+]);
+
+export const platformNews = pgTable("platform_news", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  important: boolean("important").notNull().default(false),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  publishedAt: instant("published_at").notNull().defaultNow(),
+}, (table) => [
+  check("platform_news_title_check", sql`char_length(${table.title}) between 1 and 120`),
+  check("platform_news_body_check", sql`char_length(${table.body}) between 1 and 4000`),
+]);
+
+export const platformNewsReads = pgTable("platform_news_reads", {
+  newsId: text("news_id").notNull().references(() => platformNews.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  readAt: instant("read_at").notNull().defaultNow(),
+  acknowledgedAt: instant("acknowledged_at"),
+}, (table) => [primaryKey({ name: "platform_news_reads_pk", columns: [table.newsId, table.memberId] })]);
+
+export const contentReports = pgTable("content_reports", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id").notNull(),
+  reporterMemberId: text("reporter_member_id").references(() => members.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),
+  comment: text("comment"),
+  status: text("status").notNull().default("open"),
+  resolvedByUserId: text("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: instant("resolved_at"),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("content_reports_type_check", sql`${table.resourceType} in ('teacher_resource', 'lesson_attachment')`),
+  check("content_reports_reason_check", sql`${table.reason} in ('copyright', 'inappropriate', 'personal_data', 'other')`),
+  check("content_reports_status_check", sql`${table.status} in ('open', 'dismissed', 'removed')`),
+  check("content_reports_comment_check", sql`${table.comment} is null or char_length(${table.comment}) <= 500`),
+  index("idx_content_reports_status_created").on(table.status, table.createdAt),
+  uniqueIndex("content_reports_open_unique").on(table.resourceType, table.resourceId, table.reporterMemberId).where(sql`${table.status} = 'open'`),
+]);

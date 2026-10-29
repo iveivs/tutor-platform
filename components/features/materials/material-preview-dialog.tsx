@@ -6,6 +6,7 @@ import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { appFetch } from "@/lib/client-fetch";
+import { ReportDialog } from "@/components/features/support/report-dialog";
 
 export type MaterialPreviewItem = {
   title: string;
@@ -56,7 +57,7 @@ export function MaterialPreviewDialog({ item, onOpenChange }: { item: MaterialPr
       {item && isDocx && <><div ref={docxRoot} className={`mx-auto min-h-[420px] max-w-4xl overflow-hidden rounded-xl bg-surface text-ink-strong shadow-sm ${docxState === "ready" ? "block" : "hidden"}`} />{docxState === "loading" && <p className="grid min-h-[420px] place-items-center text-sm text-ink-muted">Открываю документ…</p>}{docxState === "error" && <PreviewUnavailable />}</>}
       {item && !isImage && !isPdf && !isDocx && <PreviewUnavailable />}
     </div>
-    <DialogFooter className="border-t px-5 py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Закрыть</Button><Button asChild><a href={downloadUrl}><Download />Скачать</a></Button></DialogFooter>
+    <DialogFooter className="border-t px-5 py-4">{item && <ReportDialog url={item.url} />}<Button variant="outline" onClick={() => onOpenChange(false)}>Закрыть</Button><Button asChild><a href={downloadUrl}><Download />Скачать</a></Button></DialogFooter>
   </DialogContent></Dialog>;
 }
 
