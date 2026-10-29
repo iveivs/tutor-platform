@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Archive, CalendarPlus, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
+import { ArrowLeft, Archive, CalendarPlus, MessagesSquare, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
 import { FormField } from "@/components/common/form-field";
 import { MemberAvatar } from "@/components/features/account";
 import type { GroupDraft, Lesson, Student, StudentGroup } from "@/components/features/app/types";
 import { useGroupActions } from "@/components/features/groups/group-actions";
+import { GroupChatDialog } from "@/components/features/group-chat/group-chat-dialog";
+import { useGroupChatUnread } from "@/components/features/group-chat/use-group-chat-unread";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -109,7 +111,10 @@ export function GroupView({ group, students, lessons, onBack, onOpenStudent }: {
   const members = useMemo(() => students.filter((student) => group.memberIds.includes(student.id)), [students, group.memberIds]);
   const sessions = useMemo(() => upcomingSessions(lessons, group.id), [lessons, group.id]);
   const next = sessions[0];
+  const [chatOpen, setChatOpen] = useState(false);
+  const unread = useGroupChatUnread()[group.id] ?? 0;
   return <div className="mx-auto max-w-[1440px] px-4 py-5 md:px-8 md:py-8 xl:px-12">
+    <GroupChatDialog groupId={group.id} open={chatOpen} onOpenChange={setChatOpen} />
     <button type="button" onClick={onBack} className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-brand-text"><ArrowLeft className="size-4" />Группы</button>
     <div className="mb-5 flex min-w-0 items-center gap-3.5">
       <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand-text"><UsersRound className="size-7" /></span>
@@ -120,7 +125,7 @@ export function GroupView({ group, students, lessons, onBack, onOpenStudent }: {
         <div className="flex min-w-0 flex-col gap-0.5 rounded-[var(--radius-card)] border border-line bg-surface p-4"><span className="text-sm font-semibold text-ink-muted">Расписание</span><span className="text-lg font-extrabold leading-snug">{slotsText(group)}</span>{group.slots[0] && <span className="text-xs text-ink-muted">{`по ${group.slots[0].durationMinutes} мин`}</span>}</div>
         <div className="flex min-w-0 flex-col gap-0.5 rounded-[var(--radius-card)] border border-line bg-surface p-4"><span className="text-sm font-semibold text-ink-muted">Следующее занятие</span><span className="text-lg font-extrabold leading-snug">{next ? `${dateTitle(next.date, { weekday: "short", day: "numeric", month: "short" })}, ${next.time}` : "Не назначено"}</span>{next && <span className="text-xs text-ink-muted">{`придут ${next.count} из ${members.length}`}</span>}</div>
       </div>
-      {!group.archived && <div className="flex flex-wrap gap-2"><AddSessionDialog group={group} /><GroupEditorDialog group={group} students={students} trigger={<Button variant="outline" size="lg" className="h-11 rounded-xl"><Pencil />Изменить</Button>} /><Button variant="outline" size="lg" className="h-11 rounded-xl text-danger-text" onClick={() => { if (window.confirm(`Перенести «${group.name}» в архив? Будущие занятия группы будут отменены.`)) void archiveGroup(group.id); }}><Archive />В архив</Button></div>}
+      {!group.archived && <div className="flex flex-wrap gap-2"><Button size="lg" variant="outline" className="h-11 rounded-xl" onClick={() => setChatOpen(true)}><MessagesSquare />Чат группы{unread ? <span className="ml-0.5 grid min-w-5 place-items-center rounded-full bg-coral px-1.5 text-xs font-bold text-white">{unread}</span> : null}</Button><AddSessionDialog group={group} /><GroupEditorDialog group={group} students={students} trigger={<Button variant="outline" size="lg" className="h-11 rounded-xl"><Pencil />Изменить</Button>} /><Button variant="outline" size="lg" className="h-11 rounded-xl text-danger-text" onClick={() => { if (window.confirm(`Перенести «${group.name}» в архив? Будущие занятия группы будут отменены.`)) void archiveGroup(group.id); }}><Archive />В архив</Button></div>}
       {!group.archived && <label className="flex cursor-pointer items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4"><span className="flex min-w-0 flex-col"><span className="text-[15px]">Участники видят друг друга</span><span className="text-xs text-ink-muted">Имена группы в кабинете каждого участника</span></span><Switch checked={group.membersVisible} onCheckedChange={(checked) => void updateGroup(group.id, group.name, checked)} aria-label="Участники видят друг друга" /></label>}
       <section aria-labelledby="group-members-title" className="flex flex-col gap-2">
         <h2 id="group-members-title" className="px-1 pt-1 text-[13px] font-bold uppercase tracking-wide text-ink-muted">{`Участники · ${members.length}`}</h2>

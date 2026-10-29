@@ -37,6 +37,8 @@ describe("translateUiText", () => {
     ["Пробный · 21 день", "Trial · 21 days"],
     ["Бессрочный · без срока", "Unlimited · no end date"],
     ["бессрочных: 2", "unlimited: 2"],
+    ["Обсуждение · 3", "Discussion · 3"],
+    ["Сегодня, 10:12 · прочитали 9 из 12", "Today, 10:12 · read by 9 of 12"],
     ["Осталось 3 дня: доступ до 10.11.2026 включительно. Продлить можно в Настройках → Подписка.", "3 days left: access through 10.11.2026. You can renew in Settings → Subscription."],
     ["1 месяц, до 10 декабря", "1 month, until 10 December"],
     ["Группа · 12 участников · 1 не придёт", "Group · 12 members · 1 not coming"],

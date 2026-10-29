@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { CalendarClock, ChevronRight, FolderOpen, History, LogOut, MessageCircle, NotebookPen, Palette, WalletCards } from "lucide-react";
+import { CalendarClock, ChevronRight, FolderOpen, History, LogOut, MessageCircle, NotebookPen, Palette, WalletCards, MessagesSquare } from "lucide-react";
 import { useTheme } from "next-themes";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
 import { ShowMoreButton } from "@/components/common/show-more-button";
@@ -25,6 +25,8 @@ import { russianPlural } from "@/lib/russian-plural";
 import { useCurrentDay } from "@/hooks/use-current-day";
 import { StudentAccessNotice } from "@/components/features/subscription/student-access-notice";
 import { useWorkspaceAccess } from "@/lib/workspace-access-client";
+import { GroupChatDialog } from "@/components/features/group-chat/group-chat-dialog";
+import { useGroupChatUnread } from "@/components/features/group-chat/use-group-chat-unread";
 
 const INITIAL_NOTIFICATIONS = 3;
 
@@ -64,6 +66,8 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [chatGroupId, setChatGroupId] = useState<string | null>(null);
+  const groupUnread = useGroupChatUnread();
   const currentDay = useCurrentDay();
   const futureLessons = lessons.filter((lesson) => lesson.date >= currentDay && !lesson.past).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   const recentLessons = lessons.filter((lesson) => lesson.past).sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).slice(0, 10);
@@ -160,7 +164,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
           </div>
 
           {myGroups.length > 0 && <SettingsGroup title="Мои группы">
-            {myGroups.map((group) => <div key={group.id} className={`${settingsRowClass} flex-col items-start gap-0.5`}><strong data-no-translate className="text-[15px]">{group.name}</strong><span className="text-sm text-ink-muted">{group.membersVisible ? (group.classmates.length ? <>{"Вместе с вами: "}<span data-no-translate className="[overflow-wrap:anywhere]">{group.classmates.join(", ")}</span></> : "Других участников пока нет") : "Состав группы видит только преподаватель"}</span></div>)}
+            {myGroups.map((group) => <div key={group.id} className={settingsRowClass}><span className="flex min-w-0 flex-col items-start gap-0.5"><strong data-no-translate className="text-[15px]">{group.name}</strong><span className="text-sm text-ink-muted">{group.membersVisible ? (group.classmates.length ? <>{"Вместе с вами: "}<span data-no-translate className="[overflow-wrap:anywhere]">{group.classmates.join(", ")}</span></> : "Других участников пока нет") : "Состав группы видит только преподаватель"}</span></span><Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => setChatGroupId(group.id)}><MessagesSquare />Чат{groupUnread[group.id] ? <span className="grid min-w-5 place-items-center rounded-full bg-coral px-1.5 text-xs font-bold text-white">{groupUnread[group.id]}</span> : null}</Button></div>)}
           </SettingsGroup>}
 
           {(student.floating || student.canViewAvailability) && !requestsLocked && <section className="rounded-2xl border border-line bg-surface p-4">
@@ -200,6 +204,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
       </div>
     </div>
     <MessagesDialog open={messagesOpen} onOpenChange={setMessagesOpen} showTrigger={false} />
+    <GroupChatDialog groupId={chatGroupId} open={chatGroupId !== null} onOpenChange={(open) => { if (!open) setChatGroupId(null); }} onDirectMessage={() => { setChatGroupId(null); setMessagesOpen(true); }} />
     <Toaster position="top-center" richColors />
   </main>;
 }

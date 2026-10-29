@@ -256,8 +256,41 @@ export const studentGroupMembers = pgTable("student_group_members", {
   memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   joinedAt: instant("joined_at").notNull().defaultNow(),
+  // The teacher can stop one member from writing in the group discussion.
+  chatMuted: boolean("chat_muted").notNull().default(false),
 }, (table) => [
   index("idx_student_group_members_member").on(table.memberId),
+]);
+
+// Group chat: teacher announcements (one may be pinned) and the members' discussion.
+export const groupChatMessages = pgTable("group_chat_messages", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  groupId: text("group_id").notNull().references(() => studentGroups.id, { onDelete: "cascade" }),
+  authorMemberId: text("author_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  body: text("body").notNull(),
+  pinned: boolean("pinned").notNull().default(false),
+  deletedAt: instant("deleted_at"),
+  deletedByMemberId: text("deleted_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("group_chat_messages_kind_check", sql`${table.kind} in ('announcement', 'discussion')`),
+  check("group_chat_messages_body_check", sql`char_length(${table.body}) between 1 and 1000`),
+  check("group_chat_messages_pinned_check", sql`not ${table.pinned} or ${table.kind} = 'announcement'`),
+  index("idx_group_chat_messages_group_kind_created").on(table.groupId, table.kind, table.createdAt),
+  index("idx_group_chat_messages_author_created").on(table.authorMemberId, table.createdAt),
+]);
+
+// How far each member has read each tab of a group chat (unread counters, "read by N of M").
+export const groupChatReads = pgTable("group_chat_reads", {
+  groupId: text("group_id").notNull().references(() => studentGroups.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  lastReadAt: instant("last_read_at").notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ name: "group_chat_reads_pk", columns: [table.groupId, table.memberId, table.kind] }),
+  check("group_chat_reads_kind_check", sql`${table.kind} in ('announcement', 'discussion')`),
 ]);
 
 export const studentGroupSlots = pgTable("student_group_slots", {
