@@ -10,6 +10,7 @@ import {
 } from "@/lib/app-data/route-utils";
 import { assertSameOrigin } from "@/lib/auth";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
+import { readOnlyResponse } from "@/lib/workspace-access";
 import { enforceRateLimit, readLimitedJson } from "@/lib/request-security";
 
 export async function handleWriteAppData(request: Request) {
@@ -24,6 +25,8 @@ export async function handleWriteAppData(request: Request) {
     const body: ActionBody = parsed.data;
     const auth = await requireMember(request);
     if (auth instanceof Response) return auth;
+    // A read-only workspace (paid access ended) can still mark its notifications read.
+    if (body.action !== "markNotificationsRead" && "accessMode" in auth && auth.accessMode === "read_only") return readOnlyResponse();
     if (auth.role === "student" && body.action === "submitStudentRequest") {
       const nodeStudentLimited = await enforceNodeRateLimit(request, "student_request", 10, `${auth.workspaceId}:${auth.memberId}`);
       if (nodeStudentLimited) return nodeStudentLimited;

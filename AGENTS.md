@@ -25,6 +25,7 @@
 - Групповые занятия: `lib/app-data/write-group-actions.ts` (команды), `lib/group-sessions.ts` (склейка строк участников в одно занятие), `components/features/groups/` (экраны). Занятие группы — строка `lessons` на каждого участника с общим `class_id`; правила в разделе «Групповые занятия» `docs/BACKEND_RULES.md`.
 - `lib/lesson-content/` и `lib/teacher-material-library/` — материалы урока и библиотека преподавателя.
 - `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
+- Подписки: `lib/workspace-access.ts` (срок, режим просмотра, `rejectReadOnlyWrite` — обязателен в каждой новой изменяющей точке API кабинета), `app/api/subscription`, `lib/admin-workspaces/subscription-actions.ts`, `components/features/subscription/`, `components/features/admin/`, напоминания `scripts/access-reminders.mjs`. Правила — раздел «Подписки и доступ кабинета» в `docs/BACKEND_RULES.md`.
 - `app/globals.css` — светлая и графитовая тёмная темы, включая календарь.
 - `components/auth-gate.tsx` и `components/invite-accept.tsx` — вход и принятие приглашения.
 - `components/features/landing/` — страница о продукте для невошедшего посетителя главной; «Войти» открывает форму входа, «Начать» — панель запроса приглашения (Telegram и почта), потому что регистрация преподавателей закрыта. Приложение с главного экрана и ссылка `/?login` сразу открывают вход.

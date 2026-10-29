@@ -5,9 +5,9 @@ import { Check, Copy, Mail, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+import { CONTACT_EMAIL, CONTACT_TELEGRAM_URL as TELEGRAM_URL } from "@/lib/contacts";
+
 // Teacher accounts are invite-only (see app/api/auth/register), so «Начать» asks the owner for an invitation.
-const TELEGRAM_URL = "https://t.me/iveivs";
-const CONTACT_EMAIL = "veiv@mail.ru";
 
 export function StartDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [copied, setCopied] = useState(false);

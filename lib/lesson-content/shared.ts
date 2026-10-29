@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAuthMember } from "@/lib/auth";
 import { MAX_NOTE_LENGTH } from "@/lib/lesson-materials";
+import { rejectReadOnlyWrite } from "@/lib/workspace-access";
 
 export const lessonIdSchema = z.string().min(1).max(128);
 export const actionSchema = z.discriminatedUnion("action", [
@@ -15,7 +16,8 @@ export const actionSchema = z.discriminatedUnion("action", [
 
 export async function requireAuth(request: Request) {
   const auth = await getAuthMember(request);
-  return auth ?? Response.json({ error: "Требуется вход" }, { status: 401 });
+  if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
+  return rejectReadOnlyWrite(request, auth) ?? auth;
 }
 
 export type LessonContentAuth = NonNullable<Awaited<ReturnType<typeof getAuthMember>>>;

@@ -8,6 +8,7 @@ import {
   MAX_PHOTO_INPUT_BYTES, MAX_PHOTOS_PER_LESSON_MEMBER, MAX_WORKSPACE_PHOTO_BYTES, photoExpiresAt,
   notifyLessonStudents, putLessonPhoto, resolveLessonAccess,
 } from "@/lib/lesson-materials";
+import { rejectReadOnlyWrite } from "@/lib/workspace-access";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
     if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
     const auth = await getAuthMember(request);
     if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
+    const readOnly = rejectReadOnlyWrite(request, auth);
+    if (readOnly) return readOnly;
     if (!lessonPhotoStorageConfigured()) return Response.json({ error: "Хранилище фотографий ещё не настроено" }, { status: 503 });
     const limited = await enforceNodeRateLimit(request, "lesson_photo_upload", 10, `${auth.workspaceId}:${auth.memberId}`);
     if (limited) return limited;

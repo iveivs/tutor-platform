@@ -1,9 +1,10 @@
 import { getD1 } from "@/db/d1";
+import type { WorkspaceAccessMode } from "@/lib/workspace-access";
 
 export const ACCESS_COOKIE = "tutor_access";
 export const REFRESH_COOKIE = "tutor_refresh";
 
-export type AuthMember = { userId: string; memberId: string; workspaceId: string; role: "owner" | "teacher" | "student"; name: string; email: string; isPlatformAdmin: boolean };
+export type AuthMember = { userId: string; memberId: string; workspaceId: string; role: "owner" | "teacher" | "student"; name: string; email: string; isPlatformAdmin: boolean; accessMode?: WorkspaceAccessMode };
 export type PlatformAdmin = { userId: string; name: string; email: string };
 export type AuthIdentity = { id: string; email?: string };
 

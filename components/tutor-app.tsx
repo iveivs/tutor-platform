@@ -12,6 +12,7 @@ import { TeacherMaterialsView } from "@/components/features/materials/teacher-ma
 import { StudentPortal } from "@/components/features/student-portal/student-portal";
 import { SettingsView } from "@/components/features/settings/settings-view";
 import { StatsView } from "@/components/features/stats/stats-view";
+import { AccessBanner } from "@/components/features/subscription/access-banner";
 import { GroupActionsProvider } from "@/components/features/groups/group-actions";
 import { combineGroupSessions } from "@/lib/group-sessions";
 import { GroupView } from "@/components/features/groups/groups-view";
@@ -27,7 +28,7 @@ import { usePushDevice } from "@/lib/push-client";
 // Sections a push notification may open.
 function viewFromPath(path: string): View | null {
   const view = new URLSearchParams(path.includes("?") ? path.slice(path.indexOf("?")) : path).get("view");
-  return view === "activity" || view === "today" ? view : null;
+  return view === "activity" || view === "today" || view === "settings" ? view : null;
 }
 
 export default function TutorApp({ role = "owner", user, onLogout }: { role?: "owner" | "teacher" | "student"; user?: CurrentUser; onLogout?: () => void }) {
@@ -77,6 +78,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       <Sidebar view={view} setView={setView} name={profile.name} professionalTitle={profile.professionalTitle} onLogout={onLogout} activityCount={activityCount} />
       <section className="min-h-screen pb-24 lg:ml-[var(--sidebar-width)] lg:pb-0">
         <MobileHeader name={profile.name} professionalTitle={profile.professionalTitle} activityCount={activityCount} onActivity={() => setView("activity")} view={view} />
+        <AccessBanner onRenew={() => { setView("settings"); window.scrollTo({ top: 0 }); }} />
         {view === "today" && <TodayView lessons={activeScheduleLessons} students={activeStudents} requests={requests} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} setView={setView} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "calendar" && <CalendarView preferenceScope={preferenceScope} lessons={scheduleLessons} students={students.filter((student) => !student.archived)} dayNotes={dayNotes} onSaveDayNote={saveTeacherDayNote} showPastLessons={showPastLessons} pastLessonsLoading={pastLessonsLoading} onShowPastLessonsChange={changePastLessonsVisibility} onAdd={addLesson} onUpdate={updateLesson} onDelete={deleteLesson} onMaterials={setMaterialsLesson} onConvertTrial={convertTrialContact} onOpenStudent={(id) => { setSelectedStudent(id); setView("student"); }} />}
         {view === "students" && <StudentsView students={students} onAdd={addStudent} onOpen={(id) => { setSelectedStudent(id); setView("student"); }} />}

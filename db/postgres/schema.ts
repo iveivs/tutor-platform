@@ -7,6 +7,8 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -26,12 +28,49 @@ export const workspaces = pgTable("workspaces", {
   accessStatus: text("access_status").notNull().default("active"),
   accessGrant: text("access_grant").notNull().default("legacy"),
   accessExpiresAt: instant("access_expires_at"),
+  adminNote: text("admin_note"),
   lastActivityAt: instant("last_activity_at"),
   ...timestamps(),
 }, (table) => [
   check("workspaces_subscription_status_check", sql`${table.subscriptionStatus} in ('trial', 'active', 'past_due', 'cancelled')`),
   check("workspaces_access_status_check", sql`${table.accessStatus} in ('active', 'blocked')`),
   check("workspaces_access_grant_check", sql`${table.accessGrant} in ('legacy', 'complimentary', 'trial', 'paid')`),
+  check("workspaces_admin_note_check", sql`${table.adminNote} is null or length(${table.adminNote}) <= 2000`),
+]);
+
+// Subscription payments recorded by the platform admin (step 1: transfers, no provider yet).
+export const subscriptionPayments = pgTable("subscription_payments", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(),
+  months: integer("months").notNull(),
+  paidOn: date("paid_on").notNull(),
+  method: text("method").notNull(),
+  receiptRef: text("receipt_ref"),
+  accessFrom: instant("access_from").notNull(),
+  accessUntil: instant("access_until").notNull(),
+  status: text("status").notNull().default("paid"),
+  refundedAt: instant("refunded_at"),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  ...timestamps(),
+}, (table) => [
+  check("subscription_payments_amount_check", sql`${table.amountCents} between 0 and 100000000`),
+  check("subscription_payments_months_check", sql`${table.months} between 1 and 24`),
+  check("subscription_payments_method_check", sql`${table.method} in ('transfer', 'cash', 'other')`),
+  check("subscription_payments_status_check", sql`${table.status} in ('paid', 'refunded')`),
+  check("subscription_payments_receipt_check", sql`${table.receiptRef} is null or length(${table.receiptRef}) <= 100`),
+  index("idx_subscription_payments_workspace_paid").on(table.workspaceId, table.paidOn),
+]);
+
+// One row per sent access reminder (stage = days before the end, 0 = access ended), so each is sent once.
+export const workspaceAccessReminders = pgTable("workspace_access_reminders", {
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  accessExpiresAt: instant("access_expires_at").notNull(),
+  stage: smallint("stage").notNull(),
+  sentAt: instant("sent_at").notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ name: "workspace_access_reminders_pk", columns: [table.workspaceId, table.accessExpiresAt, table.stage] }),
+  check("workspace_access_reminders_stage_check", sql`${table.stage} in (0, 1, 3, 7)`),
 ]);
 
 export const users = pgTable("users", {
@@ -58,7 +97,7 @@ export const platformAuditEvents = pgTable("platform_audit_events", {
   newValue: text("new_value"),
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [
-  check("platform_audit_events_action_check", sql`${table.action} in ('workspace_blocked', 'workspace_unblocked')`),
+  check("platform_audit_events_action_check", sql`${table.action} in ('workspace_blocked', 'workspace_unblocked', 'access_terms_changed', 'subscription_payment_added', 'subscription_payment_refunded')`),
   index("idx_platform_audit_workspace_created").on(table.workspaceId, table.createdAt),
   index("idx_platform_audit_actor_created").on(table.actorUserId, table.createdAt),
 ]);
@@ -586,7 +625,7 @@ export const telegramDeliveries = pgTable("telegram_deliveries", {
   lastError: text("last_error"),
   ...timestamps(),
 }, (table) => [
-  check("telegram_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material')`),
+  check("telegram_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material', 'account')`),
   check("telegram_deliveries_status_check", sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'cancelled')`),
   check("telegram_deliveries_attempts_check", sql`${table.attempts} >= 0`),
   uniqueIndex("telegram_deliveries_dedupe_key_unique").on(table.dedupeKey),
@@ -625,7 +664,7 @@ export const pushDeliveries = pgTable("push_deliveries", {
   lastError: text("last_error"),
   ...timestamps(),
 }, (table) => [
-  check("push_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material', 'test')`),
+  check("push_deliveries_kind_check", sql`${table.kind} in ('lesson_reminder', 'schedule_changed', 'new_request', 'new_message', 'new_material', 'test', 'account')`),
   check("push_deliveries_status_check", sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'cancelled')`),
   check("push_deliveries_attempts_check", sql`${table.attempts} >= 0`),
   uniqueIndex("push_deliveries_dedupe_key_unique").on(table.dedupeKey),

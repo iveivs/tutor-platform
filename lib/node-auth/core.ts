@@ -2,12 +2,13 @@ import "server-only";
 
 import argon2 from "argon2";
 import { createHash, randomBytes } from "node:crypto";
+import type { WorkspaceAccessMode } from "../workspace-access";
 
 export const ACCESS_COOKIE = "tutor_access";
 export const REFRESH_COOKIE = "tutor_refresh";
 export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type AuthMember = { userId: string; memberId: string; workspaceId: string; role: "owner" | "teacher" | "student"; name: string; email: string; isPlatformAdmin: boolean };
+export type AuthMember = { userId: string; memberId: string; workspaceId: string; role: "owner" | "teacher" | "student"; name: string; email: string; isPlatformAdmin: boolean; accessMode?: WorkspaceAccessMode };
 export type PlatformAdmin = { userId: string; name: string; email: string };
 export type AuthIdentity = { id: string; email?: string };
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student" | "platform_admin"; workspaceId?: string; isPlatformAdmin: boolean };

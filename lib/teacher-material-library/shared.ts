@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getPostgresPool } from "@/db/postgres";
 import { getAuthMember } from "@/lib/auth";
 import { defaultMaterialTitle } from "@/lib/teacher-material-files";
+import { rejectReadOnlyWrite } from "@/lib/workspace-access";
 
 export const resourceIdSchema = z.string().uuid();
 export const metadataSchema = z.object({
@@ -15,7 +16,7 @@ export async function requireTeacher(request: Request) {
   const auth = await getAuthMember(request);
   if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
   if (auth.role === "student") return Response.json({ error: "Библиотека доступна только преподавателю" }, { status: 403 });
-  return auth;
+  return rejectReadOnlyWrite(request, auth) ?? auth;
 }
 export function normalizeTags(values: string[]) {
   const result: string[] = [];

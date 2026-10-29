@@ -6,6 +6,7 @@ import { baseAcceptanceDocuments, teacherInviteAcceptanceSchema } from "@/lib/le
 import { hashPassword, sha256, verifyPassword } from "@/lib/node-auth";
 import { publicMutation, tokenPattern, unavailable } from "@/lib/account-endpoints/shared";
 import { readLimitedJson } from "@/lib/request-security";
+import { trialEndsAt } from "@/lib/workspace-access";
 
 export async function handleNodeTeacherInviteGet(request: Request): Promise<Response> {
   const configError = unavailable();
@@ -51,8 +52,10 @@ export async function handleNodeTeacherInvitePost(request: Request): Promise<Res
     const userId = existing?.id ? String(existing.id) : `user-${stableId}`;
     const memberId = `owner-${stableId}`;
     const passwordHash = existing?.password_hash ?? await hashPassword(parsed.data.password);
-    await client.query(`INSERT INTO workspaces (id, name, timezone, subscription_status, access_status, access_grant, last_activity_at)
-      VALUES ($1, $2, 'Europe/Moscow', 'active', 'active', $3, now())`, [workspaceId, `Кабинет: ${String(invitation.display_name)}`, invitation.access_grant]);
+    // A trial invitation starts the 30-day trial now; a free one has no end date until the admin sets it.
+    const trial = invitation.access_grant === "trial";
+    await client.query(`INSERT INTO workspaces (id, name, timezone, subscription_status, access_status, access_grant, access_expires_at, last_activity_at)
+      VALUES ($1, $2, 'Europe/Moscow', $3, 'active', $4, $5, now())`, [workspaceId, `Кабинет: ${String(invitation.display_name)}`, trial ? "trial" : "active", invitation.access_grant, trial ? trialEndsAt() : null]);
     if (existing) await client.query("UPDATE users SET password_hash = $1, password_set_at = COALESCE(password_set_at, now()), full_name = $2, updated_at = now() WHERE id = $3", [passwordHash, invitation.display_name, userId]);
     else await client.query(`INSERT INTO users (id, email, full_name, password_hash, password_set_at) VALUES ($1, $2, $3, $4, now())`, [userId, email, invitation.display_name, passwordHash]);
     await client.query(`INSERT INTO members (id, workspace_id, user_id, role, status, display_name, professional_title, email, schedule_type)

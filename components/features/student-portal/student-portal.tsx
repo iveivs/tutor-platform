@@ -23,6 +23,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { dateTitle } from "@/lib/date-time";
 import { russianPlural } from "@/lib/russian-plural";
 import { useCurrentDay } from "@/hooks/use-current-day";
+import { StudentAccessNotice } from "@/components/features/subscription/student-access-notice";
+import { useWorkspaceAccess } from "@/lib/workspace-access-client";
 
 const INITIAL_NOTIFICATIONS = 3;
 
@@ -70,6 +72,8 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
   const shownNotifications = notificationsExpanded ? notifications : notifications.slice(0, INITIAL_NOTIFICATIONS);
   const paymentEntries = entries.filter((entry) => entry.kind === "payment" || entry.kind === "refund" || entry.kind === "adjustment");
   const selectTrigger = "h-9 w-auto min-w-0 gap-1.5 border-0 bg-transparent px-2 text-sm text-ink-muted shadow-none dark:bg-transparent";
+  // While the teacher's paid access has ended the workspace is read-only: no new requests.
+  const requestsLocked = useWorkspaceAccess()?.accessMode === "read_only";
 
   return <main className="min-h-screen overflow-x-clip bg-background px-4 pb-16 pt-5 text-foreground md:px-8">
     <div className="mx-auto max-w-5xl">
@@ -84,6 +88,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,380px)]">
         <div className="flex min-w-0 flex-col gap-5">
+          {requestsLocked && <StudentAccessNotice />}
           {nextLesson ? <section aria-label="Следующий урок" className="rounded-[var(--radius-card)] bg-hero-start p-5 text-white">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-semibold text-coral">Следующий урок</p>
@@ -94,13 +99,13 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             <GroupLine lesson={nextLesson} groups={myGroups} className="mt-2 text-sm text-hero-muted" showClassmates />
             <LessonContentBadges lesson={nextLesson} />
             <Button type="button" variant="secondary" className="mt-4 h-11 w-full rounded-xl" onClick={() => onMaterials(nextLesson)}><NotebookPen />Материалы урока</Button>
-            {nextLesson.classId ? <div className="mt-2 grid gap-2">
+            {requestsLocked ? null : nextLesson.classId ? <div className="mt-2 grid gap-2">
               <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Не приду", className: heroButton }} />
             </div> : <div className="mt-2 grid grid-cols-2 gap-2">
               <StudentRequestDialog type="reschedule" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", className: heroButton }} />
               <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", className: heroButton }} />
             </div>}
-            <p className="mt-3 text-center text-xs text-hero-muted">{nextLesson.classId ? "Отметить «Не приду» можно до 23:59 предыдущего дня" : "Отмену можно запросить до 23:59 предыдущего дня"}</p>
+            {!requestsLocked && <p className="mt-3 text-center text-xs text-hero-muted">{nextLesson.classId ? "Отметить «Не приду» можно до 23:59 предыдущего дня" : "Отмену можно запросить до 23:59 предыдущего дня"}</p>}
           </section> : <section className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarClock className="size-5 shrink-0 text-ink-faint" />Следующий урок пока не назначен</section>}
 
           <div className="grid grid-cols-2 gap-3 lg:hidden">
@@ -131,8 +136,8 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
               </div>
               <div className="-mx-2 mt-1 grid grid-cols-3 gap-1 sm:flex">
                 <Button type="button" size="sm" variant="ghost" className="text-brand-text" onClick={() => onMaterials(lesson)}>Материалы</Button>
-                {!lesson.classId && <StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", variant: "ghost" }} />}
-                <StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: lesson.classId ? "Не приду" : "Отменить", variant: "ghost", className: "text-danger-text" }} />
+                {!lesson.classId && !requestsLocked && <StudentRequestDialog type="reschedule" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Перенести", variant: "ghost" }} />}
+                {!requestsLocked && <StudentRequestDialog type="cancel" lesson={lesson} student={student} onRequest={onRequest} compactTrigger={{ label: lesson.classId ? "Не приду" : "Отменить", variant: "ghost", className: "text-danger-text" }} />}
               </div>
             </article>)}</div>
           </section>}
@@ -158,7 +163,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
             {myGroups.map((group) => <div key={group.id} className={`${settingsRowClass} flex-col items-start gap-0.5`}><strong data-no-translate className="text-[15px]">{group.name}</strong><span className="text-sm text-ink-muted">{group.membersVisible ? (group.classmates.length ? <>{"Вместе с вами: "}<span data-no-translate className="[overflow-wrap:anywhere]">{group.classmates.join(", ")}</span></> : "Других участников пока нет") : "Состав группы видит только преподаватель"}</span></div>)}
           </SettingsGroup>}
 
-          {(student.floating || student.canViewAvailability) && <section className="rounded-2xl border border-line bg-surface p-4">
+          {(student.floating || student.canViewAvailability) && !requestsLocked && <section className="rounded-2xl border border-line bg-surface p-4">
             <h2 className="text-base font-bold">Свободное время</h2>
             <p className="mt-1 text-sm text-ink-muted">Выберите подходящее время и отправьте запрос преподавателю.</p>
             <div className="mt-3"><StudentRequestDialog type="new_lesson" student={student} availableSlots={student.canViewAvailability ? availableSlots : undefined} onRequest={onRequest} fullWidth /></div>

@@ -13,6 +13,7 @@ import {
   verifyPassword,
 } from "./core";
 import type { AuthIdentity, AuthMember, CurrentUser, PlatformAdmin } from "./core";
+import { accessModeAt } from "../workspace-access";
 
 const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -46,14 +47,14 @@ export async function getAuthMember(request: Request, knownIdentity?: AuthIdenti
   const identity = knownIdentity ?? await getAuthIdentity(request);
   if (!identity) return null;
   const result = await getPostgresPool().query(`SELECT u.id AS user_id, u.email, u.is_platform_admin, m.id AS member_id,
-      m.workspace_id, m.role, m.display_name
+      m.workspace_id, m.role, m.display_name, w.access_expires_at
     FROM users u JOIN members m ON m.user_id = u.id JOIN workspaces w ON w.id = m.workspace_id
     WHERE u.id = $1 AND u.disabled_at IS NULL AND m.status = 'active' AND w.access_status = 'active' LIMIT 1`, [identity.id]);
   const member = result.rows[0];
   if (!member) return null;
   await getPostgresPool().query(`UPDATE workspaces SET last_activity_at = now(), updated_at = now()
     WHERE id = $1 AND (last_activity_at IS NULL OR last_activity_at < now() - interval '5 minutes')`, [member.workspace_id]);
-  return { userId: String(member.user_id), memberId: String(member.member_id), workspaceId: String(member.workspace_id), role: member.role as AuthMember["role"], name: String(member.display_name), email: String(member.email ?? identity.email ?? ""), isPlatformAdmin: Boolean(member.is_platform_admin) };
+  return { userId: String(member.user_id), memberId: String(member.member_id), workspaceId: String(member.workspace_id), role: member.role as AuthMember["role"], name: String(member.display_name), email: String(member.email ?? identity.email ?? ""), isPlatformAdmin: Boolean(member.is_platform_admin), accessMode: accessModeAt(member.access_expires_at) };
 }
 
 export async function getPlatformAdmin(request: Request, knownIdentity?: AuthIdentity): Promise<PlatformAdmin | null> {

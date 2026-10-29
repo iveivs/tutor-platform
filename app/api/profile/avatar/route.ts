@@ -7,6 +7,7 @@ import {
   deleteMemberAvatar, getMemberAvatar, hasCurrentContentRulesAcceptance, lessonPhotoStorageConfigured,
   memberAvatarObjectKey, putMemberAvatar,
 } from "@/lib/lesson-materials";
+import { rejectReadOnlyWrite } from "@/lib/workspace-access";
 
 export const runtime = "nodejs";
 const MAX_AVATAR_INPUT_BYTES = 2 * 1024 * 1024;
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
     if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
     const auth = await getAuthMember(request);
     if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
+    const readOnly = rejectReadOnlyWrite(request, auth);
+    if (readOnly) return readOnly;
     if (!lessonPhotoStorageConfigured()) return Response.json({ error: "Хранилище фотографий ещё не настроено" }, { status: 503 });
     const limited = await enforceNodeRateLimit(request, "member_avatar_upload", 5, `${auth.workspaceId}:${auth.memberId}`);
     if (limited) return limited;
@@ -70,6 +73,8 @@ export async function DELETE(request: Request) {
     if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
     const auth = await getAuthMember(request);
     if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
+    const readOnly = rejectReadOnlyWrite(request, auth);
+    if (readOnly) return readOnly;
     const old = await getPostgresPool().query("SELECT avatar_object_key FROM members WHERE id = $1 AND workspace_id = $2", [auth.memberId, auth.workspaceId]);
     const result = await getPostgresPool().query(`UPDATE members SET avatar_object_key = NULL, avatar_updated_at = now(), updated_at = now()
       WHERE id = $1 AND workspace_id = $2`, [auth.memberId, auth.workspaceId]);

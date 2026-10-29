@@ -9,6 +9,7 @@ import { FormField } from "@/components/common/form-field";
 import type { AvailabilityWindow } from "@/components/features/app/types";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
 import { PushNotificationsCard } from "@/components/features/notifications/push-notifications-card";
+import { SubscriptionCard } from "@/components/features/subscription/subscription-card";
 import { useLanguage, type Language } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,8 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
         <Button onClick={() => void save()} disabled={pending || name.trim().length < 2 || name.trim() === profile.name && professionalTitle.trim() === profile.professionalTitle} className="w-full sm:w-auto">{pending ? "Сохраняю…" : "Сохранить изменения"}</Button>
       </div>}
     </section>
+
+    <SubscriptionCard />
 
     <SettingsGroup title="Рабочие часы">
       {weekdays.map((day, index) => {

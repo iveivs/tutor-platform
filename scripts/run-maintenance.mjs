@@ -1,6 +1,7 @@
 import pg from "pg";
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { readVapidConfig, sendWebPush } from "./web-push.mjs";
+import { accessReminderStage, accessReminderText } from "./access-reminders.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -113,6 +114,7 @@ function studentReminderRowsSql(channel) {
       JOIN members owner ON owner.workspace_id = l.workspace_id AND owner.role = 'owner' AND owner.status = 'active'
       LEFT JOIN student_groups class_group ON class_group.id = l.class_id
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
+        AND (w.access_expires_at IS NULL OR w.access_expires_at > now())
       GROUP BY COALESCE(l.group_id, l.id), l.workspace_id, l.student_id, w.timezone, owner.display_name, class_group.name
     )
     SELECT student_id AS member_id, lesson_id,
@@ -144,6 +146,7 @@ async function teacherDigests(client, channel) {
       JOIN members preference_member ON preference_member.id = owner.id
       ${recipientFilter("owner.id")}
       WHERE l.status = 'scheduled' AND l.starts_at > now() AND l.starts_at <= now() + interval '24 hours'
+        AND (w.access_expires_at IS NULL OR w.access_expires_at > now())
         AND ${preferenceCondition}
     ), day_lessons AS (
       SELECT days.workspace_id, days.owner_id, days.timezone, days.lesson_date,
@@ -190,6 +193,45 @@ async function teacherDigests(client, channel) {
   });
 }
 
+// The owner of a workspace whose access ends soon (or has just ended) gets an in-app notification,
+// Telegram and push. workspace_access_reminders makes each stage go out once per end date.
+async function enqueueAccessReminders(client) {
+  const due = await client.query(`SELECT w.id, w.access_grant, w.access_expires_at, w.access_expires_at <= now() AS ended,
+      (w.access_expires_at AT TIME ZONE w.timezone)::date - (now() AT TIME ZONE w.timezone)::date AS days_left,
+      to_char(w.access_expires_at AT TIME ZONE w.timezone, 'DD.MM.YYYY') AS end_label, owner.id AS owner_id
+    FROM workspaces w
+    JOIN members owner ON owner.id = (SELECT m.id FROM members m WHERE m.workspace_id = w.id AND m.role = 'owner' AND m.status = 'active' ORDER BY m.created_at LIMIT 1)
+    WHERE w.access_status = 'active' AND w.access_expires_at IS NOT NULL
+      AND w.access_expires_at > now() - interval '3 days' AND w.access_expires_at <= now() + interval '8 days'`);
+  for (const row of due.rows) {
+    const daysLeft = Number(row.days_left);
+    const stage = accessReminderStage(daysLeft, Boolean(row.ended));
+    if (stage === null) continue;
+    const { title, body } = accessReminderText({ stage, daysLeft, accessGrant: String(row.access_grant), endLabel: String(row.end_label) });
+    await client.query("BEGIN");
+    try {
+      const claimed = await client.query(`INSERT INTO workspace_access_reminders (workspace_id, access_expires_at, stage)
+        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [row.id, row.access_expires_at, stage]);
+      if (claimed.rowCount) {
+        const dedupeKey = `access:${row.id}:${new Date(row.access_expires_at).toISOString()}:${stage}`;
+        await client.query(`INSERT INTO notifications (id, member_id, type, title, body)
+          VALUES (gen_random_uuid()::text, $1, $2, $3, $4)`, [row.owner_id, stage === 0 ? "access_ended" : "access_expiring", title, body]);
+        await client.query(`INSERT INTO telegram_deliveries (member_id, kind, dedupe_key, message)
+          SELECT connection.member_id, 'account', $2, $3 FROM telegram_connections connection
+          WHERE connection.member_id = $1 AND connection.disabled_at IS NULL
+          ON CONFLICT (dedupe_key) DO NOTHING`, [row.owner_id, dedupeKey, `${title}\n${body}`]);
+        if (vapid) await client.query(`INSERT INTO push_deliveries (member_id, kind, dedupe_key, title, body)
+          SELECT $1, 'account', $2, $3, $4 WHERE EXISTS (SELECT 1 FROM push_subscriptions subscription WHERE subscription.member_id = $1)
+          ON CONFLICT (dedupe_key) DO NOTHING`, [row.owner_id, dedupeKey, title, body]);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
 async function enqueueTelegramReminders(client) {
   await client.query(`UPDATE telegram_deliveries delivery
     SET status = 'cancelled', updated_at = now()
@@ -226,6 +268,13 @@ async function enqueuePushReminders(client) {
   }
 }
 
+
+// A read-only workspace (paid access ended) gets no external messages except its access notices.
+const cancelReadOnlySql = (table) => `UPDATE ${table} delivery SET status = 'cancelled', last_error = 'read_only', updated_at = now()
+  FROM members recipient JOIN workspaces workspace ON workspace.id = recipient.workspace_id
+  WHERE delivery.member_id = recipient.id AND delivery.status = 'pending' AND delivery.kind <> 'account'
+    AND workspace.access_expires_at IS NOT NULL AND workspace.access_expires_at <= now()`;
+
 async function sendTelegram(chatId, message) {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const relayBaseUrl = process.env.TELEGRAM_API_BASE_URL?.trim().replace(/\/+$/, "");
@@ -254,6 +303,7 @@ async function deliverTelegramMessages(client) {
   const relayed = Boolean(process.env.TELEGRAM_API_BASE_URL?.trim() && process.env.TELEGRAM_RELAY_SECRET?.trim());
   if (!direct && !relayed) return;
   await client.query("UPDATE telegram_deliveries SET status = 'pending', updated_at = now() WHERE status = 'sending' AND updated_at < now() - interval '10 minutes'");
+  await client.query(cancelReadOnlySql("telegram_deliveries"));
   for (let index = 0; index < 50; index += 1) {
     const claimed = await client.query(`WITH due AS (
         SELECT delivery.id FROM telegram_deliveries delivery
@@ -295,6 +345,7 @@ const englishPushText = {
   new_request: "New student request",
   new_message: "New message",
   new_material: "New lesson material",
+  account: "Your Tyuttori access",
   test: "Test notification",
 };
 
@@ -316,7 +367,7 @@ function pushMessage(delivery, language, badge) {
   return {
     title: english ? (teacher && delivery.kind === "lesson_reminder" ? "Upcoming lessons" : englishPushText[delivery.kind] ?? "Tyuttori") : String(delivery.title),
     body: english ? (isTest ? "Notifications on this device are working." : "Open Tyuttori to see the details.") : String(delivery.body),
-    url: !teacher || isTest ? "/" : delivery.kind === "lesson_reminder" ? "/?view=today" : "/?view=activity",
+    url: !teacher || isTest ? "/" : delivery.kind === "lesson_reminder" ? "/?view=today" : delivery.kind === "account" ? "/?view=settings" : "/?view=activity",
     badge,
     tag: delivery.kind === "new_message" ? "new_message" : `delivery-${delivery.id}`,
   };
@@ -325,6 +376,7 @@ function pushMessage(delivery, language, badge) {
 async function deliverPushMessages(client) {
   if (!vapid) return;
   await client.query("UPDATE push_deliveries SET status = 'pending', updated_at = now() WHERE status = 'sending' AND updated_at < now() - interval '10 minutes'");
+  await client.query(cancelReadOnlySql("push_deliveries"));
   for (let index = 0; index < 100; index += 1) {
     const claimed = await client.query(`WITH due AS (
         SELECT delivery.id FROM push_deliveries delivery
@@ -494,6 +546,7 @@ async function runOnce() {
     const workspaces = await client.query("SELECT id FROM workspaces ORDER BY id");
     const now = new Date();
     for (const workspace of workspaces.rows) await settleWorkspace(client, String(workspace.id), now);
+    await enqueueAccessReminders(client);
     await enqueueTelegramReminders(client);
     await deliverTelegramMessages(client);
     await enqueuePushReminders(client);

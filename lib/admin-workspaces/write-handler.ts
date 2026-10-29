@@ -4,6 +4,7 @@ import { assertSameOrigin, getAuthConfig, randomToken, sha256 } from "@/lib/auth
 import { adminActionSchema, requirePlatformAdmin } from "@/lib/admin-workspaces/shared";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { readLimitedJson } from "@/lib/request-security";
+import { updateSubscription } from "@/lib/admin-workspaces/subscription-actions";
 
 export async function updateAdminWorkspaces(request: Request) {
   if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
@@ -58,6 +59,10 @@ export async function updateAdminWorkspaces(request: Request) {
         .bind(crypto.randomUUID(), auth.admin.userId, parsed.data.workspaceId, parsed.data.accessStatus === "blocked" ? "workspace_blocked" : "workspace_unblocked", workspace.access_status, parsed.data.accessStatus, now),
     ]);
     return Response.json({ ok: true });
+  }
+
+  if (parsed.data.action === "setAccessTerms" || parsed.data.action === "addSubscriptionPayment" || parsed.data.action === "refundSubscriptionPayment" || parsed.data.action === "setAdminNote") {
+    return updateSubscription(parsed.data, auth.admin.userId);
   }
 
   if (parsed.data.workspaceId === auth.member?.workspaceId) return Response.json({ error: "Нельзя удалить собственный кабинет администратора" }, { status: 400 });
