@@ -127,6 +127,13 @@
       "when": 1793300000000,
       "tag": "0017_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793310000000,
+      "tag": "0018_unlimited_access",
+      "breakpoints": true
     }
   ]
 }

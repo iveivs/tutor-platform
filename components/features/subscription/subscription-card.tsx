@@ -26,7 +26,7 @@ export function SubscriptionCard() {
   const readOnly = accessMode === "read_only";
   const left = accessDaysLeft(accessMode, accessExpiresAt);
   const limited = Boolean(accessExpiresAt);
-  const chip = readOnly ? "Только просмотр" : accessGrant === "trial" ? "Пробный период" : accessGrant === "paid" ? "Платная подписка" : "Бесплатный доступ";
+  const chip = readOnly ? "Только просмотр" : accessGrant === "unlimited" ? "Бессрочный тариф" : accessGrant === "trial" ? "Пробный период" : accessGrant === "paid" ? "Платная подписка" : "Бесплатный доступ";
   const headline = readOnly ? "Доступ закончился" : left === null ? "Без ограничения по сроку" : left === 0 ? "Последний день" : `Осталось ${daysLabel(left)}`;
   const detail = readOnly && accessExpiresAt ? `Кабинет в режиме просмотра с ${accessDate(accessExpiresAt + 1)}` : accessExpiresAt ? `Полный доступ до ${accessDate(accessExpiresAt)} включительно` : "Все функции доступны";
   const trialUsed = accessGrant === "trial" && left !== null ? Math.min(TRIAL_DAYS, Math.max(0, TRIAL_DAYS - left)) : null;

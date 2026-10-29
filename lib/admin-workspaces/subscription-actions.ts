@@ -44,6 +44,7 @@ export async function updateSubscription(action: SubscriptionAction, adminUserId
     if (action.action === "setAccessTerms") {
       // The platform admin's own workspace must never turn read-only.
       if (workspace.is_admin && action.accessUntil) { await client.query("ROLLBACK"); return Response.json({ error: "Для кабинета администратора срок доступа не ставится" }, { status: 400 }); }
+      if (action.accessGrant === "unlimited" && action.accessUntil) { await client.query("ROLLBACK"); return Response.json({ error: "У бессрочного тарифа нет даты окончания" }, { status: 400 }); }
       const expiresAt = action.accessUntil ? endOfMoscowDate(action.accessUntil) : null;
       await client.query("UPDATE workspaces SET access_grant = $1, access_expires_at = $2, subscription_status = $3, updated_at = now() WHERE id = $4", [action.accessGrant, expiresAt, statusForGrant(action.accessGrant), workspace.id]);
       await client.query(`INSERT INTO platform_audit_events (id, actor_user_id, workspace_id, action, previous_value, new_value)
@@ -52,6 +53,8 @@ export async function updateSubscription(action: SubscriptionAction, adminUserId
       return Response.json({ ok: true, accessExpiresAt: expiresAt?.getTime() ?? null });
     }
 
+    // «Бессрочный» is not sold: a payment would silently turn it into a paid subscription with an end date.
+    if (workspace.access_grant === "unlimited") { await client.query("ROLLBACK"); return Response.json({ error: "Бессрочный тариф не оплачивается. Сначала смените тип доступа" }, { status: 400 }); }
     const { from, until } = extendAccess(previousExpiresAt, action.months);
     const paymentId = randomUUID();
     await client.query(`INSERT INTO subscription_payments (id, workspace_id, amount_cents, months, paid_on, method, receipt_ref, access_from, access_until, created_by_user_id)

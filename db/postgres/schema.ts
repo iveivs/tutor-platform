@@ -34,7 +34,8 @@ export const workspaces = pgTable("workspaces", {
 }, (table) => [
   check("workspaces_subscription_status_check", sql`${table.subscriptionStatus} in ('trial', 'active', 'past_due', 'cancelled')`),
   check("workspaces_access_status_check", sql`${table.accessStatus} in ('active', 'blocked')`),
-  check("workspaces_access_grant_check", sql`${table.accessGrant} in ('legacy', 'complimentary', 'trial', 'paid')`),
+  check("workspaces_access_grant_check", sql`${table.accessGrant} in ('legacy', 'complimentary', 'trial', 'paid', 'unlimited')`),
+  check("workspaces_unlimited_no_end_check", sql`${table.accessGrant} <> 'unlimited' or ${table.accessExpiresAt} is null`),
   check("workspaces_admin_note_check", sql`${table.adminNote} is null or length(${table.adminNote}) <= 2000`),
 ]);
 
@@ -135,7 +136,7 @@ export const teacherInvitations = pgTable("teacher_invitations", {
   ...timestamps(),
 }, (table) => [
   check("teacher_invitations_status_check", sql`${table.status} in ('pending', 'accepted', 'revoked')`),
-  check("teacher_invitations_access_grant_check", sql`${table.accessGrant} in ('complimentary', 'trial', 'paid')`),
+  check("teacher_invitations_access_grant_check", sql`${table.accessGrant} in ('complimentary', 'trial', 'paid', 'unlimited')`),
   uniqueIndex("teacher_invitations_token_hash_unique").on(table.tokenHash),
   uniqueIndex("teacher_invitations_pending_email_unique").on(sql`lower(${table.email})`).where(sql`${table.status} = 'pending'`),
   index("idx_teacher_invitations_status_expires").on(table.status, table.expiresAt),

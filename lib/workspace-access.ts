@@ -3,7 +3,8 @@
 // means access without a time limit (free workspaces, the platform admin's own one).
 
 export type WorkspaceAccessMode = "full" | "read_only";
-export type AccessGrant = "legacy" | "complimentary" | "trial" | "paid";
+// unlimited = «Бессрочный»: given by the admin by hand (owner, testers), never sold, never ends.
+export type AccessGrant = "legacy" | "complimentary" | "trial" | "paid" | "unlimited";
 
 export const TRIAL_DAYS = 30;
 // The teacher sees an "access ends soon" banner this many days ahead (reminders: scripts/access-reminders.mjs).

@@ -3,7 +3,7 @@ import { accessModeAt, daysLeft, moscowDate } from "@/lib/workspace-access";
 
 export type AdminWorkspace = {
   id: string; name: string; ownerName: string; ownerTitle: string; ownerEmail: string; timezone: string; subscriptionStatus: string;
-  accessStatus: "active" | "blocked"; accessGrant: "legacy" | "complimentary" | "trial" | "paid";
+  accessStatus: "active" | "blocked"; accessGrant: "legacy" | "complimentary" | "trial" | "paid" | "unlimited";
   accessExpiresAt: number | null; adminNote: string; studentCount: number; groupCount: number; storageBytes: number;
   createdAt: number; lastActivityAt: number | null;
 };
@@ -11,11 +11,12 @@ export type AdminPayment = { id: string; workspaceId: string; amountCents: numbe
 export type AdminAuditEvent = { id: string; workspaceId: string; workspaceName: string; actorName: string; action: string; previousValue: string | null; newValue: string | null; createdAt: number };
 export type TeacherInvitation = { id: string; name: string; email: string; professionalTitle: string; accessGrant: string; expiresAt: number; createdAt: number };
 
-export type AccessState = "blocked" | "read_only" | "ending" | "trial" | "paid" | "free";
+export type AccessState = "blocked" | "read_only" | "ending" | "trial" | "paid" | "free" | "unlimited";
 
 // Ending = the last week of a limited access; it is shown before the access type.
 export function accessState(workspace: AdminWorkspace, now = Date.now()): AccessState {
   if (workspace.accessStatus === "blocked") return "blocked";
+  if (workspace.accessGrant === "unlimited") return "unlimited";
   if (workspace.accessExpiresAt && accessModeAt(workspace.accessExpiresAt, now) === "read_only") return "read_only";
   if (workspace.accessExpiresAt && daysLeft(workspace.accessExpiresAt, now) <= 7) return "ending";
   if (workspace.accessGrant === "trial") return "trial";
@@ -23,7 +24,7 @@ export function accessState(workspace: AdminWorkspace, now = Date.now()): Access
   return "free";
 }
 
-export const grantLabel: Record<AdminWorkspace["accessGrant"], string> = { trial: "Пробный период", paid: "Платная подписка", complimentary: "Бесплатно", legacy: "Бесплатно (ранний)" };
+export const grantLabel: Record<AdminWorkspace["accessGrant"], string> = { unlimited: "Бессрочный", trial: "Пробный период", paid: "Платная подписка", complimentary: "Бесплатно", legacy: "Бесплатно (ранний)" };
 export const methodLabel: Record<AdminPayment["method"], string> = { transfer: "Перевод", cash: "Наличные", other: "Другое" };
 
 export const stateChip: Record<AccessState, { label: string; className: string }> = {
@@ -33,6 +34,7 @@ export const stateChip: Record<AccessState, { label: string; className: string }
   trial: { label: "Пробный", className: "bg-brand-soft text-brand-ink" },
   paid: { label: "Платная", className: "bg-success-soft text-success-ink" },
   free: { label: "Бесплатно", className: "bg-surface-subtle text-ink-muted ring-1 ring-line" },
+  unlimited: { label: "Бессрочный", className: "bg-brand-soft-strong text-brand-ink-strong" },
 };
 
 export const daysLabel = (days: number) => russianPlural(days, "день", "дня", "дней");

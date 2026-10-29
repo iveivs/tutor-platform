@@ -63,16 +63,16 @@ function TermsForm({ workspace, isOwnWorkspace, onPost, onDone }: { workspace: A
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setPending(true);
-    const ok = await onPost({ action: "setAccessTerms", workspaceId: workspace.id, accessGrant: grant, accessUntil: limited ? until : null }, "Доступ изменён");
+    const ok = await onPost({ action: "setAccessTerms", workspaceId: workspace.id, accessGrant: grant, accessUntil: limited && grant !== "unlimited" ? until : null }, "Доступ изменён");
     setPending(false);
     if (ok) onDone();
   };
   return <form onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-coral bg-surface p-4">
-    <FormField label="Тип доступа"><Select value={grant} onValueChange={(value) => setGrant(value as AdminWorkspace["accessGrant"])}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{(["trial", "paid", "complimentary", "legacy"] as const).map((value) => <SelectItem key={value} value={value}>{grantLabel[value]}</SelectItem>)}</SelectContent></Select></FormField>
-    <label className="flex items-center gap-2.5 text-[15px]"><input type="checkbox" className="size-5 accent-[var(--color-brand-solid)]" checked={limited} disabled={isOwnWorkspace} onChange={(event) => setLimited(event.target.checked)} />Ограничить по сроку</label>
-    {limited && <FormField label="Доступ до (включительно)"><Input type="date" value={until} onChange={(event) => setUntil(event.target.value)} className="h-11 rounded-xl" required /></FormField>}
-    <p className="text-[13px] text-ink-muted">{limited ? "После этой даты кабинет перейдёт в режим просмотра. За 7, 3 и 1 день преподаватель получит напоминание." : "Без срока кабинет работает без ограничений, пока вы не поставите дату."}</p>
-    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={pending || limited && !until} className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover">{pending ? "Сохраняю…" : "Сохранить"}</Button><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onDone}>Отмена</Button></div>
+    <FormField label="Тип доступа"><Select value={grant} onValueChange={(value) => setGrant(value as AdminWorkspace["accessGrant"])}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{(["unlimited", "trial", "paid", "complimentary", "legacy"] as const).map((value) => <SelectItem key={value} value={value}>{grantLabel[value]}</SelectItem>)}</SelectContent></Select></FormField>
+    {grant === "unlimited" ? <p className="rounded-xl bg-brand-soft px-3 py-2.5 text-[13px] text-brand-ink">Бессрочный тариф: без даты окончания, назначается только вручную и не продаётся. Напоминаний о сроке не будет.</p> : <label className="flex items-center gap-2.5 text-[15px]"><input type="checkbox" className="size-5 accent-[var(--color-brand-solid)]" checked={limited} disabled={isOwnWorkspace} onChange={(event) => setLimited(event.target.checked)} />Ограничить по сроку</label>}
+    {limited && grant !== "unlimited" && <FormField label="Доступ до (включительно)"><Input type="date" value={until} onChange={(event) => setUntil(event.target.value)} className="h-11 rounded-xl" required /></FormField>}
+    {grant !== "unlimited" && <p className="text-[13px] text-ink-muted">{limited ? "После этой даты кабинет перейдёт в режим просмотра. За 7, 3 и 1 день преподаватель получит напоминание." : "Без срока кабинет работает без ограничений, пока вы не поставите дату."}</p>}
+    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={pending || limited && grant !== "unlimited" && !until} className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover">{pending ? "Сохраняю…" : "Сохранить"}</Button><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onDone}>Отмена</Button></div>
   </form>;
 }
 
@@ -114,7 +114,7 @@ export function WorkspaceDialog({ workspace, payments, audit, priceCents, isOwnW
           <div className="flex items-center justify-between gap-3"><span className="text-[13px] font-bold uppercase tracking-wide text-ink-muted">Доступ</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${stateChip[state].className}`}>{chipText(workspace, state)}</span></div>
           <strong className="text-lg">{headline}</strong>
           {!form && <div className="grid grid-cols-2 gap-2">
-            <Button type="button" className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover" disabled={workspace.accessStatus === "blocked"} onClick={() => setForm("payment")}><CreditCard />Внести платёж</Button>
+            <Button type="button" className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover" disabled={workspace.accessStatus === "blocked" || workspace.accessGrant === "unlimited"} onClick={() => setForm("payment")}><CreditCard />Внести платёж</Button>
             <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={() => setForm("terms")}><Pencil />Изменить доступ</Button>
           </div>}
         </section>
