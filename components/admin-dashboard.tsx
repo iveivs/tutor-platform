@@ -11,6 +11,7 @@ import {
   type AccessState, type AdminAuditEvent, type AdminPayment, type AdminWorkspace, type TeacherInvitation,
 } from "@/components/features/admin/admin-model";
 import { WorkspaceDialog } from "@/components/features/admin/workspace-dialog";
+import { PlatformStats } from "@/components/features/admin/platform-stats";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -42,6 +43,7 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<"workspaces" | "stats">("workspaces");
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -122,6 +124,9 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
     <div className="mx-auto max-w-6xl">
       <header className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><BrandIcon className="size-12" /><div><p className="flex items-center gap-2 text-sm font-semibold text-brand-text"><ShieldCheck className="size-4" />Администрирование</p><h1 className="text-3xl font-bold">Кабинеты преподавателей</h1></div></div><div className="flex flex-wrap gap-2"><CreateTeacherInvitation onCreated={() => void load()} />{standalone ? <Button variant="outline" onClick={onLogout}><LogOut />Выйти</Button> : <Button asChild variant="outline"><Link href="/"><ArrowLeft />Вернуться в кабинет</Link></Button>}</div></header>
 
+      <div className="mb-6"><FilterChips label="Раздел" items={[{ value: "workspaces", label: "Кабинеты" }, { value: "stats", label: "Статистика" }] as const} value={tab} onChange={setTab} /></div>
+      {tab === "stats" ? <PlatformStats /> : <>
+
       {!loading && !error && <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         <SummaryTile label="Платят" value={paidCount} hint={monthIncome ? `${rubles(monthIncome)} за этот месяц` : "оплат в этом месяце нет"} />
         <SummaryTile label="Пробный период" value={trialCount} hint="30 дней без оплаты" />
@@ -157,6 +162,7 @@ export function AdminDashboard({ standalone = false, onLogout }: { standalone?: 
       </>}
 
       {!loading && !error && <section className="card mt-8 overflow-hidden"><div className="border-b p-5"><h2 className="text-xl font-bold">Журнал административных действий</h2><p className="mt-1 text-sm text-ink-muted">Доступ, платежи и блокировки, последние 300 действий</p></div><div className="divide-y">{audit.slice(0, 50).map((event) => <article key={event.id} className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm"><span><strong data-no-translate>{event.workspaceName}</strong>{` · ${auditText(event)}`}</span><time className="text-ink-muted">{formatDateTime(event.createdAt)}</time></article>)}{audit.length === 0 && <p className="p-8 text-center text-ink-muted">Действий пока нет</p>}</div></section>}
+      </>}
     </div>
     {opened && <WorkspaceDialog key={opened.id} workspace={opened} payments={payments} audit={audit} priceCents={priceCents} isOwnWorkspace={opened.id === currentWorkspaceId}
       onOpenChange={(open) => { if (!open) setOpenId(null); }} onPost={post} onToggleBlock={(workspace) => void changeStatus(workspace)}

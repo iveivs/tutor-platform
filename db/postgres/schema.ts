@@ -6,6 +6,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   smallint,
@@ -782,3 +783,23 @@ export const jobRuns = pgTable("job_runs", {
   check("job_runs_status_check", sql`${table.status} in ('running', 'succeeded', 'failed', 'skipped')`),
   index("idx_job_runs_name_started").on(table.jobName, table.startedAt),
 ]);
+
+// Anonymized platform statistics (numbers only): one row per Moscow day, kept forever.
+export const platformDailyStats = pgTable("platform_daily_stats", {
+  day: date("day").primaryKey(),
+  data: jsonb("data").notNull(),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
+});
+
+// Host load once an hour, kept 90 days; the daily row keeps its average and peak.
+export const platformHourlyLoad = pgTable("platform_hourly_load", {
+  hour: instant("hour").primaryKey(),
+  data: jsonb("data").notNull(),
+});
+
+// Platform-wide settings entered by the admin, e.g. cost rates for the economics estimate.
+export const platformSettings = pgTable("platform_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
+});

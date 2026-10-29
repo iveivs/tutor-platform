@@ -148,6 +148,13 @@
       "when": 1793330000000,
       "tag": "0020_member_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793340000000,
+      "tag": "0021_platform_stats",
+      "breakpoints": true
     }
   ]
 }

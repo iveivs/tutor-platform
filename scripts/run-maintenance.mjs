@@ -2,6 +2,7 @@ import pg from "pg";
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { readVapidConfig, sendWebPush } from "./web-push.mjs";
 import { accessReminderStage, accessReminderText } from "./access-reminders.mjs";
+import { collectPlatformStats } from "./platform-stats.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -551,6 +552,7 @@ async function runOnce() {
     await deliverTelegramMessages(client);
     await enqueuePushReminders(client);
     await runPushDeliveries();
+    await collectPlatformStats(client).catch((error) => console.error(JSON.stringify({ event: "platform_stats_failed", reason: error instanceof Error ? error.message.slice(0, 200) : "unknown" })));
     const photoCleanup = await deleteExpiredLessonPhotos(client);
     const materialCleanup = await deleteTeacherMaterials(client);
     await client.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days' OR revoked_at < now() - interval '7 days'");
