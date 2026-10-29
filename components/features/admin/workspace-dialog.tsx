@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState, type ReactNode } from "react";
-import { Ban, CheckCircle2, CreditCard, Pencil } from "lucide-react";
+import { Ban, CheckCircle2, CreditCard, Pencil, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { FormField } from "@/components/common/form-field";
 import { Button } from "@/components/ui/button";
@@ -55,24 +55,26 @@ function PaymentForm({ workspace, priceCents, onPost, onDone }: { workspace: Adm
   </form>;
 }
 
-function TermsForm({ workspace, isOwnWorkspace, onPost, onDone }: { workspace: AdminWorkspace; isOwnWorkspace: boolean; onPost: AdminPost; onDone: () => void }) {
-  const [grant, setGrant] = useState<AdminWorkspace["accessGrant"]>(workspace.accessGrant);
-  const [limited, setLimited] = useState(Boolean(workspace.accessExpiresAt));
-  const [until, setUntil] = useState(workspace.accessExpiresAt ? isoOf(workspace.accessExpiresAt) : todayIso());
+// cancelUnlimited: ends the «Бессрочный» plan; by default free access for 7 more days, then view-only.
+function TermsForm({ workspace, isOwnWorkspace, cancelUnlimited = false, onPost, onDone }: { workspace: AdminWorkspace; isOwnWorkspace: boolean; cancelUnlimited?: boolean; onPost: AdminPost; onDone: () => void }) {
+  const [grant, setGrant] = useState<AdminWorkspace["accessGrant"]>(cancelUnlimited ? "complimentary" : workspace.accessGrant);
+  const [limited, setLimited] = useState(cancelUnlimited || Boolean(workspace.accessExpiresAt));
+  const [until, setUntil] = useState(() => workspace.accessExpiresAt ? isoOf(workspace.accessExpiresAt) : isoOf(Date.now() + (cancelUnlimited ? 7 * 86400000 : 0)));
   const [pending, setPending] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setPending(true);
-    const ok = await onPost({ action: "setAccessTerms", workspaceId: workspace.id, accessGrant: grant, accessUntil: limited && grant !== "unlimited" ? until : null }, "Доступ изменён");
+    const ok = await onPost({ action: "setAccessTerms", workspaceId: workspace.id, accessGrant: grant, accessUntil: limited && grant !== "unlimited" ? until : null }, cancelUnlimited ? "Бессрочный тариф отменён" : "Доступ изменён");
     setPending(false);
     if (ok) onDone();
   };
   return <form onSubmit={submit} className="flex flex-col gap-3 rounded-2xl border border-coral bg-surface p-4">
-    <FormField label="Тип доступа"><Select value={grant} onValueChange={(value) => setGrant(value as AdminWorkspace["accessGrant"])}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{(["unlimited", "trial", "paid", "complimentary", "legacy"] as const).map((value) => <SelectItem key={value} value={value}>{grantLabel[value]}</SelectItem>)}</SelectContent></Select></FormField>
+    {cancelUnlimited && <p className="text-[13px] text-ink-muted">Отмена бессрочного тарифа: выберите, какой доступ будет дальше. С датой окончания после неё кабинет перейдёт в режим просмотра, а преподаватель получит напоминания за 7, 3 и 1 день.</p>}
+    <FormField label={cancelUnlimited ? "Новый тип доступа" : "Тип доступа"}><Select value={grant} onValueChange={(value) => setGrant(value as AdminWorkspace["accessGrant"])}><SelectTrigger className="h-11 w-full rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{(cancelUnlimited ? ["complimentary", "trial", "paid", "legacy"] as const : ["unlimited", "trial", "paid", "complimentary", "legacy"] as const).map((value) => <SelectItem key={value} value={value}>{grantLabel[value]}</SelectItem>)}</SelectContent></Select></FormField>
     {grant === "unlimited" ? <p className="rounded-xl bg-brand-soft px-3 py-2.5 text-[13px] text-brand-ink">Бессрочный тариф: без даты окончания, назначается только вручную и не продаётся. Напоминаний о сроке не будет.</p> : <label className="flex items-center gap-2.5 text-[15px]"><input type="checkbox" className="size-5 accent-[var(--color-brand-solid)]" checked={limited} disabled={isOwnWorkspace} onChange={(event) => setLimited(event.target.checked)} />Ограничить по сроку</label>}
     {limited && grant !== "unlimited" && <FormField label="Доступ до (включительно)"><Input type="date" value={until} onChange={(event) => setUntil(event.target.value)} className="h-11 rounded-xl" required /></FormField>}
     {grant !== "unlimited" && <p className="text-[13px] text-ink-muted">{limited ? "После этой даты кабинет перейдёт в режим просмотра. За 7, 3 и 1 день преподаватель получит напоминание." : "Без срока кабинет работает без ограничений, пока вы не поставите дату."}</p>}
-    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={pending || limited && grant !== "unlimited" && !until} className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover">{pending ? "Сохраняю…" : "Сохранить"}</Button><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onDone}>Отмена</Button></div>
+    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={pending || limited && grant !== "unlimited" && !until} className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover">{pending ? "Сохраняю…" : cancelUnlimited ? "Отменить бессрочный тариф" : "Сохранить"}</Button><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onDone}>{cancelUnlimited ? "Не отменять" : "Отмена"}</Button></div>
   </form>;
 }
 
@@ -83,7 +85,7 @@ type WorkspaceDialogProps = {
 
 // Admin card of one teacher workspace: access, manual payments, journal, private note, blocking.
 export function WorkspaceDialog({ workspace, payments, audit, priceCents, isOwnWorkspace, onOpenChange, onPost, onToggleBlock, deleteControl }: WorkspaceDialogProps) {
-  const [form, setForm] = useState<"payment" | "terms" | null>(null);
+  const [form, setForm] = useState<"payment" | "terms" | "cancel" | null>(null);
   const [note, setNote] = useState(workspace?.adminNote ?? "");
   const [notePending, setNotePending] = useState(false);
   if (!workspace) return null;
@@ -114,12 +116,15 @@ export function WorkspaceDialog({ workspace, payments, audit, priceCents, isOwnW
           <div className="flex items-center justify-between gap-3"><span className="text-[13px] font-bold uppercase tracking-wide text-ink-muted">Доступ</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${stateChip[state].className}`}>{chipText(workspace, state)}</span></div>
           <strong className="text-lg">{headline}</strong>
           {!form && <div className="grid grid-cols-2 gap-2">
-            <Button type="button" className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover" disabled={workspace.accessStatus === "blocked" || workspace.accessGrant === "unlimited"} onClick={() => setForm("payment")}><CreditCard />Внести платёж</Button>
+            {workspace.accessGrant === "unlimited"
+              ? <Button type="button" variant="outline" className="h-11 rounded-xl text-danger-text hover:bg-danger-soft hover:text-danger-ink" onClick={() => setForm("cancel")}><XCircle />Отменить бессрочный</Button>
+              : <Button type="button" className="h-11 rounded-xl bg-brand-solid hover:bg-brand-solid-hover" disabled={workspace.accessStatus === "blocked"} onClick={() => setForm("payment")}><CreditCard />Внести платёж</Button>}
             <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={() => setForm("terms")}><Pencil />Изменить доступ</Button>
           </div>}
         </section>
         {form === "payment" && <PaymentForm workspace={workspace} priceCents={priceCents} onPost={onPost} onDone={() => setForm(null)} />}
         {form === "terms" && <TermsForm workspace={workspace} isOwnWorkspace={isOwnWorkspace} onPost={onPost} onDone={() => setForm(null)} />}
+        {form === "cancel" && <TermsForm workspace={workspace} isOwnWorkspace={isOwnWorkspace} cancelUnlimited onPost={onPost} onDone={() => setForm(null)} />}
 
         <div className="grid grid-cols-2 gap-2.5">
           <Tile label="Учеников" value={workspace.groupCount ? `${workspace.studentCount} · групп: ${workspace.groupCount}` : String(workspace.studentCount)} />
