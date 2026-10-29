@@ -5,6 +5,7 @@ import { assertSameOrigin, getAuthMember } from "@/lib/auth";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { readLimitedJson } from "@/lib/request-security";
 import { rejectReadOnlyWrite } from "@/lib/workspace-access";
+import { guardianFromRow, speakerName } from "@/lib/guardian";
 
 export const runtime = "nodejs";
 
@@ -72,7 +73,8 @@ export async function GET(request: Request) {
   const pool = getPostgresPool();
   const [messages, reads, members] = await Promise.all([
     pool.query(`SELECT * FROM (SELECT message.id, message.kind, message.body, message.pinned, message.created_at, message.deleted_at,
-        message.author_member_id, author.display_name AS author_name, author.role AS author_role
+        message.author_member_id, author.display_name AS author_name, author.role AS author_role,
+        author.guardian_name, author.guardian_relation, author.guardian_relation_other
       FROM group_chat_messages message JOIN members author ON author.id = message.author_member_id
       WHERE message.group_id = $1 AND (message.kind = 'announcement' OR $2)
       ORDER BY message.created_at DESC LIMIT $3) recent ORDER BY created_at`, [group.id, group.membersVisible, HISTORY_LIMIT * 2]),
@@ -96,7 +98,7 @@ export async function GET(request: Request) {
         id: String(row.id), kind: String(row.kind) as Kind, pinned: Boolean(row.pinned), createdAt, deleted,
         body: deleted ? "" : String(row.body),
         mine: row.author_member_id === auth.memberId,
-        author: { id: String(row.author_member_id), name: String(row.author_name), teacher: row.author_role !== "student" },
+        author: { id: String(row.author_member_id), name: row.author_role === "student" ? speakerName(String(row.author_name), guardianFromRow(row)) : String(row.author_name), teacher: row.author_role !== "student" },
         // Only the teacher sees how many members have read an announcement.
         readCount: teacher && row.kind === "announcement" ? memberReads.filter((value) => value >= createdAt).length : undefined,
       };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { guardianSchema } from "../guardian";
 
 const id = z.string().min(1).max(128);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -20,6 +21,7 @@ export const actionBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("createStudent"), name: z.string().trim().min(1).max(80), email, floating: z.boolean(), groupId: id.optional(), weekday: z.number().int().min(1).max(7).optional(), time: time.optional(), durationMinutes: duration }).strict(),
   z.object({ action: z.literal("updateStudent"), studentId: id, name: z.string().trim().min(1).max(80), email, canViewAvailability: z.boolean() }).strict(),
   z.object({ action: z.literal("updateStudentPrices"), studentId: id, lessonPriceCents: price, doubleLessonPriceCents: price, trialLessonPriceCents: price, priceCurrency: z.string().trim().max(12).nullable() }).strict(),
+  z.object({ action: z.literal("updateStudentGuardian"), studentId: id, guardian: guardianSchema.nullable() }).strict(),
   z.object({ action: z.literal("convertTrialContact"), studentId: id }).strict(),
   z.object({ action: z.literal("createGroup"), name: groupName, membersVisible: z.boolean(), memberIds, slots: z.array(groupSlot).max(14) }).strict(),
   z.object({ action: z.literal("updateGroup"), groupId: id, name: groupName, membersVisible: z.boolean() }).strict(),

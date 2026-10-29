@@ -25,6 +25,7 @@
 - Групповые занятия: `lib/app-data/write-group-actions.ts` (команды), `lib/group-sessions.ts` (склейка строк участников в одно занятие), `components/features/groups/` (экраны). Занятие группы — строка `lessons` на каждого участника с общим `class_id`; правила в разделе «Групповые занятия» `docs/BACKEND_RULES.md`.
 - `lib/lesson-content/` и `lib/teacher-material-library/` — материалы урока и библиотека преподавателя.
 - `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
+- Кабинет ведёт взрослый: `lib/guardian.ts` (список родства, формат имени в чатах), `components/features/students/guardian-dialog.tsx` (карточка ученика и поля в приглашении).
 - Чат группы: `app/api/group-chat/route.ts` (правила доступа и запись), `components/features/group-chat/` (окно с вкладками «Объявления» и «Обсуждение», счётчики непрочитанного). Правила — раздел «Чат группы» в `docs/BACKEND_RULES.md`.
 - Подписки: `lib/workspace-access.ts` (срок, режим просмотра, `rejectReadOnlyWrite` — обязателен в каждой новой изменяющей точке API кабинета), `app/api/subscription`, `lib/admin-workspaces/subscription-actions.ts`, `components/features/subscription/`, `components/features/admin/`, напоминания `scripts/access-reminders.mjs`. Правила — раздел «Подписки и доступ кабинета» в `docs/BACKEND_RULES.md`.
 - `app/globals.css` — светлая и графитовая тёмная темы, включая календарь.

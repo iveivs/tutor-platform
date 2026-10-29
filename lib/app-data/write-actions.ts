@@ -24,6 +24,7 @@ export async function executeAppDataAction(context: WriteActionContext): Promise
     case "createStudent":
     case "updateStudent":
     case "updateStudentPrices":
+    case "updateStudentGuardian":
     case "convertTrialContact":
     case "archiveStudent":
     case "restoreStudent":

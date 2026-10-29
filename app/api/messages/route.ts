@@ -4,6 +4,7 @@ import { getAuthMember, assertSameOrigin } from "@/lib/auth";
 import { getPostgresPool } from "@/db/postgres";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
 import { readLimitedJson } from "@/lib/request-security";
+import { guardianFromRow, speakerName } from "@/lib/guardian";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const auth = await getAuthMember(request);
     if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
     const [peers, messages] = await Promise.all([
-      getPostgresPool().query(`SELECT peer.id, peer.display_name, peer.role, peer.avatar_color,
+      getPostgresPool().query(`SELECT peer.id, peer.display_name, peer.role, peer.avatar_color, peer.guardian_name, peer.guardian_relation, peer.guardian_relation_other,
           peer.avatar_object_key IS NOT NULL AS has_avatar, peer.avatar_updated_at,
           COALESCE(pref.avatar_color, peer.avatar_color) AS effective_avatar_color,
           (SELECT count(*)::int FROM direct_messages unread
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
     return Response.json({
       currentMemberId: auth.memberId,
       peers: peers.rows.map((row) => ({
-        id: String(row.id), name: String(row.display_name), role: String(row.role),
+        id: String(row.id), name: speakerName(String(row.display_name), guardianFromRow(row)), role: String(row.role),
         initials: initials(String(row.display_name)), avatarColor: String(row.effective_avatar_color),
         avatarUrl: row.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(String(row.id))}&v=${new Date(row.avatar_updated_at).getTime()}` : null,
         unreadCount: Number(row.unread_count), lastMessage: row.last_message ? String(row.last_message) : null,

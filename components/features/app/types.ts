@@ -1,3 +1,4 @@
+import type { Guardian } from "@/lib/guardian";
 export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "stats" | "settings" | "group";
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 export type TutorProfile = { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string };
@@ -7,7 +8,7 @@ export type LessonDraft = { date: string; time: string; studentId?: string; repe
 export type StudentRequestDraft = { requestType: "cancel" | "reschedule" | "new_lesson"; lessonId?: string; proposedDate?: string; proposedTime?: string; lessonCount?: 1 | 2; message?: string; studentId?: string };
 export type StudentDraft = { name: string; email?: string; floating: boolean; weekday?: number; time?: string; groupId?: string };
 export type RecurringSlot = { id: string; studentId: string; label: string; durationMinutes: number };
-export type Student = { id: string; name: string; email?: string; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; prices?: StudentPrices };
+export type Student = { id: string; name: string; email?: string; guardian?: Guardian | null; initials: string; schedule: string; next: string; balance: number; floating: boolean; canViewAvailability: boolean; archived: boolean; trialEligible: boolean; accountStatus: "invited" | "active"; avatarColor: string; ownAvatarColor: string; avatarUrl?: string; prices?: StudentPrices };
 export type StudentPrices = { lessonCents: number | null; doubleLessonCents: number | null; trialLessonCents: number | null; currency: string | null };
 export type AvailabilityWindow = { id: string; weekday: number; startMinutes: number; endMinutes: number };
 export type TeacherDayNote = { id: string; date: string; body: string; updatedAt: number };

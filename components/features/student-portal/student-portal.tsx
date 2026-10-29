@@ -27,6 +27,7 @@ import { StudentAccessNotice } from "@/components/features/subscription/student-
 import { useWorkspaceAccess } from "@/lib/workspace-access-client";
 import { GroupChatDialog } from "@/components/features/group-chat/group-chat-dialog";
 import { useGroupChatUnread } from "@/components/features/group-chat/use-group-chat-unread";
+import { relationText } from "@/lib/guardian";
 
 const INITIAL_NOTIFICATIONS = 3;
 
@@ -84,7 +85,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
       <header className="mb-6 flex items-center gap-3">
         <BrandIcon className="size-11 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold leading-tight tracking-tight md:text-3xl">Привет, <span data-no-translate>{student.name.split(" ")[0]}</span></h1>
+          <h1 className="text-2xl font-bold leading-tight tracking-tight md:text-3xl">Привет, <span data-no-translate>{(student.guardian?.name ?? student.name).split(" ")[0]}</span></h1>{student.guardian && <p className="text-sm font-semibold text-brand-text">Кабинет ученика: <span data-no-translate>{student.name}</span>{` · вы — ${relationText(student.guardian)}`}</p>}
           <p className="truncate text-sm text-ink-muted">Преподаватель: <span data-no-translate>{teacherName}</span></p>
         </div>
         <MemberAvatar name={student.name} initials={student.initials.slice(0, 1)} color={student.ownAvatarColor} url={student.avatarUrl} className="size-11 shrink-0" />

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { guardianSchema } from "./guardian";
 
 export const LEGAL_DOCUMENT_VERSION = "1.0";
 export const CONTENT_RULES_VERSION = "1.2";
@@ -19,6 +20,8 @@ export const studentInviteAcceptanceSchema = z.object({
   acceptedContentRules: z.literal(true),
   acceptedPersonalData: z.literal(true),
   acceptedParentalConsent: z.boolean(),
+  // The representative's own name and relation to the child (shown in chats); optional for older clients.
+  guardian: guardianSchema.nullable().optional(),
 }).strict().superRefine((value, context) => {
   if (value.participantStatus === "legal_representative" && !value.acceptedParentalConsent) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["acceptedParentalConsent"], message: "Требуется согласие законного представителя" });

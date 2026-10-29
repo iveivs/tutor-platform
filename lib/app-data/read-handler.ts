@@ -18,6 +18,7 @@ import {
 import { groupDoubleLessonCharges, groupDoubleLessonEvents } from "@/lib/double-lesson-history";
 import { collectChangedSections, incrementalDataSections, type IncrementalDataSection } from "@/lib/incremental-sync";
 import { settlePastLessons } from "@/lib/lesson-maintenance";
+import { guardianFromRow } from "@/lib/guardian";
 
 function normalizeDateOnly(value: unknown) {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -68,6 +69,7 @@ export async function handleGetAppData(request: Request) {
     const [studentRows, seriesRows, lessonRows, requestRows, balanceRows, notificationRows, teacherRow, viewerRow, lessonEventRows, historyRequestRows, historyBalanceRows, availabilityRows, availabilityBusyRows] = await Promise.all([
       loadRows(needs("students"), () => db.prepare(`SELECT m.id, m.display_name, m.email, m.status, m.schedule_type, m.can_view_availability,
         m.lesson_price_cents, m.double_lesson_price_cents, m.trial_lesson_price_cents, m.price_currency,
+        m.guardian_name, m.guardian_relation, m.guardian_relation_other,
         m.avatar_color, m.avatar_object_key IS NOT NULL AS has_avatar, m.avatar_updated_at,
         (SELECT preference.avatar_color FROM member_display_preferences preference
           WHERE preference.viewer_member_id = ? AND preference.student_member_id = m.id LIMIT 1) AS avatar_override_color,
@@ -202,6 +204,7 @@ export async function handleGetAppData(request: Request) {
         balance: Number(row.balance), floating, canViewAvailability: Boolean(row.can_view_availability), archived: row.status === "archived", trialEligible: Boolean(row.trial_eligible), accountStatus: Boolean(row.account_ready) ? "active" : "invited",
         ownAvatarColor: String(row.avatar_color ?? "indigo"), avatarColor: String(row.avatar_override_color ?? row.avatar_color ?? "indigo"),
         avatarUrl: row.has_avatar ? `/api/profile/avatar?memberId=${encodeURIComponent(String(row.id))}&v=${Number(row.avatar_updated_at ?? 0)}` : undefined,
+        guardian: guardianFromRow(row),
         // Prices are the teacher's working data and are not sent to the student portal.
         prices: auth.role === "student" ? undefined : {
           lessonCents: row.lesson_price_cents === null || row.lesson_price_cents === undefined ? null : Number(row.lesson_price_cents),

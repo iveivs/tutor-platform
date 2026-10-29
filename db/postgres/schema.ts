@@ -157,6 +157,10 @@ export const members = pgTable("members", {
   avatarObjectKey: text("avatar_object_key"),
   avatarUpdatedAt: instant("avatar_updated_at"),
   isTrialContact: boolean("is_trial_contact").notNull().default(false),
+  // Set when a parent or trusted adult runs the student's account (see lib/guardian.ts).
+  guardianName: text("guardian_name"),
+  guardianRelation: text("guardian_relation"),
+  guardianRelationOther: text("guardian_relation_other"),
   scheduleType: text("schedule_type").notNull().default("floating"),
   canViewAvailability: boolean("can_view_availability").notNull().default(false),
   lessonPriceCents: integer("lesson_price_cents"),

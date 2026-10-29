@@ -10,17 +10,18 @@ import {
 import { hashPassword, sha256, verifyPassword } from "@/lib/node-auth";
 import { publicMutation, tokenPattern, unavailable } from "@/lib/account-endpoints/shared";
 import { readLimitedJson } from "@/lib/request-security";
+import { guardianColumns, guardianFromRow } from "@/lib/guardian";
 
 export async function handleNodeStudentInviteGet(request: Request): Promise<Response> {
   const configError = unavailable();
   if (configError) return configError;
   const token = new URL(request.url).searchParams.get("token");
   if (!token || !tokenPattern.test(token)) return Response.json({ error: "Ссылка недействительна" }, { status: 400 });
-  const result = await getPostgresPool().query(`SELECT m.display_name, m.email FROM invitations i JOIN members m ON m.id = i.member_id
+  const result = await getPostgresPool().query(`SELECT m.display_name, m.email, m.guardian_name, m.guardian_relation, m.guardian_relation_other FROM invitations i JOIN members m ON m.id = i.member_id
     WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > now() LIMIT 1`, [await sha256(token)]);
   const invitation = result.rows[0];
   if (!invitation) return Response.json({ error: "Ссылка недействительна или устарела" }, { status: 404 });
-  return Response.json({ name: String(invitation.display_name), email: String(invitation.email ?? "") }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ name: String(invitation.display_name), email: String(invitation.email ?? ""), guardian: guardianFromRow(invitation) }, { headers: { "Cache-Control": "no-store" } });
 }
 export async function handleNodeStudentInvitePost(request: Request): Promise<Response> {
   const limited = await publicMutation(request);
@@ -55,6 +56,11 @@ export async function handleNodeStudentInvitePost(request: Request): Promise<Res
     if (existing) await client.query("UPDATE users SET password_hash = $1, password_set_at = COALESCE(password_set_at, now()), updated_at = now() WHERE id = $2", [passwordHash, userId]);
     else await client.query("INSERT INTO users (id, email, full_name, password_hash, password_set_at) VALUES ($1, $2, $3, $4, now())", [userId, email, invitation.display_name, passwordHash]);
     await client.query("UPDATE members SET user_id = $1, status = 'active', updated_at = now() WHERE id = $2", [userId, invitation.member_id]);
+    // A legal representative names themself; the teacher's earlier entry is replaced by theirs.
+    if (parsed.data.participantStatus === "legal_representative" && parsed.data.guardian) {
+      const [guardianName, guardianRelation, guardianRelationOther] = guardianColumns(parsed.data.guardian);
+      await client.query("UPDATE members SET guardian_name = $1, guardian_relation = $2, guardian_relation_other = $3 WHERE id = $4", [guardianName, guardianRelation, guardianRelationOther, invitation.member_id]);
+    }
     await client.query("UPDATE invitations SET accepted_at = now() WHERE id = $1", [invitation.id]);
     const userAgent = request.headers.get("user-agent")?.slice(0, 512) ?? null;
     const acceptanceDocuments = parsed.data.participantStatus === "legal_representative"

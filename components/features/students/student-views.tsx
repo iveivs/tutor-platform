@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { today } from "@/lib/date-time";
 import { formatMoney } from "@/lib/money";
 import { russianPlural } from "@/lib/russian-plural";
+import { GuardianDialog, guardianSummary } from "@/components/features/students/guardian-dialog";
 
 const filters = ["Все", "Постоянное", "Плавающее", "Задолженность", "Без урока", "Архив"];
 const balanceText = (balance: number) => balance < 0 ? `Долг ${Math.abs(balance)}` : russianPlural(balance, "занятие", "занятия", "занятий");
@@ -131,6 +132,10 @@ export function StudentView(props: StudentViewProps) {
         <span className="text-sm font-semibold text-ink-muted">Расписание</span>
         <span className="text-lg font-extrabold leading-snug md:text-2xl">{student.floating ? "Плавающее" : student.schedule}</span>
       </div>
+      <GuardianDialog studentId={student.id} guardian={student.guardian} onSaved={onReload} trigger={<button type="button" className="col-span-2 flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3 text-left transition hover:bg-surface-subtle lg:col-span-3">
+        <span className="flex min-w-0 flex-col gap-0.5"><span className="text-sm font-semibold text-ink-muted">Кабинет ведёт</span><span className="truncate text-[15px] font-semibold" data-no-translate={student.guardian ? "" : undefined}>{guardianSummary(student.guardian)}</span></span>
+        <span className="shrink-0 text-xs font-semibold text-brand-text">{student.guardian ? "Изменить" : "Указать взрослого"}</span>
+      </button>} />
     </div>
 
     <div className="mb-5 space-y-2 lg:hidden">
