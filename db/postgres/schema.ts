@@ -803,3 +803,24 @@ export const platformSettings = pgTable("platform_settings", {
   value: jsonb("value").notNull(),
   updatedAt: instant("updated_at").notNull().defaultNow(),
 });
+
+// Hourly request counters written by the app (lib/request-metrics.ts); kept 90 days.
+export const platformRequestStats = pgTable("platform_request_stats", {
+  hour: instant("hour").notNull(),
+  kind: text("kind").notNull(),
+  requests: integer("requests").notNull().default(0),
+  errors: integer("errors").notNull().default(0),
+  totalMs: bigint("total_ms", { mode: "number" }).notNull().default(0),
+  buckets: integer("buckets").array().notNull().default(sql`'{0,0,0,0,0}'`),
+  bytes: bigint("bytes", { mode: "number" }).notNull().default(0),
+  peakOpen: integer("peak_open").notNull().default(0),
+}, (table) => [
+  primaryKey({ name: "platform_request_stats_pk", columns: [table.hour, table.kind] }),
+  check("platform_request_stats_kind_check", sql`${table.kind} in ('page', 'api', 'file', 'realtime')`),
+]);
+
+// Last time each admin alert went out (throttling).
+export const platformAlerts = pgTable("platform_alerts", {
+  key: text("key").primaryKey(),
+  lastSentAt: instant("last_sent_at").notNull(),
+});

@@ -17,7 +17,10 @@ type Day = {
   actions: Record<string, number>;
   channels: { accounts: number; telegram: number; push: number };
   load: { avg: number | null; peak: number | null };
+  requests?: Record<string, { requests: number; errors: number; slow: number; avgMs: number; bytes: number; peakOpen: number; peakHour: number }>;
 };
+type RequestHour = { hour: number; kind: string; requests: number; errors: number; totalMs: number; buckets: number[]; bytes: number; peakOpen: number };
+type StatsData = { days: Day[]; hours: Hour[]; rates: Rates; requestHours: RequestHour[]; alertMemberId: string | null; owners: Array<{ id: string; name: string }> };
 type Hour = { hour: number; cores: number; load1: number; memoryUsedBytes: number | null; memoryTotalBytes: number | null; diskUsedBytes: number | null; diskTotalBytes: number | null; databaseBytes: number; pendingTelegram: number; pendingPush: number; activeUsersHour: number };
 type Rates = { serverRubPerMonth: number; storageRubPerGbMonth: number; trafficRubPerGb: number; proPriceRub: number; maxPriceRub: number; feePercent: number };
 
@@ -41,12 +44,13 @@ function Bars({ values, highlightLast = true, label }: { values: number[]; highl
   return <div role="img" aria-label={label} className="flex h-28 items-end gap-1">{values.map((value, index) => <span key={index} className={`min-w-0 flex-1 rounded-t ${highlightLast && index === values.length - 1 ? "bg-coral" : "bg-brand-solid"}`} style={{ height: `${Math.max(2, value / max * 100)}%` }} />)}</div>;
 }
 
-function Economics({ latest, rates, onSaved }: { latest?: Day; rates: Rates; onSaved: () => void }) {
+function Economics({ latest, rates, monthlyFileBytes, onSaved }: { latest?: Day; rates: Rates; monthlyFileBytes: number | null; onSaved: () => void }) {
   const [draft, setDraft] = useState(rates);
   const [pending, setPending] = useState(false);
   const storageGb = totalBytes(latest) / 1e9;
-  // Traffic is not measured yet: assume every stored file is downloaded once a month.
-  const trafficGb = storageGb;
+  // Measured: bytes of file downloads served by the app over the last 30 days (scaled if fewer
+  // days are recorded). Until then assume every stored file is downloaded once a month.
+  const trafficGb = monthlyFileBytes !== null ? monthlyFileBytes / 1e9 : storageGb;
   const paying = latest?.paying ?? 0;
   const revenue = paying * draft.proPriceRub;
   const fees = revenue * draft.feePercent / 100;
@@ -72,7 +76,7 @@ function Economics({ latest, rates, onSaved }: { latest?: Day; rates: Rates; onS
         <Tile label="Остаётся" value={rubles(net * 100)} hint={net >= 0 ? "проект в плюсе" : "пока в минусе"} tone={net >= 0 ? "text-success-text" : "text-danger-text"} />
         <Tile label="В ноль" value={`${breakEven}`} hint="платящих «Про» нужно" />
         <Tile label="На один кабинет" value={rubles((paying ? (costs + fees) / paying : costs) * 100)} hint="себестоимость" />
-        <Tile label="Трафик" value={`${trafficGb.toFixed(1).replace(".", ",")} ГБ`} hint="оценка: пока не измеряется" />
+        <Tile label="Трафик файлов" value={`${trafficGb.toFixed(1).replace(".", ",")} ГБ`} hint={monthlyFileBytes !== null ? "за 30 дней, измерено" : "оценка: замер начался недавно"} />
       </div>
       <div className="grid grid-cols-2 gap-2.5">
         {field("serverRubPerMonth", "Сервер, ₽/мес")}{field("storageRubPerGbMonth", "Хранилище, ₽/ГБ")}{field("trafficRubPerGb", "Трафик, ₽/ГБ")}{field("feePercent", "Налог + комиссия, %")}{field("proPriceRub", "«Про», ₽")}{field("maxPriceRub", "«Макс», ₽")}
@@ -82,15 +86,62 @@ function Economics({ latest, rates, onSaved }: { latest?: Day; rates: Rates; onS
   </Card>;
 }
 
+function monthlyFileBytes(days: Day[]) {
+  const measured = days.slice(-30).filter((day) => day.requests);
+  if (measured.length < 3) return null;
+  const bytes = measured.reduce((sum, day) => sum + (day.requests?.file?.bytes ?? 0), 0);
+  return bytes * 30 / measured.length;
+}
+
+function Requests({ hours, latest }: { hours: RequestHour[]; latest: Day }) {
+  const web = hours.filter((row) => row.kind !== "realtime");
+  const byHour = new Map<number, number>();
+  for (const row of web) byHour.set(row.hour, (byHour.get(row.hour) ?? 0) + row.requests);
+  const series = [...byHour.entries()].sort((a, b) => a[0] - b[0]).slice(-48).map(([, value]) => value);
+  const total = web.reduce((sum, row) => sum + row.requests, 0);
+  const slow = web.reduce((sum, row) => sum + (row.buckets[3] ?? 0) + (row.buckets[4] ?? 0), 0);
+  const errors = web.reduce((sum, row) => sum + row.errors, 0);
+  const avgMs = total ? Math.round(web.reduce((sum, row) => sum + row.totalMs, 0) / total) : 0;
+  const peakOpen = Math.max(0, ...hours.filter((row) => row.kind === "realtime").map((row) => row.peakOpen));
+  const today = latest.requests ?? {};
+  const todayRequests = Object.entries(today).filter(([kind]) => kind !== "realtime").reduce((sum, [, value]) => sum + value.requests, 0);
+  return <Card title="Запросы к сайту · 7 дней" className="lg:col-span-2">
+    {series.length ? <Bars values={series} label="Запросы по часам за последние двое суток" /> : <p className="text-sm text-ink-muted">Замер запросов начался недавно, первые данные появятся в течение часа.</p>}
+    <div className="grid grid-cols-2 gap-2 text-[13px] sm:grid-cols-4">
+      <span className="rounded-xl bg-surface-subtle p-2.5">{`Сегодня: ${todayRequests}`}</span>
+      <span className="rounded-xl bg-surface-subtle p-2.5">{`Средний ответ: ${avgMs} мс`}</span>
+      <span className={`rounded-xl p-2.5 ${total && slow / total > 0.1 ? "bg-warning-soft text-warning-ink" : "bg-surface-subtle"}`}>{`Дольше секунды: ${percent(slow, total)}`}</span>
+      <span className={`rounded-xl p-2.5 ${total && errors / total > 0.05 ? "bg-danger-soft text-danger-ink" : "bg-surface-subtle"}`}>{`Ошибок: ${percent(errors, total)}`}</span>
+    </div>
+    <span className="text-xs text-ink-muted">{`Живых соединений одновременно, максимум: ${peakOpen}`}</span>
+  </Card>;
+}
+
+function Alerts({ owners, memberId, onSaved }: { owners: StatsData["owners"]; memberId: string | null; onSaved: () => void }) {
+  const save = async (value: string) => {
+    try {
+      const response = await fetch("/api/admin/stats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ alertMemberId: value || null }) });
+      if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "Не удалось сохранить");
+      toast.success("Сохранено"); onSaved();
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Не удалось сохранить"); }
+  };
+  return <Card title="Оповещения">
+    <p className="text-[13px] text-ink-muted">Диск больше 80%, процессор загружен три часа подряд, память больше 90%, медленные ответы или ошибки сайта, очередь уведомлений. Не чаще раза в 6 часов на каждую проблему.</p>
+    <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Присылать в кабинет (уведомление, Telegram, push)
+      <select value={memberId ?? ""} onChange={(event) => void save(event.target.value)} className="h-10 rounded-xl border border-line bg-surface px-3 text-[15px] font-normal text-ink-strong"><option value="">Не присылать</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select>
+    </label>
+  </Card>;
+}
+
 // Admin «Статистика» tab: anonymized numbers collected by the worker (scripts/platform-stats.mjs).
 export function PlatformStats() {
-  const [data, setData] = useState<{ days: Day[]; hours: Hour[]; rates: Rates } | null>(null);
+  const [data, setData] = useState<StatsData | null>(null);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState<"7" | "30" | "90">("30");
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/stats", { cache: "no-store" });
-      const result = await response.json() as { error?: string; days: Day[]; hours: Hour[]; rates: Rates };
+      const result = await response.json() as StatsData & { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить статистику");
       setData(result); setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось загрузить статистику"); }
@@ -136,7 +187,9 @@ export function PlatformStats() {
       <Card title="Чем пользуются за период">{actionLabels.map(([key, label]) => <span key={key} className="flex justify-between text-[13px]"><span>{label}</span><strong>{sum(key)}</strong></span>)}<span className="flex justify-between text-[13px]"><span>Включили Telegram / push</span><strong>{`${percent(latest.channels.telegram, latest.channels.accounts)} / ${percent(latest.channels.push, latest.channels.accounts)}`}</strong></span></Card>
       <Card title="Нагрузка"><Bars values={hourly} highlightLast={false} label="Средняя загрузка процессора по часам" /><span className="text-xs text-ink-muted">{`Пик нагрузки около ${peakHour}:00 по Москве · за сегодня максимум ${loadPercent ?? "—"}% процессора`}</span>
         <div className="grid grid-cols-2 gap-2 text-[13px]"><span className="rounded-xl bg-surface-subtle p-2.5">{`База: ${formatBytes(lastHour?.databaseBytes ?? 0)}`}</span><span className={`rounded-xl p-2.5 ${diskShare !== null && diskShare >= 80 ? "bg-danger-soft text-danger-ink" : "bg-surface-subtle"}`}>{`Диск: ${diskShare ?? "—"}%`}</span><span className="rounded-xl bg-surface-subtle p-2.5">{`Память: ${lastHour?.memoryTotalBytes ? percent(lastHour.memoryUsedBytes ?? 0, lastHour.memoryTotalBytes) : "—"}`}</span><span className="rounded-xl bg-surface-subtle p-2.5">{`Очередь: ${(lastHour?.pendingTelegram ?? 0) + (lastHour?.pendingPush ?? 0)}`}</span></div></Card>
-      <Economics latest={latest} rates={data.rates} onSaved={() => void load()} />
+      <Requests hours={data.requestHours} latest={latest} />
+      <Alerts owners={data.owners} memberId={data.alertMemberId} onSaved={() => void load()} />
+      <Economics latest={latest} rates={data.rates} monthlyFileBytes={monthlyFileBytes(data.days)} onSaved={() => void load()} />
     </div>
   </div>;
 }

@@ -51,7 +51,7 @@ const percentile = (values, share) => {
 async function writeDailyStats(client) {
   const day = "(now() AT TIME ZONE 'Europe/Moscow')::date";
   const since = `(${day})::timestamp AT TIME ZONE 'Europe/Moscow'`;
-  const [totals, active, files, perWorkspace, actions, channels, load] = await Promise.all([
+  const [totals, active, files, perWorkspace, actions, channels, load, requests] = await Promise.all([
     client.query(`SELECT (SELECT count(*) FROM workspaces)::int AS workspaces,
         (SELECT count(*) FROM workspaces WHERE created_at >= ${since})::int AS workspaces_new,
         (SELECT count(*) FROM members WHERE role = 'student' AND status <> 'archived' AND NOT is_trial_contact)::int AS students,
@@ -89,6 +89,9 @@ async function writeDailyStats(client) {
     client.query(`SELECT avg((data->>'load1')::numeric) AS load_avg, max((data->>'load1')::numeric) AS load_peak,
         max((data->>'memoryUsedBytes')::bigint) AS memory_peak, max((data->>'activeUsersHour')::int) AS users_peak
       FROM platform_hourly_load WHERE hour >= ${since}`),
+    client.query(`SELECT kind, sum(requests)::int AS requests, sum(errors)::int AS errors, sum(total_ms)::bigint AS total_ms,
+        sum(buckets[4] + buckets[5])::int AS slow, sum(bytes)::bigint AS bytes, max(peak_open)::int AS peak_open, max(requests)::int AS peak_hour
+      FROM platform_request_stats WHERE hour >= ${since} GROUP BY kind`),
   ]);
   const byRole = Object.fromEntries(active.rows.map((row) => [row.teacher ? "teachers" : "students", { day: row.day, week: row.week, month: row.month }]));
   const students = perWorkspace.rows.map((row) => Number(row.students));
@@ -104,14 +107,56 @@ async function writeDailyStats(client) {
     },
     actions: Object.fromEntries(Object.entries(actions.rows[0]).map(([key, value]) => [key.replace(/_(\w)/g, (_, c) => c.toUpperCase()), value])),
     channels: channels.rows[0],
+    requests: Object.fromEntries(requests.rows.map((row) => [row.kind, { requests: row.requests, errors: row.errors, slow: row.slow, avgMs: row.requests ? Math.round(Number(row.total_ms) / row.requests) : 0, bytes: Number(row.bytes), peakOpen: row.peak_open, peakHour: row.peak_hour }])),
     load: { avg: load.rows[0].load_avg == null ? null : Number(load.rows[0].load_avg), peak: load.rows[0].load_peak == null ? null : Number(load.rows[0].load_peak), memoryPeakBytes: load.rows[0].memory_peak == null ? null : Number(load.rows[0].memory_peak), activeUsersPeakHour: load.rows[0].users_peak },
   };
   await client.query(`INSERT INTO platform_daily_stats (day, data) VALUES (${day}, $1)
     ON CONFLICT (day) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [data]);
 }
 
+const ALERT_EVERY_HOURS = 6;
+
+// Problems worth the admin's attention, from the latest hour; each kind at most every 6 hours.
+async function sendAlerts(client) {
+  const setting = await client.query("SELECT value FROM platform_settings WHERE key = 'alerts'");
+  const memberId = setting.rows[0]?.value?.memberId;
+  if (!memberId) return;
+  const [load, requests] = await Promise.all([
+    client.query("SELECT data FROM platform_hourly_load ORDER BY hour DESC LIMIT 3"),
+    client.query(`SELECT sum(requests)::int AS requests, sum(errors)::int AS errors, sum(buckets[4] + buckets[5])::int AS slow
+      FROM platform_request_stats WHERE kind IN ('page', 'api', 'file') AND hour = date_trunc('hour', now()) - interval '1 hour'`),
+  ]);
+  const latest = load.rows[0]?.data;
+  const problems = [];
+  if (latest?.diskTotalBytes && latest.diskUsedBytes / latest.diskTotalBytes >= 0.8) problems.push(["disk", `Диск сервера заполнен на ${Math.round(latest.diskUsedBytes / latest.diskTotalBytes * 100)}%.`]);
+  if (load.rows.length === 3 && load.rows.every((row) => row.data.load1 >= row.data.cores)) problems.push(["cpu", "Процессор сервера загружен полностью три часа подряд."]);
+  if (latest?.memoryTotalBytes && latest.memoryUsedBytes / latest.memoryTotalBytes >= 0.9) problems.push(["memory", `Память сервера занята на ${Math.round(latest.memoryUsedBytes / latest.memoryTotalBytes * 100)}%.`]);
+  if ((latest?.pendingTelegram ?? 0) + (latest?.pendingPush ?? 0) > 100) problems.push(["queue", "В очереди Telegram и push больше 100 неотправленных сообщений."]);
+  const hour = requests.rows[0];
+  if (hour?.requests >= 50 && hour.slow / hour.requests > 0.1) problems.push(["slow", `За прошлый час ${Math.round(hour.slow / hour.requests * 100)}% ответов сайта заняли больше секунды.`]);
+  if (hour?.requests >= 50 && hour.errors / hour.requests > 0.05) problems.push(["errors", `За прошлый час ${Math.round(hour.errors / hour.requests * 100)}% запросов закончились ошибкой сервера.`]);
+  for (const [key, text] of problems) {
+    const claimed = await client.query(`INSERT INTO platform_alerts (key, last_sent_at) VALUES ($1, now())
+      ON CONFLICT (key) DO UPDATE SET last_sent_at = now() WHERE platform_alerts.last_sent_at < now() - ($2 * interval '1 hour')
+      RETURNING key`, [key, ALERT_EVERY_HOURS]);
+    if (!claimed.rowCount) continue;
+    const title = "Тьюттори: внимание к серверу";
+    const body = `${text} Подробнее — админка → Статистика.`;
+    const dedupeKey = `platform-alert:${key}:${new Date().toISOString().slice(0, 13)}`;
+    await client.query("INSERT INTO notifications (id, member_id, type, title, body) VALUES (gen_random_uuid()::text, $1, 'platform_alert', $2, $3)", [memberId, title, body]);
+    await client.query(`INSERT INTO telegram_deliveries (member_id, kind, dedupe_key, message)
+      SELECT member_id, 'account', $2, $3 FROM telegram_connections WHERE member_id = $1 AND disabled_at IS NULL
+      ON CONFLICT (dedupe_key) DO NOTHING`, [memberId, dedupeKey, `${title}\n${body}`]);
+    await client.query(`INSERT INTO push_deliveries (member_id, kind, dedupe_key, title, body)
+      SELECT $1, 'account', $2, $3, $4 WHERE EXISTS (SELECT 1 FROM push_subscriptions WHERE member_id = $1)
+      ON CONFLICT (dedupe_key) DO NOTHING`, [memberId, dedupeKey, title, body]);
+  }
+}
+
 /** One call per worker cycle; a failure here never stops the lesson jobs. */
 export async function collectPlatformStats(client) {
   await writeHourlyLoad(client);
   await writeDailyStats(client);
+  await client.query("DELETE FROM platform_request_stats WHERE hour < now() - interval '90 days'");
+  await sendAlerts(client);
 }

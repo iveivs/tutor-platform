@@ -155,6 +155,13 @@
       "when": 1793340000000,
       "tag": "0021_platform_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793350000000,
+      "tag": "0022_request_stats",
+      "breakpoints": true
     }
   ]
 }
