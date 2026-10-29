@@ -48,7 +48,7 @@ export function GuardianDialog({ studentId, guardian, onSaved, trigger }: { stud
     <DialogTrigger asChild>{trigger}</DialogTrigger>
     <DialogContent className="rounded-3xl sm:max-w-md">
       <DialogHeader><DialogTitle>Кто ведёт кабинет</DialogTitle><DialogDescription>Для детей: войдёт и будет писать взрослый. В расписании, оплатах и статистике остаётся имя ученика.</DialogDescription></DialogHeader>
-      <label className="flex items-center justify-between gap-3 rounded-2xl border border-line p-3.5"><span className="flex items-center gap-2.5 text-[15px] font-semibold"><UserRound className="size-5 text-brand-text" />Кабинет ведёт родитель или доверенное лицо</span><Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} /></label>
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-line p-3.5"><span className="flex items-center gap-2.5 text-[15px] font-semibold"><UserRound className="size-5 text-brand-text" />Кабинет ведёт родитель или доверенное лицо</span><Switch aria-label="Кабинет ведёт родитель или доверенное лицо" checked={draft.enabled} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} /></div>
       {draft.enabled && <GuardianFields draft={draft} onChange={setDraft} />}
       <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Отмена</Button><Button disabled={pending || !guardianDraftValid(draft)} onClick={() => void save()}>{pending ? "Сохраняю…" : "Сохранить"}</Button></DialogFooter>
     </DialogContent>

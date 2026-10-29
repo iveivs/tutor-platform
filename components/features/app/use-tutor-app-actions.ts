@@ -72,7 +72,8 @@ export function useTutorAppActions({ reload, setProfile, setTeacherName, setStud
   };
   const addStudent = async (student: StudentDraft) => {
     try {
-      await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating, weekday: student.weekday, time: student.time, ...(student.groupId ? { groupId: student.groupId } : {}) });
+      const created = await saveAppData({ action: "createStudent", name: student.name, email: student.email, floating: student.floating, weekday: student.weekday, time: student.time, ...(student.groupId ? { groupId: student.groupId } : {}) }) as { id?: string };
+      if (student.guardian && created.id) await saveAppData({ action: "updateStudentGuardian", studentId: created.id, guardian: student.guardian });
       await reload();
       toast.success(student.email ? "Ученик создан. Пригласить его можно из карточки" : "Ученик создан");
       return true;
