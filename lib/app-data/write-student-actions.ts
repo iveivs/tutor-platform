@@ -6,11 +6,14 @@ import { conflict, hasConflict, invalid, lessonRange, nextOccurrenceDate, toMosc
 import type { WriteActionContext } from "@/lib/app-data/write-action-types";
 import { manualSessionCopies } from "@/lib/app-data/write-group-actions";
 import { guardianColumns } from "@/lib/guardian";
+import { invitationLimitResponse, studentLimitResponse } from "@/lib/workspace-limits";
 
 export async function executeStudentAction({ request, db, body, auth, id }: WriteActionContext): Promise<Response | void> {
   if (body.action === "createStudent") {
     if (!body.name?.trim() || body.name.trim().length > 80 || (body.email && !/^\S+@\S+\.\S+$/.test(body.email.trim()))) return invalid();
     const email = body.email?.trim() || null;
+    const limited = await studentLimitResponse(auth.workspaceId) ?? (email ? await invitationLimitResponse(auth.workspaceId) : null);
+    if (limited) return limited;
     const statements = [db.prepare(`INSERT INTO members (id, workspace_id, role, status, display_name, email, schedule_type)
       VALUES (?, ?, 'student', 'invited', ?, ?, ?)`).bind(id, auth.workspaceId, body.name.trim(), email, body.floating ? "floating" : "fixed")];
     if (!body.floating) {
@@ -115,6 +118,8 @@ export async function executeStudentAction({ request, db, body, auth, id }: Writ
     if (!student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
     if (Boolean(student.account_ready)) return Response.json({ error: "Ученик уже подключил аккаунт" }, { status: 409 });
     if (!student.email) return Response.json({ error: "Сначала укажите email ученика" }, { status: 409 });
+    const limited = await invitationLimitResponse(auth.workspaceId);
+    if (limited) return limited;
     const inviteToken = randomToken();
     await db.batch([
       db.prepare("UPDATE invitations SET expires_at = ? WHERE member_id = ? AND accepted_at IS NULL").bind(Date.now() - 1, student.id),

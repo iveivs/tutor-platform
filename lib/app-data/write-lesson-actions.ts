@@ -9,6 +9,7 @@ import {
 } from "@/lib/app-data/route-utils";
 
 import type { WriteActionContext } from "@/lib/app-data/write-action-types";
+import { studentLimitResponse } from "@/lib/workspace-limits";
 
 export async function executeLessonAction({ db, body, auth, id }: WriteActionContext): Promise<Response | void> {
   if (body.action === "createLesson") {
@@ -29,6 +30,7 @@ export async function executeLessonAction({ db, body, auth, id }: WriteActionCon
     if (body.studentId && !student) return Response.json({ error: "Ученик не найден" }, { status: 404 });
     if (lessonType === "regular" && student?.is_trial_contact) return Response.json({ error: "Сначала создайте карточку ученика" }, { status: 409 });
     if (lessonType === "trial" && student && (student.has_paid_lesson || student.has_payment)) return Response.json({ error: "У ученика уже были платные занятия — пробное занятие недоступно" }, { status: 409 });
+    if (guestId) { const limited = await studentLimitResponse(auth.workspaceId); if (limited) return limited; }
     const studentId = student?.id ?? guestId!;
     if (await hasConflict(db, auth.workspaceId, range.start, range.end)) return conflict();
     const seriesId = body.repeat === "weekly" ? crypto.randomUUID() : null;

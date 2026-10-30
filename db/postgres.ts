@@ -17,6 +17,9 @@ export function getPostgresPool() {
       max: Number(process.env.DATABASE_POOL_MAX ?? 10),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
+      // A runaway query or a stuck transaction must not hold the database for everyone else.
+      statement_timeout: 15_000,
+      idle_in_transaction_session_timeout: 60_000,
       application_name: "tutor-platform-web",
     });
   }
