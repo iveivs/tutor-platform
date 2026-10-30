@@ -40,16 +40,17 @@ export async function GET(request: Request) {
       ORDER BY thread.last_message_at DESC LIMIT 200`),
     pool.query(`SELECT report.id, report.workspace_id, report.resource_type, report.resource_id, report.reason, report.comment, report.status, report.created_at,
         owner.display_name AS owner_name,
-        COALESCE(resource.title, 'Фото урока') AS title, COALESCE(resource.original_filename, '') AS filename,
-        COALESCE(resource.content_type, attachment.content_type) AS content_type, COALESCE(resource.byte_size, attachment.byte_size) AS byte_size,
-        COALESCE(resource.created_at, attachment.created_at) AS uploaded_at, uploader.display_name AS uploader_name, uploader.role AS uploader_role,
-        COALESCE(resource.status, attachment.status) AS resource_status,
+        COALESCE(resource.title, lesson_file.original_filename, 'Фото урока') AS title, COALESCE(resource.original_filename, lesson_file.original_filename, '') AS filename,
+        COALESCE(resource.content_type, lesson_file.content_type, attachment.content_type) AS content_type, COALESCE(resource.byte_size, lesson_file.byte_size, attachment.byte_size) AS byte_size,
+        COALESCE(resource.created_at, lesson_file.created_at, attachment.created_at) AS uploaded_at, uploader.display_name AS uploader_name, uploader.role AS uploader_role,
+        COALESCE(resource.status, lesson_file.status, attachment.status) AS resource_status,
         (SELECT count(*) FROM lesson_resource_links link WHERE link.resource_id = report.resource_id)::int AS lesson_links,
         (SELECT count(*) FROM student_resource_links link WHERE link.resource_id = report.resource_id)::int AS student_links
       FROM content_reports report
       LEFT JOIN teacher_resources resource ON report.resource_type = 'teacher_resource' AND resource.id = report.resource_id
       LEFT JOIN lesson_attachments attachment ON report.resource_type = 'lesson_attachment' AND attachment.id = report.resource_id
-      LEFT JOIN members uploader ON uploader.id = COALESCE(resource.uploaded_by_member_id, attachment.uploaded_by_member_id)
+      LEFT JOIN lesson_files lesson_file ON report.resource_type = 'lesson_file' AND lesson_file.id = report.resource_id
+      LEFT JOIN members uploader ON uploader.id = COALESCE(resource.uploaded_by_member_id, lesson_file.uploaded_by_member_id, attachment.uploaded_by_member_id)
       LEFT JOIN members owner ON owner.id = (SELECT id FROM members WHERE workspace_id = report.workspace_id AND role = 'owner' ORDER BY created_at LIMIT 1)
       ORDER BY report.status = 'open' DESC, report.created_at DESC LIMIT 200`),
     pool.query(`SELECT news.id, news.title, news.body, news.important, news.published_at,
@@ -118,9 +119,11 @@ export async function POST(request: Request) {
     await client.query(`UPDATE content_reports SET status = $3, resolved_by_user_id = $4, resolved_at = now()
       WHERE resource_type = $1 AND resource_id = $2 AND status = 'open'`, [report.resource_type, report.resource_id, decided, auth.admin.userId]);
     if (action.decision === "remove") {
-      const table = report.resource_type === "teacher_resource" ? "teacher_resources" : "lesson_attachments";
-      const removed = await client.query(`UPDATE ${table} SET status = 'deleting', deleted_at = now(), updated_at = now() WHERE id = $1 AND status = 'active'
-        RETURNING uploaded_by_member_id, ${report.resource_type === "teacher_resource" ? "title" : "'Фото урока'"} AS title`, [report.resource_id]);
+      const table = report.resource_type === "teacher_resource" ? "teacher_resources" : report.resource_type === "lesson_file" ? "lesson_files" : "lesson_attachments";
+      const titleColumn = report.resource_type === "teacher_resource" ? "title" : report.resource_type === "lesson_file" ? "original_filename" : "'Фото урока'";
+      const touched = report.resource_type === "lesson_file" ? "" : ", updated_at = now()";
+      const removed = await client.query(`UPDATE ${table} SET status = 'deleting', deleted_at = now()${touched} WHERE id = $1 AND status = 'active'
+        RETURNING uploaded_by_member_id, ${titleColumn} AS title`, [report.resource_id]);
       if (report.resource_type === "teacher_resource") {
         await client.query("DELETE FROM lesson_resource_links WHERE resource_id = $1", [report.resource_id]);
         await client.query("DELETE FROM student_resource_links WHERE resource_id = $1", [report.resource_id]);

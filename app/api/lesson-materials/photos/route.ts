@@ -9,6 +9,7 @@ import {
   notifyLessonStudents, putLessonPhoto, resolveLessonAccess,
 } from "@/lib/lesson-materials";
 import { rejectReadOnlyWrite } from "@/lib/workspace-access";
+import { SINCE_MOSCOW_TODAY, STUDENT_DAILY_LIMITS } from "@/lib/lesson-file-limits";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,10 @@ export async function POST(request: Request) {
     const hourly = await getPostgresPool().query(`SELECT count(*)::int AS count FROM lesson_attachments
       WHERE workspace_id = $1 AND uploaded_by_member_id = $2 AND created_at > now() - interval '1 hour'`, [auth.workspaceId, auth.memberId]);
     if (Number(hourly.rows[0]?.count ?? 0) >= 20) return Response.json({ error: "За час можно загрузить не более 20 фотографий" }, { status: 429, headers: { "Retry-After": "3600" } });
+    if (auth.role === "student") {
+      const daily = await getPostgresPool().query(`SELECT count(*)::int AS count FROM lesson_attachments WHERE uploaded_by_member_id = $1 AND ${SINCE_MOSCOW_TODAY}`, [auth.memberId]);
+      if (Number(daily.rows[0]?.count ?? 0) >= STUDENT_DAILY_LIMITS.photo) return Response.json({ error: `В день можно добавить не более ${STUDENT_DAILY_LIMITS.photo} фотографий` }, { status: 429 });
+    }
 
     const attachmentId = randomUUID();
     const objectKey = lessonPhotoObjectKey(auth.workspaceId, lesson.lessonId, attachmentId);

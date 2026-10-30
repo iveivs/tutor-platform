@@ -1,6 +1,6 @@
 import { getPostgresPool } from "@/db/postgres";
 import { requirePlatformAdmin } from "@/lib/admin-workspaces/shared";
-import { getLessonPhoto, getTeacherMaterial } from "@/lib/lesson-materials";
+import { getLessonFile, getLessonPhoto, getTeacherMaterial } from "@/lib/lesson-materials";
 
 export const runtime = "nodejs";
 
@@ -11,17 +11,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (auth instanceof Response) return auth;
   const { id } = await context.params;
   const result = await getPostgresPool().query(`SELECT report.resource_type, resource.object_key AS resource_key, resource.content_type, resource.original_filename,
-      attachment.object_key AS attachment_key
+      attachment.object_key AS attachment_key, lesson_file.object_key AS file_key, lesson_file.content_type AS file_type
     FROM content_reports report
     LEFT JOIN teacher_resources resource ON report.resource_type = 'teacher_resource' AND resource.id = report.resource_id AND resource.status = 'active'
     LEFT JOIN lesson_attachments attachment ON report.resource_type = 'lesson_attachment' AND attachment.id = report.resource_id AND attachment.status = 'active'
+    LEFT JOIN lesson_files lesson_file ON report.resource_type = 'lesson_file' AND lesson_file.id = report.resource_id AND lesson_file.status = 'active'
     WHERE report.id = $1 AND report.status = 'open'`, [id]);
   const row = result.rows[0];
-  const key = row?.resource_key ?? row?.attachment_key;
+  const key = row?.resource_key ?? row?.file_key ?? row?.attachment_key;
   if (!key) return Response.json({ error: "Файл недоступен" }, { status: 404 });
-  const bytes = row.resource_type === "teacher_resource" ? await getTeacherMaterial(String(key)) : await getLessonPhoto(String(key));
+  const bytes = row.resource_type === "teacher_resource" ? await getTeacherMaterial(String(key)) : row.resource_type === "lesson_file" ? await getLessonFile(String(key)) : await getLessonPhoto(String(key));
   return new Response(Buffer.from(bytes), { headers: {
-    "Content-Type": row.resource_type === "teacher_resource" ? String(row.content_type) : "image/webp",
+    "Content-Type": row.resource_type === "teacher_resource" ? String(row.content_type) : row.resource_type === "lesson_file" ? String(row.file_type) : "image/webp",
     "Content-Disposition": "inline",
     "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",

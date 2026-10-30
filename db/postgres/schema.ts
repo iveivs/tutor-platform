@@ -882,10 +882,35 @@ export const contentReports = pgTable("content_reports", {
   resolvedAt: instant("resolved_at"),
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [
-  check("content_reports_type_check", sql`${table.resourceType} in ('teacher_resource', 'lesson_attachment')`),
+  check("content_reports_type_check", sql`${table.resourceType} in ('teacher_resource', 'lesson_attachment', 'lesson_file')`),
   check("content_reports_reason_check", sql`${table.reason} in ('copyright', 'inappropriate', 'personal_data', 'other')`),
   check("content_reports_status_check", sql`${table.status} in ('open', 'dismissed', 'removed')`),
   check("content_reports_comment_check", sql`${table.comment} is null or char_length(${table.comment}) <= 500`),
   index("idx_content_reports_status_created").on(table.status, table.createdAt),
   uniqueIndex("content_reports_open_unique").on(table.resourceType, table.resourceId, table.reporterMemberId).where(sql`${table.status} = 'open'`),
+]);
+
+// Audio and documents attached to a lesson by the teacher or a student; removed 90 days after the lesson.
+export const lessonFiles = pgTable("lesson_files", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  lessonId: text("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  uploadedByMemberId: text("uploaded_by_member_id").references(() => members.id, { onDelete: "set null" }),
+  objectKey: text("object_key").notNull(),
+  contentType: text("content_type").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: instant("expires_at").notNull(),
+  deletedAt: instant("deleted_at"),
+  createdAt: instant("created_at").notNull().defaultNow(),
+}, (table) => [
+  check("lesson_files_type_check", sql`${table.contentType} in ('audio/mpeg', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')`),
+  check("lesson_files_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 20971520`),
+  check("lesson_files_status_check", sql`${table.status} in ('active', 'deleting', 'deleted')`),
+  check("lesson_files_filename_check", sql`char_length(${table.originalFilename}) between 1 and 160`),
+  uniqueIndex("lesson_files_object_key_unique").on(table.objectKey),
+  index("idx_lesson_files_lesson_active").on(table.lessonId, table.status),
+  index("idx_lesson_files_expiry").on(table.status, table.expiresAt),
+  index("idx_lesson_files_uploader_created").on(table.uploadedByMemberId, table.createdAt),
 ]);

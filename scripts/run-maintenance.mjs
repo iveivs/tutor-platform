@@ -50,6 +50,18 @@ async function deleteExpiredLessonPhotos(client) {
       failed += 1;
     }
   }
+  // Lesson audio and documents follow the same rule: removed after their expiry or when deleted.
+  const files = await client.query(`SELECT id, object_key FROM lesson_files
+    WHERE status = 'deleting' OR (status = 'active' AND expires_at <= now()) ORDER BY expires_at LIMIT 100`);
+  for (const file of files.rows) {
+    try {
+      await photoStorage.client.send(new DeleteObjectCommand({ Bucket: photoStorage.bucket, Key: String(file.object_key) }));
+      await client.query("UPDATE lesson_files SET status = 'deleted', deleted_at = COALESCE(deleted_at, now()) WHERE id = $1", [file.id]);
+      deleted += 1;
+    } catch {
+      failed += 1;
+    }
+  }
   return { deleted, failed };
 }
 

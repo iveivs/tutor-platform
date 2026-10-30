@@ -25,6 +25,7 @@
 - Групповые занятия: `lib/app-data/write-group-actions.ts` (команды), `lib/group-sessions.ts` (склейка строк участников в одно занятие), `components/features/groups/` (экраны). Занятие группы — строка `lessons` на каждого участника с общим `class_id`; правила в разделе «Групповые занятия» `docs/BACKEND_RULES.md`.
 - `lib/lesson-content/` и `lib/teacher-material-library/` — материалы урока и библиотека преподавателя.
 - `lib/node-auth/`, `lib/account-endpoints/` и `lib/admin-workspaces/` — сессии, приглашения и административные операции.
+- Файлы урока (аудио и документы): `app/api/lesson-materials/files`, `app/api/lesson-files/[id]`, `lib/lesson-file-limits.ts`, `components/features/materials/lesson-files-section.tsx`; очистка — в `deleteExpiredLessonPhotos` worker.
 - Связь с администрацией: `app/api/support`, `app/api/news`, `app/api/reports`, `app/api/admin/communication`, `app/api/admin/reports/[id]/file`, `lib/admin-notify.ts`; экраны — `components/features/support/` (поддержка, новости и баннер важной новости, жалоба в просмотре файла) и `components/features/admin/admin-communication.tsx` (вкладка «Связь»).
 - Статистика платформы: `scripts/platform-stats.mjs` (сбор в worker), `app/api/admin/stats/route.ts`, `components/features/admin/platform-stats.tsx` (вкладка «Статистика» в админке). Новые модули worker нужно добавлять в `COPY` в `Dockerfile`.
 - Кабинет ведёт взрослый: `lib/guardian.ts` (список родства, формат имени в чатах), `components/features/students/guardian-dialog.tsx` (карточка ученика и поля в приглашении).

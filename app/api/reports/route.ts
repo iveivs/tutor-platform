@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 // A complaint about one file. The reporter's name is never shown to the teacher; the admin sees
 // only the reported file, not the rest of the workspace.
 const reportSchema = z.object({
-  resourceType: z.enum(["teacher_resource", "lesson_attachment"]),
+  resourceType: z.enum(["teacher_resource", "lesson_attachment", "lesson_file"]),
   resourceId: z.string().min(1).max(128),
   reason: z.enum(["copyright", "inappropriate", "personal_data", "other"]),
   comment: z.string().trim().max(500),
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Выберите причину жалобы" }, { status: 400 });
   const { resourceType, resourceId, reason, comment } = parsed.data;
   const pool = getPostgresPool();
-  const table = resourceType === "teacher_resource" ? "teacher_resources" : "lesson_attachments";
+  const table = resourceType === "teacher_resource" ? "teacher_resources" : resourceType === "lesson_file" ? "lesson_files" : "lesson_attachments";
   const exists = await pool.query(`SELECT 1 FROM ${table} WHERE id = $1 AND workspace_id = $2 AND status = 'active'`, [resourceId, auth.workspaceId]);
   if (!exists.rowCount) return Response.json({ error: "Файл не найден" }, { status: 404 });
   await pool.query(`INSERT INTO content_reports (id, workspace_id, resource_type, resource_id, reporter_member_id, reason, comment)

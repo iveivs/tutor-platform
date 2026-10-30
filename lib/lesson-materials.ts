@@ -64,6 +64,24 @@ export function lessonPhotoObjectKey(workspaceId: string, lessonId: string, atta
   return `${photosPrefix}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(lessonId)}/${attachmentId}.webp`;
 }
 
+// Lesson files live next to lesson photos: both are temporary and removed 90 days after the lesson.
+export function lessonFileObjectKey(workspaceId: string, lessonId: string, fileId: string, extension: string) {
+  const { photosPrefix } = client();
+  return `${photosPrefix}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(lessonId)}/files/${fileId}.${extension}`;
+}
+
+export async function putLessonFile(objectKey: string, body: Uint8Array, contentType: string) {
+  const storage = client();
+  await storage.client.send(new PutObjectCommand({ Bucket: storage.bucket, Key: objectKey, Body: body, ContentType: contentType, CacheControl: "private, max-age=86400", Metadata: { retention: `${PHOTO_RETENTION_DAYS}-days` } }));
+}
+
+export async function getLessonFile(objectKey: string, range?: { start: number; end: number }) {
+  const storage = client();
+  const result = await storage.client.send(new GetObjectCommand({ Bucket: storage.bucket, Key: objectKey, Range: range ? `bytes=${range.start}-${range.end}` : undefined }));
+  if (!result.Body) throw new Error("S3 object body is empty");
+  return result.Body.transformToByteArray();
+}
+
 export function teacherMaterialObjectKey(workspaceId: string, resourceId: string, extension: string) {
   const { materialsPrefix } = client();
   return `${materialsPrefix}/${encodeURIComponent(workspaceId)}/${resourceId}.${extension}`;

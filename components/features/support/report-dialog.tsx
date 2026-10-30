@@ -12,10 +12,10 @@ type Reason = "copyright" | "inappropriate" | "personal_data" | "other";
 const reasons: Array<[Reason, string]> = [["copyright", "Нарушение авторских прав"], ["inappropriate", "Неприемлемое содержание"], ["personal_data", "Личные данные без согласия"], ["other", "Другое"]];
 
 /** Which stored file a preview URL points to, if it can be reported. */
-export function reportTarget(url: string): { resourceType: "teacher_resource" | "lesson_attachment"; resourceId: string } | null {
-  const match = url.match(/^\/api\/(teacher-materials|lesson-attachments)\/([^/?#]+)/);
+export function reportTarget(url: string): { resourceType: "teacher_resource" | "lesson_attachment" | "lesson_file"; resourceId: string } | null {
+  const match = url.match(/^\/api\/(teacher-materials|lesson-attachments|lesson-files)\/([^/?#]+)/);
   if (!match) return null;
-  return { resourceType: match[1] === "teacher-materials" ? "teacher_resource" : "lesson_attachment", resourceId: decodeURIComponent(match[2]) };
+  return { resourceType: match[1] === "teacher-materials" ? "teacher_resource" : match[1] === "lesson-files" ? "lesson_file" : "lesson_attachment", resourceId: decodeURIComponent(match[2]) };
 }
 
 // «Пожаловаться» on a file: goes to the platform admin; the teacher never learns who reported.

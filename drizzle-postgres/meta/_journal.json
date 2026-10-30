@@ -176,6 +176,13 @@
       "when": 1793370000000,
       "tag": "0024_teacher_audio",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793380000000,
+      "tag": "0025_lesson_files",
+      "breakpoints": true
     }
   ]
 }

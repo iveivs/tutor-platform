@@ -70,11 +70,13 @@ async function writeDailyStats(client) {
           WHEN content_type LIKE 'audio/%' THEN 'audio' ELSE 'word' END AS kind, byte_size AS bytes
         FROM teacher_resources WHERE status = 'active'
         UNION ALL SELECT 'photo', byte_size FROM lesson_attachments WHERE status = 'active'
+        UNION ALL SELECT CASE WHEN content_type LIKE 'audio/%' THEN 'audio' WHEN content_type = 'application/pdf' THEN 'pdf' ELSE 'word' END, byte_size FROM lesson_files WHERE status = 'active'
       ) f GROUP BY kind`),
     client.query(`SELECT w.id,
         (SELECT count(*) FROM members m WHERE m.workspace_id = w.id AND m.role = 'student' AND m.status <> 'archived' AND NOT m.is_trial_contact)::int AS students,
         (COALESCE((SELECT sum(byte_size) FROM teacher_resources r WHERE r.workspace_id = w.id AND r.status = 'active'), 0)
-          + COALESCE((SELECT sum(byte_size) FROM lesson_attachments a WHERE a.workspace_id = w.id AND a.status = 'active'), 0))::bigint AS bytes
+          + COALESCE((SELECT sum(byte_size) FROM lesson_attachments a WHERE a.workspace_id = w.id AND a.status = 'active'), 0)
+          + COALESCE((SELECT sum(byte_size) FROM lesson_files f WHERE f.workspace_id = w.id AND f.status = 'active'), 0))::bigint AS bytes
       FROM workspaces w`),
     client.query(`SELECT (SELECT count(*) FROM lessons WHERE created_at >= ${since})::int AS lessons,
         (SELECT count(*) FROM balance_entries WHERE kind = 'payment' AND created_at >= ${since})::int AS payments,

@@ -1,4 +1,5 @@
 import type { Guardian } from "@/lib/guardian";
+import type { LessonFile } from "@/components/features/materials/lesson-files-section";
 export type View = "today" | "calendar" | "students" | "activity" | "student" | "materials" | "stats" | "settings" | "group";
 export type CurrentUser = { name: string; email: string; role: "owner" | "teacher" | "student"; isPlatformAdmin?: boolean };
 export type TutorProfile = { name: string; professionalTitle: string; email: string; avatarColor: string; avatarUrl?: string };
@@ -37,7 +38,7 @@ export type TeacherMaterialAssignment = { lessonId: string; studentId: string; s
 export type TeacherMaterialStudentShare = { studentId: string; studentName: string; sharedAt: number };
 export type TeacherMaterial = { id: string; title: string; filename: string; contentType: string; byteSize: number; createdAt: number; url: string; lessonCount?: number; folder?: string | null; tags?: string[]; versionNumber?: number; updatedAt?: number; lastUsedAt?: number | null; assignments?: TeacherMaterialAssignment[]; sharedStudents?: TeacherMaterialStudentShare[] };
 export type TeacherMaterialsData = { contentRulesAccepted: boolean; storageConfigured: boolean; maxFileBytes: number; maxUploadsPerMonth: number; maxStorageBytes: number; uploadsThisMonth: number; storageBytes: number; students: { id: string; name: string }[]; resources: TeacherMaterial[] };
-export type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; homework: { assignment: string; studentResponse: string; assignmentUpdatedAt: number | null; responseUpdatedAt: number | null; responses?: Array<{ studentName: string; body: string; updatedAt: number | null }> }; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[] };
+export type LessonMaterialsData = { contentRulesAccepted: boolean; contentRulesVersion: string; photoStorageConfigured: boolean; photoRetentionDays: number; maxPhotosPerParticipant: number; homework: { assignment: string; studentResponse: string; assignmentUpdatedAt: number | null; responseUpdatedAt: number | null; responses?: Array<{ studentName: string; body: string; updatedAt: number | null }> }; notes: LessonMaterialNote[]; attachments: LessonMaterialPhoto[]; documents: TeacherMaterial[]; library: TeacherMaterial[]; files?: LessonFile[] };
 export type StudentMaterialDocument = TeacherMaterial & { lessonStartsAt: number | null };
 export type StudentMaterialPhoto = LessonMaterialPhoto & { lessonId: string; lessonStartsAt: number };
 export type StudentMaterialsData = { documents: StudentMaterialDocument[]; photos: StudentMaterialPhoto[] };

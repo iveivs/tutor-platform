@@ -39,7 +39,7 @@ export async function readLessonMaterials(request: Request) {
     const lessonIds = await sessionLessonIds(auth.workspaceId, lesson);
     const ownLessonId = auth.role === "student" ? lesson.lessonId : null;
     const assignmentLessonId = lesson.session?.anchorLessonId ?? lesson.lessonId;
-    const [accepted, notesResult, homeworkResult, attachmentsResult, resourcesResult, libraryResult] = await Promise.all([
+    const [accepted, notesResult, homeworkResult, attachmentsResult, resourcesResult, libraryResult, filesResult] = await Promise.all([
       hasCurrentContentRulesAcceptance(auth),
       getPostgresPool().query(`SELECT note.id, note.author_member_id, note.visibility, note.body, note.created_at, note.updated_at,
           author.display_name AS author_name, author.role AS author_role
@@ -68,6 +68,13 @@ export async function readLessonMaterials(request: Request) {
         ORDER BY resource.id, link.created_at`, [auth.workspaceId, lessonIds]),
       auth.role === "student" ? Promise.resolve({ rows: [] }) : getPostgresPool().query(`SELECT id, title, original_filename, content_type, byte_size, folder, tags, created_at
         FROM teacher_resources WHERE workspace_id = $1 AND status = 'active' ORDER BY created_at DESC`, [auth.workspaceId]),
+      // Audio and documents on the lesson; a student sees their own and the teacher's, like photos.
+      getPostgresPool().query(`SELECT file.id, file.uploaded_by_member_id, file.content_type, file.original_filename, file.byte_size, file.expires_at, file.created_at,
+          author.display_name AS author_name
+        FROM lesson_files file LEFT JOIN members author ON author.id = file.uploaded_by_member_id
+        WHERE file.workspace_id = $1 AND file.lesson_id = ANY($2::text[]) AND file.status = 'active' AND file.expires_at > now()
+          AND ($3::text IS NULL OR file.lesson_id = $3 OR author.role <> 'student')
+        ORDER BY file.created_at`, [auth.workspaceId, lessonIds, ownLessonId]),
     ]);
     return Response.json({
       contentRulesAccepted: accepted,
@@ -88,6 +95,13 @@ export async function readLessonMaterials(request: Request) {
         byteSize: Number(row.byte_size), width: Number(row.width), height: Number(row.height),
         expiresAt: new Date(row.expires_at).getTime(), createdAt: new Date(row.created_at).getTime(),
         url: `/api/lesson-attachments/${encodeURIComponent(String(row.id))}`,
+      })),
+      files: filesResult.rows.map((row) => ({
+        id: String(row.id), filename: String(row.original_filename), contentType: String(row.content_type), byteSize: Number(row.byte_size),
+        authorName: row.author_name ? String(row.author_name) : "Удалённый пользователь", mine: row.uploaded_by_member_id === auth.memberId,
+        canDelete: row.uploaded_by_member_id === auth.memberId || auth.role !== "student",
+        expiresAt: new Date(row.expires_at).getTime(), createdAt: new Date(row.created_at).getTime(),
+        url: `/api/lesson-files/${encodeURIComponent(String(row.id))}`,
       })),
       documents: [...resourcesResult.rows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map((row) => ({
         id: String(row.id), title: String(row.title), filename: String(row.original_filename), contentType: String(row.content_type),
