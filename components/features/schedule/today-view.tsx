@@ -43,7 +43,7 @@ export function TodayView({ lessons, students, requests, dayNotes, onSaveDayNote
   const dayNote = dayNotes.find((note) => note.date === selectedDate);
 
   const weekday = dateTitle(selectedDate, { weekday: "long" });
-  return <AppShell actionsInline eyebrow={weekday.charAt(0).toUpperCase() + weekday.slice(1)} title={`${relative}, ${dateTitle(selectedDate)}`} actions={<AddLessonDialog iconOnMobile students={students} defaultDate={selectedDate} onAdd={onAdd} />}>
+  return <AppShell actionsInline eyebrow={weekday.charAt(0).toUpperCase() + weekday.slice(1)} title={`${relative}, ${dateTitle(selectedDate)}`} actions={<span data-tour="add-lesson" className="inline-flex"><AddLessonDialog iconOnMobile students={students} defaultDate={selectedDate} onAdd={onAdd} /></span>}>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-4">
         <section aria-label="Неделя" className="flex items-center gap-1 rounded-[var(--radius-card)] border border-line bg-surface p-1.5">

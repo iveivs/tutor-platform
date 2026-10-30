@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { CalendarClock, ChevronRight, FolderOpen, History, LogOut, MessageCircle, NotebookPen, Palette, WalletCards, MessagesSquare } from "lucide-react";
+import { CalendarClock, ChevronRight, FolderOpen, GraduationCap, History, LogOut, MessageCircle, MessagesSquare, NotebookPen, Palette, WalletCards } from "lucide-react";
 import { useTheme } from "next-themes";
 import { CollapsibleSection } from "@/components/common/collapsible-section";
 import { ShowMoreButton } from "@/components/common/show-more-button";
@@ -17,6 +17,7 @@ import { SettingsGroup, settingsRowClass } from "@/components/features/settings/
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
 import { PushNotificationsCard } from "@/components/features/notifications/push-notifications-card";
 import { useLanguage, type Language } from "@/components/language-provider";
+import { replayTour } from "@/components/features/onboarding/onboarding-tour";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Toaster } from "@/components/ui/sonner";
@@ -94,7 +95,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,380px)]">
         <div className="flex min-w-0 flex-col gap-5">
           {requestsLocked && <StudentAccessNotice />}
-          {nextLesson ? <section aria-label="Следующий урок" className="rounded-[var(--radius-card)] bg-hero-start p-5 text-white">
+          {nextLesson ? <section data-tour="student-next" aria-label="Следующий урок" className="rounded-[var(--radius-card)] bg-hero-start p-5 text-white">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-semibold text-coral">Следующий урок</p>
               <LessonStatusChip lesson={nextLesson} />
@@ -111,9 +112,9 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
               <StudentRequestDialog type="cancel" lesson={nextLesson} student={student} onRequest={onRequest} compactTrigger={{ label: "Отменить", className: heroButton }} />
             </div>}
             {!requestsLocked && <p className="mt-3 text-center text-xs text-hero-muted">{nextLesson.classId ? "Отметить «Не приду» можно до 23:59 предыдущего дня" : "Отмену можно запросить до 23:59 предыдущего дня"}</p>}
-          </section> : <section className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarClock className="size-5 shrink-0 text-ink-faint" />Следующий урок пока не назначен</section>}
+          </section> : <section data-tour="student-next" className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink-muted"><CalendarClock className="size-5 shrink-0 text-ink-faint" />Следующий урок пока не назначен</section>}
 
-          <div className="grid grid-cols-2 gap-3 lg:hidden">
+          <div data-tour="student-contact" className="grid grid-cols-2 gap-3 lg:hidden">
             <BalanceTile balance={student.balance} />
             <button type="button" onClick={() => setMessagesOpen(true)} className="flex flex-col items-start gap-1 rounded-2xl border border-line bg-surface p-4 text-left transition hover:bg-surface-subtle"><MessageCircle className="size-5 text-brand-text" /><span className="mt-1 text-base font-bold">Сообщения</span><span className="text-xs text-ink-muted">Написать преподавателю</span></button>
           </div>
@@ -159,7 +160,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
         </div>
 
         <aside className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-5">
-          <div className="hidden flex-col gap-3 lg:flex">
+          <div data-tour="student-contact" className="hidden flex-col gap-3 lg:flex">
             <BalanceTile balance={student.balance} />
             <Button type="button" variant="outline" className="h-11 justify-start rounded-xl bg-surface" onClick={() => setMessagesOpen(true)}><MessageCircle />Написать преподавателю</Button>
           </div>
@@ -188,6 +189,7 @@ export function StudentPortal({ student, teacherName, lessons, entries, historyE
           <TelegramNotificationsCard />
 
           <SettingsGroup title="Оформление">
+            <button type="button" className={`${settingsRowClass} hover:bg-surface-subtle`} onClick={replayTour}><span className="flex items-center gap-3 text-[15px]"><GraduationCap className="size-5 text-brand-text" />Как пользоваться</span><ChevronRight className="size-4 text-ink-subtle" /></button>
             <div className={settingsRowClass}>
               <span className="text-[15px]">Тема</span>
               <Select value={mounted ? theme ?? "system" : "system"} onValueChange={setTheme}><SelectTrigger size="sm" aria-label="Тема" className={selectTrigger}><SelectValue /></SelectTrigger><SelectContent align="end"><SelectItem value="system">Как в системе</SelectItem><SelectItem value="light">Светлая</SelectItem><SelectItem value="dark">Тёмная</SelectItem></SelectContent></Select>

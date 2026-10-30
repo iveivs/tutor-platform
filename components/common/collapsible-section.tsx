@@ -34,7 +34,7 @@ export function CollapsibleSection({ scope, id, title, description, icon: Icon, 
     });
   };
 
-  return <section className={`card min-w-0 overflow-hidden ${className}`}>
+  return <section data-tour={`section-${id}`} className={`card min-w-0 overflow-hidden ${className}`}>
     <button type="button" className="flex w-full items-center gap-3 p-5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/50 md:p-6" aria-expanded={open} aria-controls={`${id}-content`} onClick={toggle}>
       {Icon && <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-indigo-600 dark:text-indigo-300"><Icon className="size-5" /></span>}
       <span className="min-w-0 flex-1"><AppCardTitle>{title}</AppCardTitle>{description && <AppCardDescription>{description}</AppCardDescription>}</span>

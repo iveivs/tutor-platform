@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { ChevronDown, ChevronRight, LifeBuoy, LogOut, Megaphone, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, GraduationCap, LifeBuoy, LogOut, Megaphone, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { AppShell } from "@/components/common/app-shell";
@@ -10,6 +10,7 @@ import type { AvailabilityWindow } from "@/components/features/app/types";
 import { TelegramNotificationsCard } from "@/components/features/telegram/telegram-notifications-card";
 import { PushNotificationsCard } from "@/components/features/notifications/push-notifications-card";
 import { SubscriptionCard } from "@/components/features/subscription/subscription-card";
+import { replayTour } from "@/components/features/onboarding/onboarding-tour";
 import { NewsDialog, useNews } from "@/components/features/support/news";
 import { SupportDialog } from "@/components/features/support/support-dialog";
 import { useLanguage, type Language } from "@/components/language-provider";
@@ -130,6 +131,7 @@ export function SettingsView({ profile, availabilityWindows, onSave, onSaveAvail
     <SettingsGroup title="Тьюттори">
       <button type="button" className={`${settingsRowClass} hover:bg-surface-subtle`} onClick={() => setNewsOpen(true)}><span className="flex items-center gap-3 text-[15px]"><Megaphone className="size-5 text-brand-text" />Новости Тьюттори</span><span className="flex items-center gap-2">{news?.unread ? <span className="grid min-w-5 place-items-center rounded-full bg-coral px-1.5 text-xs font-bold text-white">{news.unread}</span> : null}<ChevronRight className="size-4 text-ink-subtle" /></span></button>
       <button type="button" className={`${settingsRowClass} hover:bg-surface-subtle`} onClick={() => setSupportOpen(true)}><span className="flex items-center gap-3 text-[15px]"><LifeBuoy className="size-5 text-brand-text" />Написать в поддержку</span><ChevronRight className="size-4 text-ink-subtle" /></button>
+      <button type="button" className={`${settingsRowClass} hover:bg-surface-subtle`} onClick={replayTour}><span className="flex items-center gap-3 text-[15px]"><GraduationCap className="size-5 text-brand-text" />Как пользоваться</span><ChevronRight className="size-4 text-ink-subtle" /></button>
     </SettingsGroup>
     <NewsDialog open={newsOpen} onOpenChange={setNewsOpen} />
     <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} />

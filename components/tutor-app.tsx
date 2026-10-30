@@ -14,6 +14,7 @@ import { SettingsView } from "@/components/features/settings/settings-view";
 import { StatsView } from "@/components/features/stats/stats-view";
 import { AccessBanner } from "@/components/features/subscription/access-banner";
 import { ImportantNewsBanner } from "@/components/features/support/news";
+import { OnboardingTour } from "@/components/features/onboarding/onboarding-tour";
 import { GroupActionsProvider } from "@/components/features/groups/group-actions";
 import { combineGroupSessions } from "@/lib/group-sessions";
 import { GroupView } from "@/components/features/groups/groups-view";
@@ -71,7 +72,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
   const activityCount = getActivityAttentionCount(requests, notifications);
   const portalStudent = students.find((student) => student.id === selectedStudent) ?? students[0];
   if (role === "student") return portalStudent
-    ? <><StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} availableSlots={availableSlots} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onMaterials={setMaterialsLesson} onBack={onLogout ?? (() => undefined)} onReload={reload} myGroups={myGroups} /><LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} /></>
+    ? <><OnboardingTour role="student" /><StudentPortal student={portalStudent} teacherName={teacherName} lessons={lessons} entries={balanceEntries} historyEvents={historyEvents} requests={requests} notifications={notifications} availableSlots={availableSlots} onReadNotifications={markNotificationsRead} onRequest={submitStudentRequest} onMaterials={setMaterialsLesson} onBack={onLogout ?? (() => undefined)} onReload={reload} myGroups={myGroups} /><LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} /></>
     : <main className="grid min-h-screen place-items-center bg-background px-4 text-foreground"><div className="card max-w-md p-7 text-center"><h1 className="text-xl font-bold">Кабинет ученика не найден</h1><p className="mt-2 text-ink-muted">Аккаунт вошёл, но не связан с карточкой ученика. Попросите преподавателя создать новое приглашение.</p><Button className="mt-5" variant="outline" onClick={onLogout}>Выйти</Button></div></main>;
 
   return (
@@ -93,6 +94,7 @@ export default function TutorApp({ role = "owner", user, onLogout }: { role?: "o
       </section>
       <MobileNav view={view} setView={setView} />
       <LessonMaterialsDialog key={materialsLesson?.id ?? "closed"} lesson={materialsLesson} role={role} onOpenChange={(open) => !open && setMaterialsLesson(null)} />
+      <OnboardingTour role="teacher" onNavigate={setView} />
       <Toaster position="top-right" richColors />
     </main></GroupActionsProvider>
   );
