@@ -99,6 +99,10 @@ describe("translateUiText", () => {
     ["Документы (3)", "Documents (3)"],
     ["Фотографии (2)", "Photos (2)"],
     ["Фотография от Светослав", "Photo from Светослав"],
+    ["Урок 3 ноября в 16:00", "Lesson 3 November, 16:00"],
+    ["MP3 · 4.2 МБ · из библиотеки", "MP3 · 4.2 MB · from the library"],
+    ["240 КБ · Хор", "240 KB · Хор"],
+    ["Материал из библиотеки для Анна Смирнова", "Library material for Анна Смирнова"],
   ])("translates %s", (source, expected) => {
     expect(translateUiText(source)).toBe(expected);
   });

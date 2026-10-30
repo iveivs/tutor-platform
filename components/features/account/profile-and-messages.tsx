@@ -2,12 +2,16 @@
 /* eslint-disable @next/next/no-img-element -- protected avatars use a session-bound API URL and are resized server-side. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, MessageCircle, Send, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ChevronDown, FileText, MessageCircle, MoreHorizontal, Paperclip, Pin, Send, Trash2, Upload, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppCard, AppCardDescription, AppCardTitle } from "@/components/common/app-card";
 import { SearchableSelect } from "@/components/common/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { formatBytes } from "@/components/features/materials/format";
+import { MaterialPreviewDialog, type MaterialPreviewItem } from "@/components/features/materials/material-preview-dialog";
+import { DmAttachDialog } from "@/components/features/messages/dm-attach-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import { appFetch as apiFetch } from "@/lib/client-fetch";
@@ -102,7 +106,8 @@ export function StudentAvatarPreferenceCard({ studentId, name, initials, avatarC
 }
 
 type MessagePeer = { id: string; name: string; role: string; initials: string; avatarColor: string; avatarUrl: string | null; unreadCount: number; lastMessage: string | null; lastAt: number | null };
-type DirectMessage = { id: string; senderId: string; recipientId: string; body: string; read: boolean; createdAt: number };
+type DirectMaterial = { id: string; title: string; contentType: string; byteSize: number; available: boolean; url: string };
+type DirectMessage = { id: string; senderId: string; recipientId: string; body: string; read: boolean; createdAt: number; pinned: boolean; material: DirectMaterial | null };
 type MessagesData = { currentMemberId: string; peers: MessagePeer[]; messages: DirectMessage[] };
 
 // Messages data and actions, shared by the card/dialog layout and the v2 chat layout.
@@ -134,18 +139,32 @@ function useMessages(initialPeerId?: string) {
   }, [selectedId, load]);
   const selected = data?.peers.find((peer) => peer.id === selectedId);
   const thread = useMemo(() => (data?.messages.filter((message) => message.senderId === selectedId || message.recipientId === selectedId) ?? []).slice(-50), [data, selectedId]);
+  const post = async (payload: { body: string; resourceId?: string }) => {
+    const response = await apiFetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recipientId: selectedId, ...payload }) });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error ?? "Не удалось отправить сообщение");
+    await load();
+  };
   const send = async () => {
     const text = body.trim(); if (!selectedId || !text) return;
     setPending(true);
-    try {
-      const response = await apiFetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recipientId: selectedId, body: text }) });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Не удалось отправить сообщение");
-      setBody(""); await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить сообщение"); }
+    try { await post({ body: text }); setBody(""); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить сообщение"); }
     finally { setPending(false); }
   };
-  return { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send };
+  const sendMaterial = async (resourceId: string, caption: string) => {
+    try { await post({ body: caption, resourceId }); return true; }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось отправить материал"); return false; }
+  };
+  const pin = async (messageId: string, pinned: boolean) => {
+    try {
+      const response = await apiFetch("/api/messages", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "pin", messageId, pinned }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Не удалось закрепить сообщение");
+      await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось закрепить сообщение"); }
+  };
+  return { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send, sendMaterial, pin };
 }
 
 const messageTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -157,10 +176,36 @@ const messageDayLabel = (value: number) => {
   return day;
 };
 
+const messagePreview = (message: DirectMessage) => message.body || message.material?.title || "Материал удалён";
+
+function MaterialCard({ material, mine, onOpen }: { material: DirectMaterial | null; mine: boolean; onOpen: (item: MaterialPreviewItem) => void }) {
+  if (!material || !material.available) return <span className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${mine ? "bg-white/15" : "bg-surface-muted"} opacity-80`}><FileText className="size-4 shrink-0" />{material ? "Материал больше недоступен" : "Материал удалён"}</span>;
+  const audio = material.contentType.startsWith("audio/");
+  const item = { title: material.title, contentType: material.contentType, url: `${material.url}?preview=1`, downloadUrl: material.url };
+  return <span className={`flex flex-col gap-2 rounded-xl p-2.5 ${mine ? "bg-white/15" : "bg-surface-muted"}`}>
+    <button type="button" className="flex items-center gap-2.5 text-left" onClick={() => onOpen(item)}>
+      <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${mine ? "bg-white/20" : "bg-brand-soft text-brand-text"}`}><FileText className="size-5" /></span>
+      <span className="flex min-w-0 flex-col"><strong className="truncate text-sm" data-no-translate>{material.title}</strong><span className="text-xs opacity-75">{`${audio ? "MP3" : material.contentType === "application/pdf" ? "PDF" : material.contentType.startsWith("image/") ? "Изображение" : "Word"} · ${formatBytes(material.byteSize)} · из библиотеки`}</span></span>
+    </button>
+    {audio && <audio controls preload="none" src={`${material.url}?preview=1`} className="h-9 w-full min-w-56" />}
+  </span>;
+}
+
 function MessagesChat({ initialPeerId }: { initialPeerId?: string }) {
-  const { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send } = useMessages(initialPeerId);
+  const { data, selectedId, setSelectedId, selected, thread, body, setBody, pending, send, sendMaterial, pin } = useMessages(initialPeerId);
   const [showPeers, setShowPeers] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [preview, setPreview] = useState<MaterialPreviewItem | null>(null);
+  const [highlightId, setHighlightId] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const pinned = thread.find((message) => message.pinned);
+  const canAttach = selected?.role === "student";
+  const showPinned = () => {
+    if (!pinned) return;
+    document.getElementById(`dm-${pinned.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightId(pinned.id);
+    window.setTimeout(() => setHighlightId(""), 1600);
+  };
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [thread.length, selectedId]);
   const close = <DialogClose asChild><Button type="button" size="icon" variant="ghost" className="size-10 shrink-0 text-ink-muted" aria-label="Закрыть"><X className="size-5" /></Button></DialogClose>;
   if (!data || !data.peers.length) return <div className="flex h-full flex-col"><div className="flex justify-end p-3">{close}</div><div className="grid flex-1 place-items-center p-6 text-center text-sm text-ink-muted">{!data ? "Загружаю сообщения…" : <span><UserRound className="mx-auto mb-2 size-7" />Доступных собеседников пока нет</span>}</div></div>;
@@ -171,6 +216,10 @@ function MessagesChat({ initialPeerId }: { initialPeerId?: string }) {
       {data.peers.length > 1 && <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2" aria-expanded={showPeers} onClick={() => setShowPeers((current) => !current)}>Сменить<ChevronDown className={`transition-transform ${showPeers ? "rotate-180" : ""}`} /></Button>}
       {close}
     </header>
+    {pinned && <div className="flex items-center gap-2 border-b border-line bg-brand-soft py-2 pl-4 pr-2">
+      <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left" onClick={showPinned}><Pin className="size-4 shrink-0 text-coral" /><span className="flex min-w-0 flex-col"><span className="text-[11px] font-bold text-coral-text">Закреплено</span><span className="truncate text-sm" data-no-translate>{messagePreview(pinned)}</span></span></button>
+      <Button type="button" size="icon" variant="ghost" className="size-8 shrink-0 text-ink-muted" aria-label="Открепить сообщение" onClick={() => void pin(pinned.id, false)}><X className="size-4" /></Button>
+    </div>}
     {showPeers && <div className="border-b border-line p-3"><SearchableSelect value={selectedId} onValueChange={(value) => { setSelectedId(value); setShowPeers(false); }} placeholder="Выберите собеседника" searchPlaceholder="Найти собеседника" emptyText="Собеседники не найдены" items={data.peers.map((peer) => ({ value: peer.id, label: peer.name, description: peer.lastMessage ?? (peer.role === "student" ? "Ученик" : "Преподаватель") }))} /></div>}
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-background p-4">
       {thread.map((message, index) => {
@@ -179,17 +228,29 @@ function MessagesChat({ initialPeerId }: { initialPeerId?: string }) {
         const showDay = index === 0 || day !== messageDayLabel(thread[index - 1].createdAt);
         return <div key={message.id} className="contents">
           {showDay && <span className="my-1 self-center rounded-full bg-surface px-2.5 py-0.5 text-xs text-ink-muted">{day}</span>}
-          <div className={`flex max-w-[82%] flex-col gap-1 rounded-2xl px-3 py-2 text-[15px] leading-5 ${mine ? "self-end rounded-br-md bg-brand-solid text-white" : "self-start rounded-bl-md border border-line bg-surface"}`}><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p><time className="self-end text-[11px] opacity-70">{messageTime.format(new Date(message.createdAt))}</time></div>
+          <div id={`dm-${message.id}`} className={`group flex max-w-[82%] items-start gap-1 ${mine ? "flex-row-reverse self-end" : "self-start"}`}>
+            <div className={`flex min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-2 text-[15px] leading-5 transition-shadow ${mine ? "rounded-br-md bg-brand-solid text-white" : "rounded-bl-md border border-line bg-surface"} ${highlightId === message.id ? "ring-2 ring-coral" : ""}`}>
+              {(message.material || !message.body) && <MaterialCard material={message.material} mine={mine} onOpen={setPreview} />}
+              {message.body && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p>}
+              <span className="flex items-center gap-1 self-end text-[11px] opacity-70">{message.pinned && <Pin className="size-3" aria-label="Закреплено" />}<time>{messageTime.format(new Date(message.createdAt))}</time></span>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button type="button" size="icon" variant="ghost" className="size-8 shrink-0 text-ink-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-[state=open]:opacity-100" aria-label="Действия с сообщением"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align={mine ? "end" : "start"}><DropdownMenuItem onSelect={() => void pin(message.id, !message.pinned)}>{message.pinned ? "Открепить сообщение" : "Закрепить сообщение"}</DropdownMenuItem></DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>;
       })}
       {!thread.length && <div className="grid flex-1 place-items-center text-center text-sm text-ink-muted">Сообщений пока нет</div>}
       <div ref={endRef} />
     </div>
     <footer className="border-t border-line bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5">
-      <div className="flex items-end gap-2"><Textarea aria-label="Сообщение" className="max-h-32 min-h-11 min-w-0 resize-none rounded-[22px] bg-background px-4 py-2.5 text-[15px]" value={body} maxLength={500} rows={1} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send /></Button></div>
+      <div className="flex items-end gap-2">{canAttach && <Button type="button" size="icon" variant="outline" className="size-11 shrink-0 rounded-full" aria-label="Прикрепить материал" onClick={() => setAttachOpen(true)}><Paperclip /></Button>}<Textarea aria-label="Сообщение" className="max-h-32 min-h-11 min-w-0 resize-none rounded-[22px] bg-background px-4 py-2.5 text-[15px]" value={body} maxLength={500} rows={1} placeholder="Введите сообщение" onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) { event.preventDefault(); void send(); } }} /><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" disabled={pending || !body.trim()} aria-label="Отправить сообщение" onClick={() => void send()}><Send /></Button></div>
       <div className="mt-1 hidden justify-between gap-2 px-1 text-[11px] text-ink-subtle sm:flex"><span>Enter — отправить, Shift+Enter — новая строка</span><span>{body.length}/500</span></div>
       {body.length > 400 && <div className="mt-1 px-1 text-right text-[11px] text-ink-subtle sm:hidden">{body.length}/500</div>}
     </footer>
+    {canAttach && selected && <DmAttachDialog open={attachOpen} onOpenChange={setAttachOpen} studentId={selected.id} studentName={selected.name} onSend={sendMaterial} />}
+    <MaterialPreviewDialog item={preview} onOpenChange={(open) => { if (!open) setPreview(null); }} />
   </div>;
 }
 
