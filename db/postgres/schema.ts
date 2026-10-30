@@ -451,6 +451,7 @@ export const teacherResources = pgTable("teacher_resources", {
   tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
   versionNumber: integer("version_number").notNull().default(1),
   lastUsedAt: instant("last_used_at"),
+  audioCheckedAt: instant("audio_checked_at"),
   status: text("status").notNull().default("active"),
   deletedAt: instant("deleted_at"),
   ...timestamps(),
@@ -903,6 +904,7 @@ export const lessonFiles = pgTable("lesson_files", {
   status: text("status").notNull().default("active"),
   expiresAt: instant("expires_at").notNull(),
   deletedAt: instant("deleted_at"),
+  audioCheckedAt: instant("audio_checked_at"),
   createdAt: instant("created_at").notNull().defaultNow(),
 }, (table) => [
   check("lesson_files_type_check", sql`${table.contentType} in ('audio/mpeg', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')`),

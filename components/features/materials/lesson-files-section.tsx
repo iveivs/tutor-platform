@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Music, Paperclip, Trash2 } from "lucide-react";
+import { BookmarkPlus, FileText, Music, Paperclip, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { MaterialPreviewItem } from "@/components/features/materials/material-preview-dialog";
 import { appFetch } from "@/lib/client-fetch";
 
-export type LessonFile = { id: string; filename: string; contentType: string; byteSize: number; authorName: string; mine: boolean; canDelete: boolean; expiresAt: number; createdAt: number; url: string };
+export type LessonFile = { id: string; filename: string; contentType: string; byteSize: number; authorName: string; mine: boolean; canDelete: boolean; canSaveToLibrary?: boolean; expiresAt: number; createdAt: number; url: string };
 
 const size = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} МБ`;
 const daysLeft = (expiresAt: number) => Math.max(0, Math.ceil((expiresAt - Date.now()) / 86_400_000));
@@ -29,6 +29,11 @@ export function LessonFilesSection({ lessonId, files, storageConfigured, onChang
     } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось загрузить файл"); }
     finally { setPending(false); }
   };
+  const save = async (file: LessonFile) => {
+    const response = await appFetch(`/api/lesson-materials/files?id=${encodeURIComponent(file.id)}`, { method: "PUT" });
+    if (response.ok) toast.success("Сохранено в библиотеку — файл больше не удалится через 90 дней");
+    else toast.error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "Не удалось сохранить в библиотеку");
+  };
   const remove = async (file: LessonFile) => {
     if (!window.confirm(`Удалить «${file.filename}»?`)) return;
     const response = await appFetch(`/api/lesson-materials/files?id=${encodeURIComponent(file.id)}`, { method: "DELETE" });
@@ -47,6 +52,7 @@ export function LessonFilesSection({ lessonId, files, storageConfigured, onChang
           <strong className="truncate text-[15px]" data-no-translate>{file.filename}</strong>
           <span className="truncate text-xs text-ink-muted">{`${file.authorName} · ${size(file.byteSize)} · удалится через ${daysLeft(file.expiresAt)} дн.`}</span>
         </button>
+        {file.canSaveToLibrary && <Button type="button" size="icon" variant="ghost" className="shrink-0 text-ink-muted" aria-label="Сохранить в библиотеку" title="Сохранить в библиотеку" onClick={() => void save(file)}><BookmarkPlus className="size-4" /></Button>}
         {file.canDelete && <Button type="button" size="icon" variant="ghost" className="shrink-0 text-ink-muted" aria-label="Удалить файл" onClick={() => void remove(file)}><Trash2 className="size-4" /></Button>}
       </article>;
     })}</div> : <p className="mt-3 rounded-xl bg-surface-subtle p-4 text-sm text-ink-muted">Пока нет файлов. Можно записать, как играете упражнение, и добавить сюда.</p>}

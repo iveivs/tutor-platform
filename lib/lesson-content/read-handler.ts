@@ -99,7 +99,7 @@ export async function readLessonMaterials(request: Request) {
       files: filesResult.rows.map((row) => ({
         id: String(row.id), filename: String(row.original_filename), contentType: String(row.content_type), byteSize: Number(row.byte_size),
         authorName: row.author_name ? String(row.author_name) : "Удалённый пользователь", mine: row.uploaded_by_member_id === auth.memberId,
-        canDelete: row.uploaded_by_member_id === auth.memberId || auth.role !== "student",
+        canDelete: row.uploaded_by_member_id === auth.memberId || auth.role !== "student", canSaveToLibrary: auth.role !== "student",
         expiresAt: new Date(row.expires_at).getTime(), createdAt: new Date(row.created_at).getTime(),
         url: `/api/lesson-files/${encodeURIComponent(String(row.id))}`,
       })),

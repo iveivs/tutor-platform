@@ -1,12 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getPostgresPool } from "@/db/postgres";
 import { assertSameOrigin, getAuthMember } from "@/lib/auth";
 import { lessonFileKind, MAX_LESSON_AUDIO_BYTES, MAX_LESSON_DOCUMENT_BYTES, SINCE_MOSCOW_TODAY, STUDENT_DAILY_LIMITS } from "@/lib/lesson-file-limits";
 import {
-  hasCurrentContentRulesAcceptance, lessonFileObjectKey, lessonPhotoStorageConfigured, notifyLessonStudents, photoExpiresAt, putLessonFile, resolveLessonAccess,
+  getLessonFile, hasCurrentContentRulesAcceptance, lessonFileObjectKey, lessonPhotoStorageConfigured, notifyLessonStudents, photoExpiresAt, putLessonFile, putTeacherMaterial, resolveLessonAccess, teacherMaterialObjectKey,
 } from "@/lib/lesson-materials";
 import { enforceNodeRateLimit } from "@/lib/node-rate-limit";
-import { detectTeacherMaterial, MAX_WORKSPACE_MATERIAL_BYTES, sanitizeMaterialFilename } from "@/lib/teacher-material-files";
+import { defaultMaterialTitle, detectTeacherMaterial, MAX_WORKSPACE_MATERIAL_BYTES, sanitizeMaterialFilename } from "@/lib/teacher-material-files";
 import { rejectReadOnlyWrite } from "@/lib/workspace-access";
 
 export const runtime = "nodejs";
@@ -83,4 +83,40 @@ export async function DELETE(request: Request) {
     WHERE id = $1 AND workspace_id = $2 AND status = 'active' AND (uploaded_by_member_id = $3 OR $4 <> 'student') RETURNING id`, [id, auth.workspaceId, auth.memberId, auth.role]);
   if (!result.rowCount) return Response.json({ error: "Файл не найден" }, { status: 404 });
   return Response.json({ ok: true });
+}
+
+// «Сохранить в библиотеку»: the teacher copies a lesson file (for example a good recording of a
+// student) into the library, where it stays until deleted instead of 90 days after the lesson.
+export async function PUT(request: Request) {
+  try {
+    if (!assertSameOrigin(request)) return Response.json({ error: "Запрос отклонён" }, { status: 403 });
+    const auth = await getAuthMember(request);
+    if (!auth) return Response.json({ error: "Требуется вход" }, { status: 401 });
+    if (auth.role === "student") return Response.json({ error: "Сохранять в библиотеку может преподаватель" }, { status: 403 });
+    const readOnly = rejectReadOnlyWrite(request, auth);
+    if (readOnly) return readOnly;
+    const id = new URL(request.url).searchParams.get("id");
+    const pool = getPostgresPool();
+    const found = await pool.query("SELECT object_key, content_type, original_filename, byte_size FROM lesson_files WHERE id = $1 AND workspace_id = $2 AND status = 'active'", [id, auth.workspaceId]);
+    const file = found.rows[0];
+    if (!file) return Response.json({ error: "Файл не найден" }, { status: 404 });
+    const bytes = await getLessonFile(String(file.object_key));
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    const duplicate = await pool.query("SELECT 1 FROM teacher_resources WHERE workspace_id = $1 AND content_sha256 = $2 AND status = 'active'", [auth.workspaceId, sha]);
+    if (duplicate.rowCount) return Response.json({ error: "Этот файл уже есть в библиотеке" }, { status: 409 });
+    const storage = await pool.query(`SELECT (COALESCE((SELECT sum(byte_size) FROM teacher_resources WHERE workspace_id = $1 AND status = 'active'), 0)
+        + COALESCE((SELECT sum(byte_size) FROM lesson_files WHERE workspace_id = $1 AND status = 'active'), 0)
+        + COALESCE((SELECT sum(byte_size) FROM lesson_attachments WHERE workspace_id = $1 AND status = 'active'), 0))::bigint AS bytes`, [auth.workspaceId]);
+    if (Number(storage.rows[0]?.bytes ?? 0) + bytes.byteLength > MAX_WORKSPACE_MATERIAL_BYTES) return Response.json({ error: "В кабинете закончилось место (5 ГБ)" }, { status: 409 });
+    const resourceId = randomUUID();
+    const extension = String(file.original_filename).toLowerCase().split(".").pop() ?? "bin";
+    const objectKey = teacherMaterialObjectKey(auth.workspaceId, resourceId, extension);
+    await putTeacherMaterial(objectKey, bytes, String(file.content_type), sha);
+    await pool.query(`INSERT INTO teacher_resources (id, workspace_id, uploaded_by_member_id, title, original_filename, object_key, content_type, content_sha256, byte_size, folder, tags)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, '{}')`, [resourceId, auth.workspaceId, auth.memberId, defaultMaterialTitle(String(file.original_filename)), String(file.original_filename), objectKey, String(file.content_type), sha, bytes.byteLength]);
+    return Response.json({ ok: true, id: resourceId });
+  } catch (error) {
+    console.error("Failed to save a lesson file to the library", error);
+    return Response.json({ error: "Не удалось сохранить в библиотеку" }, { status: 500 });
+  }
 }
